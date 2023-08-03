@@ -1,0 +1,17 @@
+[package]
+name = "zngur"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# ra_ap_hir = "0.0.165"
+# ra_ap_hir_def = "0.0.165"
+# ra_ap_hir_ty = "0.0.165"
+# ra_ap_ide = "0.0.165"
+# ra_ap_ide_db = "0.0.165"
+# ra_ap_load-cargo = "0.0.165"
+# ra_ap_paths = "0.0.165"
+# ra_ap_project_model = "0.0.165"
+zngur-generator = { path = "../zngur-generator" }

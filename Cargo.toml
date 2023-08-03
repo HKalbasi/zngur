@@ -1,0 +1,5 @@
+[workspace]
+members = ["zngur", "simple-example", "zngur-generator"]
+
+[profile.dev]
+opt-level = 3
