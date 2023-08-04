@@ -1,4 +1,6 @@
+#include <cstdint>
 #include <iostream>
+#include <vector>
 
 #include "./generated.h"
 
@@ -23,3 +25,21 @@ int main() {
   auto x = s.into_iter().map(std::move(f)).sum();
   std::cout << x << " " << state << "\n";
 }
+
+template <>
+class ::rust::Impl<::std::vector<int32_t>>
+    : ::rust::std::iter::Iterator<int32_t>::Impl {
+
+public:
+  ::std::vector<int32_t> self;
+
+  ::rust::std::option::Option<int32_t> next() override {
+    if (self.empty()) {
+      return ::rust::std::option::Option<int32_t>::None();
+    } else {
+      auto r = self.back();
+      self.pop_back();
+      return ::rust::std::option::Option<int32_t>::Some(r);
+    }
+  }
+};

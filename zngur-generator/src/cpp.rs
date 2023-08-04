@@ -152,6 +152,12 @@ impl Write for State {
     }
 }
 
+pub struct CppTraitMethod {
+    pub name: String,
+    pub inputs: Vec<CppType>,
+    pub output: CppType,
+}
+
 pub struct CppFnSig {
     pub rust_link_name: String,
     pub inputs: Vec<CppType>,
@@ -227,6 +233,60 @@ pub struct CppMethod {
 
 pub struct BuildFromFunction {
     pub sig: CppFnSig,
+}
+
+pub struct CppTraitDefinition {
+    pub as_ty: CppType,
+    pub methods: Vec<CppTraitMethod>,
+}
+
+impl CppTraitDefinition {
+    fn emit(&self, state: &mut State) -> std::fmt::Result {
+        self.as_ty.path.emit_in_namespace(state, |state| {
+            if self.as_ty.generic_args.is_empty() {
+                write!(state, "struct {}", self.as_ty.path.name())?;
+            } else {
+                write!(
+                    state,
+                    "template<> struct {}<{}>",
+                    self.as_ty.path.name(),
+                    self.as_ty.generic_args.iter().join(", ")
+                )?;
+            }
+            write!(
+                state,
+                r#"
+{{
+public:
+    class Impl {{
+"#,
+            )?;
+            for method in &self.methods {
+                write!(
+                    state,
+                    r#"
+        virtual {output} {name}({input}) = 0;
+"#,
+                    output = method.output,
+                    name = method.name,
+                    input = method
+                        .inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, x)| format!("{x} i{n}"))
+                        .join(", "),
+                )?;
+            }
+            write!(
+                state,
+                r#"
+    }};
+}};
+"#,
+            )?;
+            Ok(())
+        })
+    }
 }
 
 pub struct CppTypeDefinition {
@@ -453,6 +513,7 @@ namespace rust {{
 pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
+    pub trait_defs: Vec<CppTraitDefinition>,
 }
 
 impl CppFile {
@@ -473,9 +534,7 @@ namespace rust {
 
     template<typename T>
     void __zngur_internal_assume_deinit(T& t);
-}
 
-namespace rust {
     template<typename T>
     struct Ref {
         Ref(T& t) {
@@ -486,9 +545,7 @@ namespace rust {
         template<typename T2>
         friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
     };
-}
 
-namespace rust {
     template<typename T>
     uint8_t* __zngur_internal_data_ptr(::rust::Ref<T>& t) {
         return (uint8_t*)&t.data;
@@ -499,15 +556,16 @@ namespace rust {
 
     template<typename T>
     void __zngur_internal_assume_deinit(::rust::Ref<T>& t) {}
-}
 
-namespace rust {
     uint8_t* __zngur_internal_data_ptr(int32_t& t) {
         return (uint8_t*)&t;
     }
 
     void __zngur_internal_assume_init(int32_t& t) {}
     void __zngur_internal_assume_deinit(int32_t& t) {}
+
+    template<typename T>
+    class Impl;
 }
 
 "#;
@@ -522,11 +580,17 @@ namespace rust {
         for td in &self.type_defs {
             td.ty.emit_header(state)?;
         }
+        for fd in &self.trait_defs {
+            fd.as_ty.emit_header(state)?;
+        }
         for td in &self.type_defs {
             td.emit(state)?;
         }
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
+        }
+        for fd in &self.trait_defs {
+            fd.emit(state)?;
         }
         Ok(())
     }

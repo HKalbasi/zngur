@@ -3,7 +3,7 @@ use std::{
     iter,
 };
 
-use iter_tools::Itertools;
+use iter_tools::{Either, Itertools};
 
 use crate::cpp::{cpp_handle_keyword, CppPath, CppType};
 
@@ -17,10 +17,17 @@ pub enum ScalarRustType {
 pub struct RustPathAndGenerics {
     path: Vec<String>,
     generics: Vec<RustType>,
+    named_generics: Vec<(String, RustType)>,
 }
+
 impl RustPathAndGenerics {
     fn into_cpp(&self) -> CppType {
-        let RustPathAndGenerics { path, generics } = self;
+        let RustPathAndGenerics {
+            path,
+            generics,
+            named_generics,
+        } = self;
+        let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {
             path: CppPath(
                 iter::once("rust")
@@ -29,7 +36,11 @@ impl RustPathAndGenerics {
                     .map(|x| x.to_owned())
                     .collect(),
             ),
-            generic_args: generics.iter().map(|x| x.into_cpp()).collect(),
+            generic_args: generics
+                .iter()
+                .chain(named_generics)
+                .map(|x| x.into_cpp())
+                .collect(),
         }
     }
 }
@@ -42,6 +53,35 @@ pub enum RustTrait {
         inputs: Vec<RustType>,
         output: Box<RustType>,
     },
+}
+impl RustTrait {
+    pub fn into_cpp_type(&self) -> CppType {
+        match self {
+            RustTrait::Normal(pg) => pg.into_cpp(),
+            RustTrait::Fn {
+                name,
+                inputs,
+                output,
+            } => CppType {
+                path: CppPath::from(&*format!("rust::{name}")),
+                generic_args: inputs
+                    .iter()
+                    .chain(Some(&**output))
+                    .map(|x| x.into_cpp())
+                    .collect(),
+            },
+        }
+    }
+}
+
+impl From<&str> for RustTrait {
+    fn from(value: &str) -> Self {
+        let ty = RustType::from(&*format!("dyn {value}"));
+        match ty {
+            RustType::Dyn(x) => x,
+            _ => unreachable!(),
+        }
+    }
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -56,15 +96,27 @@ pub enum RustType {
 
 impl Display for RustPathAndGenerics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let RustPathAndGenerics { path, generics } = self;
+        let RustPathAndGenerics {
+            path,
+            generics,
+            named_generics,
+        } = self;
         for p in path {
             if p != "crate" {
                 write!(f, "::")?;
             }
             write!(f, "{p}")?;
         }
-        if !generics.is_empty() {
-            write!(f, "::<{}>", generics.iter().join(", "))?;
+        if !generics.is_empty() || !named_generics.is_empty() {
+            write!(
+                f,
+                "::<{}>",
+                generics
+                    .iter()
+                    .map(|x| format!("{x}"))
+                    .chain(named_generics.iter().map(|x| format!("{} = {}", x.0, x.1)))
+                    .join(", ")
+            )?;
         }
         Ok(())
     }
@@ -118,6 +170,7 @@ impl From<&str> for RustType {
             ParenOpen,
             ParenClose,
             And,
+            Eq,
             Comma,
             Dyn,
             Ident(&'a str),
@@ -131,6 +184,7 @@ impl From<&str> for RustType {
             just("(").to(Token::ParenOpen),
             just(")").to(Token::ParenClose),
             just("&").to(Token::And),
+            just("=").to(Token::Eq),
             just(",").to(Token::Comma),
             just("dyn").to(Token::Dyn),
         ])
@@ -161,9 +215,15 @@ impl From<&str> for RustType {
             .collect::<Vec<_>>();
 
         let parser = recursive::<_, RustType, extra::Err<Simple<'_, Token>>, _, _>(|parser| {
+            let named_generic = select! {
+                Token::Ident(c) => c.to_owned(),
+            }
+            .then_ignore(just(Token::Eq))
+            .then(parser.clone())
+            .map(Either::Left);
             let generics = just(Token::ColonColon).repeated().at_most(1).ignore_then(
-                parser
-                    .clone()
+                named_generic
+                    .or(parser.clone().map(Either::Right))
                     .separated_by(just(Token::Comma))
                     .allow_trailing()
                     .collect::<Vec<_>>()
@@ -171,9 +231,14 @@ impl From<&str> for RustType {
             );
             let pg = path
                 .then(generics.clone().repeated().at_most(1).collect::<Vec<_>>())
-                .map(|x| RustPathAndGenerics {
-                    path: x.0,
-                    generics: x.1.into_iter().next().unwrap_or_default(),
+                .map(|x| {
+                    let generics = x.1.into_iter().next().unwrap_or_default();
+                    let (named_generics, generics) = generics.into_iter().partition_map(|x| x);
+                    RustPathAndGenerics {
+                        path: x.0,
+                        generics,
+                        named_generics,
+                    }
                 });
             let adt = pg.clone().map(RustType::Adt);
 
@@ -201,7 +266,7 @@ impl From<&str> for RustType {
                 .map(RustType::Dyn);
             let boxed = just(Token::Ident("Box")).then(generics).map(|(_, x)| {
                 assert_eq!(x.len(), 1);
-                RustType::Boxed(Box::new(x.into_iter().next().unwrap()))
+                RustType::Boxed(Box::new(x.into_iter().next().unwrap().right().unwrap()))
             });
             let unit = just(Token::ParenOpen)
                 .then(just(Token::ParenClose))
@@ -249,21 +314,7 @@ impl RustType {
                 todo!()
             }
             RustType::Dyn(tr) => {
-                let tr_as_cpp_type = match tr {
-                    RustTrait::Normal(pg) => pg.into_cpp(),
-                    RustTrait::Fn {
-                        name,
-                        inputs,
-                        output,
-                    } => CppType {
-                        path: CppPath::from(&*format!("rust::{name}")),
-                        generic_args: inputs
-                            .iter()
-                            .chain(Some(&**output))
-                            .map(|x| x.into_cpp())
-                            .collect(),
-                    },
-                };
+                let tr_as_cpp_type = tr.into_cpp_type();
                 CppType {
                     path: CppPath::from("rust::Dyn"),
                     generic_args: vec![tr_as_cpp_type],
@@ -387,6 +438,33 @@ pub extern "C" fn {mangled_name}(
         mangled_name
     }
 
+    pub fn add_constructor<'a>(
+        &mut self,
+        rust_name: &str,
+        args: impl Iterator<Item = &'a str> + Clone,
+    ) -> String {
+        let mangled_name = mangle_name(rust_name);
+        w!(
+            self,
+            r#"
+#[no_mangle]
+pub extern "C" fn {mangled_name}("#
+        );
+        for name in args.clone() {
+            w!(self, "f_{name}: *mut u8, ");
+        }
+        w!(
+            self,
+            r#"o: *mut u8) {{ unsafe {{
+    ::std::ptr::write(o as *mut _, {rust_name} {{ "#
+        );
+        for name in args {
+            w!(self, "{name}: ::std::ptr::read(f_{name} as *mut _), ");
+        }
+        wln!(self, "}}) }} }}");
+        mangled_name
+    }
+
     pub fn add_function(&mut self, rust_name: &str, arg_count: usize) -> String {
         let mangled_name = mangle_name(rust_name);
         w!(
@@ -426,6 +504,7 @@ mod tests {
         parse_pretty("&u32");
         parse_pretty("Box<i64>");
         parse_pretty("Box<dyn ::std::fmt::Debug>");
+        parse_pretty("Box<dyn ::std::iter::Iterator::<Item = i32>>");
         parse_pretty("Box<dyn Fn(i32, ::hello::World) -> Box<u64>>");
         parse_pretty("::Vec::<i32>");
         parse_pretty("::std::result::Result::<::Vec::<&u32>, ::Err>");
