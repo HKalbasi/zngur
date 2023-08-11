@@ -7,7 +7,7 @@ use iter_tools::{Either, Itertools};
 
 use crate::cpp::{cpp_handle_keyword, CppPath, CppType};
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScalarRustType {
     Uint(u32),
     Int(u32),
@@ -15,9 +15,9 @@ pub enum ScalarRustType {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct RustPathAndGenerics {
-    path: Vec<String>,
-    generics: Vec<RustType>,
-    named_generics: Vec<(String, RustType)>,
+    pub path: Vec<String>,
+    pub generics: Vec<RustType>,
+    pub named_generics: Vec<(String, RustType)>,
 }
 
 impl RustPathAndGenerics {
@@ -88,6 +88,7 @@ impl From<&str> for RustTrait {
 pub enum RustType {
     Scalar(ScalarRustType),
     Ref(Box<RustType>),
+    RefMut(Box<RustType>),
     Boxed(Box<RustType>),
     Dyn(RustTrait),
     Tuple(Vec<RustType>),
@@ -149,6 +150,7 @@ impl Display for RustType {
                 ScalarRustType::Int(s) => write!(f, "i{s}"),
             },
             RustType::Ref(ty) => write!(f, "&{ty}"),
+            RustType::RefMut(ty) => write!(f, "&mut {ty}"),
             RustType::Boxed(ty) => write!(f, "Box<{ty}>"),
             RustType::Tuple(v) => write!(f, "({})", v.iter().join(", ")),
             RustType::Adt(pg) => write!(f, "{pg}"),
@@ -303,6 +305,10 @@ impl RustType {
                 generic_args: vec![t.into_cpp()],
             },
             RustType::Ref(t) => CppType {
+                path: CppPath::from("rust::Ref"),
+                generic_args: vec![t.into_cpp()],
+            },
+            RustType::RefMut(t) => CppType {
                 path: CppPath::from("rust::Ref"),
                 generic_args: vec![t.into_cpp()],
             },

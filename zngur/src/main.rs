@@ -9,8 +9,8 @@ use std::{fs::File, io::Write};
 // use ra_ap_paths::AbsPath;
 // use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
 use zngur_generator::{
-    RustTrait, RustType, ZngurConstructor, ZngurFile, ZngurMethod, ZngurMethodReceiver, ZngurTrait,
-    ZngurType,
+    ParsedZngFile, RustTrait, RustType, ZngurConstructor, ZngurFile, ZngurMethod,
+    ZngurMethodReceiver, ZngurTrait, ZngurType,
 };
 
 #[cfg(False)]
@@ -67,142 +67,8 @@ fn parse_repo() {
 }
 
 fn main() {
-    let file = ZngurFile {
-        types: vec![
-            ZngurType {
-                ty: RustType::from("::crate::St"),
-                size: 32,
-                align: 8,
-                is_copy: false,
-                methods: vec![],
-                constructors: vec![],
-            },
-            ZngurType {
-                ty: RustType::from("()"),
-                size: 0,
-                align: 1,
-                is_copy: true,
-                methods: vec![],
-                constructors: vec![],
-            },
-            ZngurType {
-                ty: RustType::from("::std::option::Option<i32>"),
-                size: 8,
-                align: 4,
-                is_copy: true,
-                methods: vec![ZngurMethod {
-                    name: "unwrap".to_owned(),
-                    generics: vec![],
-                    receiver: ZngurMethodReceiver::Move,
-                    inputs: vec![],
-                    output: RustType::from("i32"),
-                }],
-                constructors: vec![
-                    ZngurConstructor::from("None {}"),
-                    ZngurConstructor::from("Some { 0: i32 }"),
-                ],
-            },
-            ZngurType {
-                ty: RustType::from("Box<dyn Fn(i32) -> i32>"),
-                size: 16,
-                align: 8,
-                is_copy: false,
-                methods: vec![],
-                constructors: vec![],
-            },
-            ZngurType {
-                ty: RustType::from(
-                    "::std::iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>>",
-                ),
-                size: 48,
-                align: 8,
-                is_copy: false,
-                methods: vec![ZngurMethod {
-                    name: "sum".to_owned(),
-                    generics: vec![RustType::from("i32")],
-                    receiver: ZngurMethodReceiver::Move,
-                    inputs: vec![],
-                    output: RustType::from("i32"),
-                }],
-                constructors: vec![],
-            },
-            ZngurType {
-                ty: RustType::from("::std::vec::IntoIter<i32>"),
-                size: 32,
-                align: 8,
-                is_copy: false,
-                methods: vec![
-                    ZngurMethod {
-                        name: "sum".to_owned(),
-                        generics: vec![RustType::from("i32")],
-                        receiver: ZngurMethodReceiver::Move,
-                        inputs: vec![],
-                        output: RustType::from("i32"),
-                    },
-                    ZngurMethod {
-                        name: "map".to_owned(),
-                        generics: vec![
-                            RustType::from("i32"),
-                            RustType::from("Box<dyn Fn(i32) -> i32>"),
-                        ],
-                        receiver: ZngurMethodReceiver::Move,
-                        inputs: vec![RustType::from("Box<dyn Fn(i32) -> i32>")],
-                        output: RustType::from(
-                            "::std::iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>>",
-                        ),
-                    },
-                ],
-                constructors: vec![],
-            },
-            ZngurType {
-                ty: RustType::from("::std::vec::Vec<i32>"),
-                size: 24,
-                align: 8,
-                is_copy: false,
-                methods: vec![
-                    ZngurMethod {
-                        name: "new".to_owned(),
-                        generics: vec![],
-                        receiver: ZngurMethodReceiver::Static,
-                        inputs: vec![],
-                        output: RustType::from("::std::vec::Vec<i32>"),
-                    },
-                    ZngurMethod {
-                        name: "push".to_owned(),
-                        generics: vec![],
-                        receiver: ZngurMethodReceiver::RefMut,
-                        inputs: vec![RustType::from("i32")],
-                        output: RustType::from("()"),
-                    },
-                    ZngurMethod {
-                        name: "clone".to_owned(),
-                        generics: vec![],
-                        receiver: ZngurMethodReceiver::Ref,
-                        inputs: vec![],
-                        output: RustType::from("::std::vec::Vec<i32>"),
-                    },
-                    ZngurMethod {
-                        name: "into_iter".to_owned(),
-                        generics: vec![],
-                        receiver: ZngurMethodReceiver::Move,
-                        inputs: vec![],
-                        output: RustType::from("::std::vec::IntoIter<i32>"),
-                    },
-                ],
-                constructors: vec![],
-            },
-        ],
-        traits: vec![ZngurTrait {
-            tr: RustTrait::from("::std::iter::Iterator::<Item = i32>"),
-            methods: vec![ZngurMethod {
-                name: "next".to_owned(),
-                generics: vec![],
-                receiver: ZngurMethodReceiver::RefMut,
-                inputs: vec![],
-                output: RustType::from("::std::option::Option<i32>"),
-            }],
-        }],
-    };
+    let file = std::fs::read_to_string("../simple-example/main.zng").unwrap();
+    let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
 
     let (rust, cpp) = file.render();
     File::create("../simple-example/src/generated.rs")

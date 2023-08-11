@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-chumsky = "1.0.0-alpha.4"
+ariadne = "0.3.0"
+chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 iter_tools = "0.1.4"

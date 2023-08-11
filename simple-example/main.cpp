@@ -33,7 +33,7 @@ class ::rust::Impl<::std::vector<int32_t>>
 public:
   ::std::vector<int32_t> self;
 
-  ::rust::std::option::Option<int32_t> next() override {
+  ::rust::std::option::Option<int32_t> next() {
     if (self.empty()) {
       return ::rust::std::option::Option<int32_t>::None();
     } else {

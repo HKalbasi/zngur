@@ -10,10 +10,13 @@ use iter_tools::Itertools;
 pub use rust::{RustTrait, RustType};
 
 pub mod cpp;
+mod parser;
 mod rust;
 
+pub use parser::ParsedZngFile;
 pub use rust::RustFile;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZngurMethodReceiver {
     Static,
     Ref,
@@ -68,12 +71,17 @@ pub struct ZngurTrait {
     pub methods: Vec<ZngurMethod>,
 }
 
+#[derive(Default)]
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub traits: Vec<ZngurTrait>,
 }
 
 impl ZngurFile {
+    pub fn build_from_zng(zng: ParsedZngFile<'_>) -> Self {
+        zng.into_zngur_file()
+    }
+
     pub fn render(self) -> (String, String) {
         let mut cpp_file = CppFile::default();
         let mut rust_file = RustFile::default();
