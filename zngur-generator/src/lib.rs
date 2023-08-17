@@ -1,8 +1,10 @@
 use cpp::cpp_handle_keyword;
 use cpp::CppFile;
+use cpp::CppFnDefinition;
 use cpp::CppFnSig;
 use cpp::CppMethod;
 use cpp::CppMethodKind;
+use cpp::CppPath;
 use cpp::CppTraitDefinition;
 use cpp::CppTraitMethod;
 use cpp::CppTypeDefinition;
@@ -75,6 +77,7 @@ pub struct ZngurTrait {
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub traits: Vec<ZngurTrait>,
+    pub funcs: Vec<ZngurMethod>,
 }
 
 impl ZngurFile {
@@ -147,6 +150,7 @@ impl ZngurFile {
                 align: ty_def.align,
                 is_copy: ty_def.is_copy,
                 methods: cpp_methods,
+                from_trait: None,
                 from_function: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(rust::RustTrait::Fn {
                         name,
@@ -171,18 +175,40 @@ impl ZngurFile {
             });
         }
         for tr in self.traits {
-            cpp_file.trait_defs.push(CppTraitDefinition {
-                as_ty: tr.tr.into_cpp_type(),
-                methods: tr
-                    .methods
-                    .into_iter()
-                    .map(|x| CppTraitMethod {
-                        name: x.name,
-                        inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                        output: x.output.into_cpp(),
-                    })
-                    .collect(),
+            let link_name = rust_file.add_builder_for_dyn_trait(&tr);
+            cpp_file.type_defs.push(CppTypeDefinition {
+                ty: RustType::Boxed(Box::new(RustType::Dyn(tr.tr.clone()))).into_cpp(),
+                size: 16,
+                align: 8,
+                is_copy: false,
+                methods: vec![],
+                from_function: None,
+                from_trait: Some(CppTraitDefinition {
+                    as_ty: tr.tr.into_cpp_type(),
+                    methods: tr
+                        .methods
+                        .into_iter()
+                        .map(|x| CppTraitMethod {
+                            name: x.name,
+                            inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
+                            output: x.output.into_cpp(),
+                        })
+                        .collect(),
+                    link_name,
+                }),
             })
+        }
+        for func in self.funcs {
+            let rust_link_name =
+                rust_file.add_function(&format!("crate::{}", func.name), func.inputs.len());
+            cpp_file.fn_defs.push(CppFnDefinition {
+                name: CppPath::from(&*format!("crate::{}", func.name)),
+                sig: CppFnSig {
+                    rust_link_name,
+                    inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),
+                    output: func.output.into_cpp(),
+                },
+            });
         }
         (rust_file.0, cpp_file.render())
     }

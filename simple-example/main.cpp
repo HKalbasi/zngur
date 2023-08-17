@@ -24,22 +24,23 @@ int main() {
       });
   auto x = s.into_iter().map(std::move(f)).sum();
   std::cout << x << " " << state << "\n";
+  std::vector<int32_t> vec{10, 20, 60};
+  auto vec_as_iter =
+      ::rust::Box<::rust::Dyn<::rust::std::iter::Iterator<int32_t>>>::build(
+          vec);
+  auto t = ::crate::collect_vec(std::move(vec_as_iter));
+  cout << t.clone().into_iter().sum() << endl;
 }
 
 template <>
-class ::rust::Impl<::std::vector<int32_t>>
-    : ::rust::std::iter::Iterator<int32_t>::Impl {
-
-public:
-  ::std::vector<int32_t> self;
-
-  ::rust::std::option::Option<int32_t> next() {
-    if (self.empty()) {
-      return ::rust::std::option::Option<int32_t>::None();
-    } else {
-      auto r = self.back();
-      self.pop_back();
-      return ::rust::std::option::Option<int32_t>::Some(r);
-    }
+::rust::std::option::Option<int32_t>
+rust::Impl<::std::vector<int32_t>,
+           ::rust::std::iter::Iterator<int32_t>>::next() {
+  if (self.empty()) {
+    return ::rust::std::option::Option<int32_t>::None();
+  } else {
+    auto r = self.back();
+    self.pop_back();
+    return ::rust::std::option::Option<int32_t>::Some(r);
   }
-};
+}

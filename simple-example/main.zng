@@ -45,3 +45,7 @@ mod ::std {
         fn next(&mut self) -> ::std::option::Option<i32>;
     }
 }
+
+mod crate {
+    fn collect_vec(Box<dyn ::std::iter::Iterator<Item = i32>>) -> ::std::vec::Vec<i32>;
+}

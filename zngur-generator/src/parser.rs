@@ -41,7 +41,11 @@ impl ParsedPath<'_> {
                 .chain(self.segments.into_iter())
                 .map(|x| x.to_owned())
                 .collect(),
-            ParsedPathStart::Crate => todo!(),
+            ParsedPathStart::Crate => ["crate"]
+                .into_iter()
+                .chain(self.segments)
+                .map(|x| x.to_owned())
+                .collect(),
         }
     }
 }
@@ -58,7 +62,9 @@ enum ParsedItem<'a> {
     },
     Trait {
         tr: ParsedRustTrait<'a>,
+        methods: Vec<ParsedMethod<'a>>,
     },
+    Fn(ParsedMethod<'a>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -84,6 +90,22 @@ struct ParsedMethod<'a> {
     generics: Vec<ParsedRustType<'a>>,
     inputs: Vec<ParsedRustType<'a>>,
     output: ParsedRustType<'a>,
+}
+
+impl ParsedMethod<'_> {
+    fn to_zngur(self, base: &[String]) -> ZngurMethod {
+        ZngurMethod {
+            name: self.name.to_owned(),
+            generics: self
+                .generics
+                .into_iter()
+                .map(|x| x.to_zngur(base))
+                .collect(),
+            receiver: self.receiver,
+            inputs: self.inputs.into_iter().map(|x| x.to_zngur(base)).collect(),
+            output: self.output.to_zngur(base),
+        }
+    }
 }
 
 impl ParsedItem<'_> {
@@ -132,13 +154,7 @@ impl ParsedItem<'_> {
                                 },
                             })
                         }
-                        ParsedTypeItem::Method(m) => methods.push(ZngurMethod {
-                            name: m.name.to_owned(),
-                            generics: m.generics.into_iter().map(|x| x.to_zngur(base)).collect(),
-                            receiver: m.receiver,
-                            inputs: m.inputs.into_iter().map(|x| x.to_zngur(base)).collect(),
-                            output: m.output.to_zngur(base),
-                        }),
+                        ParsedTypeItem::Method(m) => methods.push(m.to_zngur(base)),
                     }
                 }
                 r.types.push(ZngurType {
@@ -150,10 +166,11 @@ impl ParsedItem<'_> {
                     constructors,
                 });
             }
-            ParsedItem::Trait { tr } => r.traits.push(ZngurTrait {
+            ParsedItem::Trait { tr, methods } => r.traits.push(ZngurTrait {
                 tr: tr.to_zngur(base),
-                methods: vec![],
+                methods: methods.into_iter().map(|m| m.to_zngur(base)).collect(),
             }),
+            ParsedItem::Fn(f) => r.funcs.push(f.to_zngur(base)),
         }
     }
 }
@@ -278,7 +295,7 @@ impl ParsedZngFile<'_> {
 
 fn handle_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>, filename: &str, text: &str) {
     for e in errs {
-        Report::build(ReportKind::Error, filename.clone(), e.span().start)
+        Report::build(ReportKind::Error, filename, e.span().start)
             .with_message(e.to_string())
             .with_label(
                 Label::new((filename.to_string(), e.span().into_range()))
@@ -623,11 +640,21 @@ fn trait_item<'a>(
     just(Token::KwTrait)
         .ignore_then(rust_trait(rust_type()))
         .then(
-            (select! { c if !matches!(c, Token::BraceOpen | Token::BraceClose) => c })
+            method()
+                .then_ignore(just(Token::Semicolon))
                 .repeated()
+                .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
-        .map(|(tr, items)| ParsedItem::Trait { tr })
+        .map(|(tr, methods)| ParsedItem::Trait { tr, methods })
+}
+
+fn fn_item<'a>(
+) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+    method()
+        .then_ignore(just(Token::Semicolon))
+        .map(ParsedItem::Fn)
 }
 
 fn item<'a>(
@@ -644,6 +671,7 @@ fn item<'a>(
             .map(|(path, items)| ParsedItem::Mod { path, items })
             .or(type_item())
             .or(trait_item())
+            .or(fn_item())
     })
 }
 
@@ -664,6 +692,7 @@ fn path<'a>(
             .at_least(1)
             .collect::<Vec<_>>(),
         )
+        .or(just(Token::KwCrate).to((ParsedPathStart::Crate, vec![])))
         .map_with_span(|(start, segments), span| ParsedPath {
             start,
             segments,

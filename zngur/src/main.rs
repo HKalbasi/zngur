@@ -1,5 +1,6 @@
 use std::{fs::File, io::Write};
 
+use clap::Parser;
 // use ra_ap_hir::db::DefDatabase;
 // use ra_ap_hir_def::ModuleId;
 // use ra_ap_hir_ty::{db::HirDatabase, AdtId, Interner, Substitution, TyKind};
@@ -8,10 +9,7 @@ use std::{fs::File, io::Write};
 // use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
 // use ra_ap_paths::AbsPath;
 // use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
-use zngur_generator::{
-    ParsedZngFile, RustTrait, RustType, ZngurConstructor, ZngurFile, ZngurMethod,
-    ZngurMethodReceiver, ZngurTrait, ZngurType,
-};
+use zngur_generator::{ParsedZngFile, ZngurFile};
 
 #[cfg(False)]
 fn parse_repo() {
@@ -39,7 +37,9 @@ fn parse_repo() {
         .crate_graph()
         .iter()
         .find(|x| {
-            let Some(n) = &db.crate_graph()[*x].display_name else { return false };
+            let Some(n) = &db.crate_graph()[*x].display_name else {
+                return false;
+            };
             n.canonical_name() == "simple-example"
         })
         .unwrap();
@@ -66,7 +66,14 @@ fn parse_repo() {
     dbg!(layout);
 }
 
+#[derive(Parser)]
+enum Command {
+    #[command(alias = "g")]
+    Generate,
+}
+
 fn main() {
+    let cmd = Command::parse();
     let file = std::fs::read_to_string("../simple-example/main.zng").unwrap();
     let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
 

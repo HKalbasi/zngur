@@ -1,5 +1,6 @@
 [workspace]
 members = ["zngur", "simple-example", "zngur-generator"]
+resolver = "2"
 
 [profile.dev]
 opt-level = 3

@@ -238,54 +238,47 @@ pub struct BuildFromFunction {
 pub struct CppTraitDefinition {
     pub as_ty: CppType,
     pub methods: Vec<CppTraitMethod>,
+    pub link_name: String,
 }
 
 impl CppTraitDefinition {
     fn emit(&self, state: &mut State) -> std::fmt::Result {
-        self.as_ty.path.emit_in_namespace(state, |state| {
-            if self.as_ty.generic_args.is_empty() {
-                write!(state, "struct {}", self.as_ty.path.name())?;
-            } else {
-                write!(
-                    state,
-                    "template<> struct {}<{}>",
-                    self.as_ty.path.name(),
-                    self.as_ty.generic_args.iter().join(", ")
-                )?;
-            }
-            write!(
-                state,
-                r#"
-{{
+        write!(
+            state,
+            r#"
+namespace rust {{
+template<typename T>
+class Impl<T, {}> {{
 public:
-    class Impl {{
+    T self;
+    Impl(T&& val) : self(val) {{}}
 "#,
-            )?;
-            for method in &self.methods {
-                write!(
-                    state,
-                    r#"
-        virtual {output} {name}({input}) = 0;
-"#,
-                    output = method.output,
-                    name = method.name,
-                    input = method
-                        .inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, x)| format!("{x} i{n}"))
-                        .join(", "),
-                )?;
-            }
+            self.as_ty,
+        )?;
+        for method in &self.methods {
             write!(
                 state,
                 r#"
-    }};
+        {output} {name}({input});
+"#,
+                output = method.output,
+                name = method.name,
+                input = method
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .map(|(n, x)| format!("{x} i{n}"))
+                    .join(", "),
+            )?;
+        }
+        write!(
+            state,
+            r#"
+}};
 }};
 "#,
-            )?;
-            Ok(())
-        })
+        )?;
+        Ok(())
     }
 }
 
@@ -296,6 +289,7 @@ pub struct CppTypeDefinition {
     pub is_copy: bool,
     pub methods: Vec<CppMethod>,
     pub from_function: Option<BuildFromFunction>,
+    pub from_trait: Option<CppTraitDefinition>,
 }
 
 impl Default for CppTypeDefinition {
@@ -307,6 +301,7 @@ impl Default for CppTypeDefinition {
             is_copy: false,
             methods: vec![],
             from_function: None,
+            from_trait: None,
         }
     }
 }
@@ -326,6 +321,9 @@ namespace rust {{
 }}"#,
             ty = self.ty,
         )?;
+        if let Some(from_trait) = &self.from_trait {
+            from_trait.emit(state)?;
+        }
         self.ty.path.emit_in_namespace(state, |state| {
             if self.ty.generic_args.is_empty() {
                 write!(state, "struct {}", self.ty.path.name())?;
@@ -405,6 +403,34 @@ private:
     "#,
                     ty = self.ty.path.name(),
                     link_name = from_function.sig.rust_link_name,
+                )?;
+            }
+            if let Some(from_trait) = &self.from_trait {
+                // TODO: too special
+                writeln!(
+                    state,
+                    r#"
+    template<typename T>
+    static {ty} build(T f) {{
+        auto data = new {rust_impl}(::std::move(f));
+        {ty} o;
+        ::rust::__zngur_internal_assume_init(o);
+        {link_name}(
+            (uint8_t *)data,
+            [](uint8_t *d) {{ delete ({rust_impl} *)d; }},
+            [](uint8_t *d, uint8_t *o) {{
+                ::std::array<uint8_t, 8> *oo = (::std::array<uint8_t, 8> *)o;
+                auto dd = ({rust_impl} *)d;
+                auto ooo = dd->next();
+                *oo = *(::std::array<uint8_t, 8> *)::rust::__zngur_internal_data_ptr(ooo);
+            }},
+            ::rust::__zngur_internal_data_ptr(o));
+        return o;
+    }}
+    "#,
+                    rust_impl = format!("::rust::Impl<T, {}>", from_trait.as_ty),
+                    ty = self.ty.path.name(),
+                    link_name = from_trait.link_name,
                 )?;
             }
             for method in &self.methods {
@@ -488,6 +514,20 @@ namespace rust {{
         for method in &self.methods {
             method.sig.emit_rust_link(state)?;
         }
+        if let Some(ff) = &self.from_trait {
+            let CppTraitDefinition {
+                as_ty,
+                methods,
+                link_name,
+            } = ff;
+            // TODO: too special
+            writeln!(
+                state,
+                "void {link_name}(uint8_t *data, void destructor(uint8_t *),
+            void f_next(uint8_t *, uint8_t *),
+            uint8_t *o);"
+            )?;
+        }
         if let Some(ff) = &self.from_function {
             let BuildFromFunction {
                 sig:
@@ -513,7 +553,6 @@ namespace rust {{
 pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
-    pub trait_defs: Vec<CppTraitDefinition>,
 }
 
 impl CppFile {
@@ -564,7 +603,7 @@ namespace rust {
     void __zngur_internal_assume_init(int32_t& t) {}
     void __zngur_internal_assume_deinit(int32_t& t) {}
 
-    template<typename T>
+    template<typename Type, typename Trait>
     class Impl;
 }
 
@@ -580,18 +619,18 @@ namespace rust {
         for td in &self.type_defs {
             td.ty.emit_header(state)?;
         }
-        for fd in &self.trait_defs {
-            fd.as_ty.emit_header(state)?;
-        }
+        // for fd in &self.trait_defs {
+        //     fd.as_ty.emit_header(state)?;
+        // }
         for td in &self.type_defs {
             td.emit(state)?;
         }
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
         }
-        for fd in &self.trait_defs {
-            fd.emit(state)?;
-        }
+        // for fd in &self.trait_defs {
+        //     fd.emit(state)?;
+        // }
         Ok(())
     }
 

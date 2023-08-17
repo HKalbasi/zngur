@@ -72,6 +72,14 @@ impl RustTrait {
             },
         }
     }
+
+    fn take_assocs(mut self) -> (Self, Vec<(String, RustType)>) {
+        let assocs = match &mut self {
+            RustTrait::Normal(p) => std::mem::take(&mut p.named_generics),
+            RustTrait::Fn { .. } => vec![],
+        };
+        (self, assocs)
+    }
 }
 
 impl From<&str> for RustTrait {
@@ -379,6 +387,7 @@ fn mangle_name(name: &str) -> String {
     let bads = [
         (1, "::<", 'm'),
         (1, ">::", 'n'),
+        (2, "=", 'e'),
         (2, "<", 'x'),
         (2, ">", 'y'),
         (2, "::", 's'),
@@ -395,6 +404,19 @@ fn mangle_name(name: &str) -> String {
 }
 
 impl RustFile {
+    fn call_cpp_function(&mut self, name: &str, inputs: usize) {
+        for n in 0..inputs {
+            wln!(self, "let mut i{n} = ::core::mem::MaybeUninit::new(i{n});")
+        }
+        wln!(self, "let mut r = ::core::mem::MaybeUninit::uninit();");
+        w!(self, "{name}(data");
+        for n in 0..inputs {
+            w!(self, ", i{n}.as_mut_ptr() as *mut u8");
+        }
+        wln!(self, ", r.as_mut_ptr() as *mut u8);");
+        wln!(self, "r.assume_init()");
+    }
+
     pub fn add_static_size_assert(&mut self, ty: &RustType, size: usize) {
         wln!(
             self,
@@ -407,6 +429,63 @@ impl RustFile {
             self,
             r#"const _: () = assert!(::std::mem::align_of::<{ty}>() == {align});"#
         );
+    }
+
+    pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &crate::ZngurTrait) -> String {
+        let trait_name = tr.tr.to_string();
+        let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
+        let mangled_name = mangle_name(&trait_name);
+        wln!(
+            self,
+            r#"
+#[no_mangle]
+pub extern "C" fn {mangled_name}(
+    data: *mut u8,
+    destructor: extern "C" fn(*mut u8),
+    f_next: extern "C" fn(data: *mut u8, o: *mut u8),
+    o: *mut u8,
+) {{
+    struct Wrapper {{ 
+        value: ZngurCppOpaqueObject,
+        f_next: extern "C" fn(data: *mut u8, o: *mut u8),
+    }}
+    impl {trait_without_assocs} for Wrapper {{
+"#
+        );
+        for (name, ty) in assocs {
+            wln!(self, "        type {name} = {ty};");
+        }
+        for method in &tr.methods {
+            w!(self, "        fn {}(", method.name);
+            match method.receiver {
+                crate::ZngurMethodReceiver::Static => {
+                    panic!("traits with static methods are not object safe");
+                }
+                crate::ZngurMethodReceiver::Ref => w!(self, "&self"),
+                crate::ZngurMethodReceiver::RefMut => w!(self, "&mut self"),
+                crate::ZngurMethodReceiver::Move => w!(self, "self"),
+            }
+            for (i, ty) in method.inputs.iter().enumerate() {
+                w!(self, ", i{i}: {ty}");
+            }
+            wln!(self, ") -> {} {{ unsafe {{", method.output);
+            wln!(self, "            let data = self.value.data;");
+            self.call_cpp_function("(self.f_next)", 0);
+            wln!(self, "        }} }}");
+        }
+        wln!(
+            self,
+            r#"
+    }}
+    let this = Wrapper {{
+        value: ZngurCppOpaqueObject {{ data, destructor }},
+        f_next,
+    }};
+    let r: Box<dyn {trait_name}> = Box::new(this);
+    unsafe {{ std::ptr::write(o as *mut _, r) }}
+}}"#
+        );
+        mangled_name
     }
 
     pub fn add_builder_for_dyn_fn(
@@ -427,16 +506,15 @@ pub extern "C" fn {mangled_name}(
     o: *mut u8,
 ) {{
     let this = ZngurCppOpaqueObject {{ data, destructor }};
-    let r: Box<dyn Fn(i32) -> i32> = Box::new(move |i1| unsafe {{
+    let r: Box<dyn Fn(i32) -> i32> = Box::new(move |i0| unsafe {{
         _ = &this;
-        let mut i1 = ::core::mem::ManuallyDrop::new(i1);
-        let mut r = ::core::mem::MaybeUninit::uninit();
-        call(
-            this.data,
-            &mut *i1 as *mut _ as *mut _,
-            r.as_mut_ptr() as *mut _,
+        let data = this.data;
+"#,
         );
-        r.assume_init()
+        self.call_cpp_function("call", 1);
+        wln!(
+            self,
+            r#"
     }});
     unsafe {{ std::ptr::write(o as *mut _, r) }}
 }}"#
