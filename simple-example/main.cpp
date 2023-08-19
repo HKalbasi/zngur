@@ -29,7 +29,7 @@ int main() {
       ::rust::Box<::rust::Dyn<::rust::std::iter::Iterator<int32_t>>>::build(
           vec);
   auto t = ::crate::collect_vec(std::move(vec_as_iter));
-  cout << t.clone().into_iter().sum() << endl;
+  zngur_dbg(t);
 }
 
 template <>

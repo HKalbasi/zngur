@@ -59,11 +59,23 @@ impl From<&str> for ZngurConstructor {
     }
 }
 
+pub enum ZngurWellknownTrait {
+    Debug,
+}
+
+pub enum ZngurWellknownTraitData {
+    Debug {
+        pretty_print: String,
+        debug_print: String,
+    },
+}
+
 pub struct ZngurType {
     pub ty: RustType,
     pub size: usize,
     pub align: usize,
     pub is_copy: bool,
+    pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<ZngurMethod>,
     pub constructors: Vec<ZngurConstructor>,
 }
@@ -92,6 +104,7 @@ impl ZngurFile {
             rust_file.add_static_size_assert(&ty_def.ty, ty_def.size);
             rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
             let mut cpp_methods = vec![];
+            let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
                 let rust_link_name = rust_file.add_constructor(
                     &format!("{}::{}", ty_def.ty, constructor.name),
@@ -106,6 +119,10 @@ impl ZngurFile {
                         output: ty_def.ty.into_cpp(),
                     },
                 });
+            }
+            for wellknown_trait in ty_def.wellknown_traits {
+                let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
+                wellknown_traits.push(data);
             }
             for method in ty_def.methods {
                 let receiver_type = match method.receiver {
@@ -151,6 +168,7 @@ impl ZngurFile {
                 is_copy: ty_def.is_copy,
                 methods: cpp_methods,
                 from_trait: None,
+                wellknown_traits,
                 from_function: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(rust::RustTrait::Fn {
                         name,
@@ -196,6 +214,7 @@ impl ZngurFile {
                         .collect(),
                     link_name,
                 }),
+                wellknown_traits: vec![],
             })
         }
         for func in self.funcs {

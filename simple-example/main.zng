@@ -33,6 +33,7 @@ mod ::std {
 
         type Vec<i32> {
             properties(size = 24, align = 8);
+            wellknown_traits(Debug);
 
             fn new() -> Vec<i32>;
             fn push(&mut self, i32);

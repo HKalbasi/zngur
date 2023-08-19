@@ -5,7 +5,10 @@ use std::{
 
 use iter_tools::{Either, Itertools};
 
-use crate::cpp::{cpp_handle_keyword, CppPath, CppType};
+use crate::{
+    cpp::{cpp_handle_keyword, CppPath, CppType},
+    ZngurWellknownTrait, ZngurWellknownTraitData,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ScalarRustType {
@@ -495,6 +498,7 @@ pub extern "C" fn {mangled_name}(
         output: &RustType,
     ) -> String {
         let mangled_name = mangle_name(&inputs.iter().chain(Some(output)).join(", "));
+        let trait_str = format!("{name}({}) -> {output}", inputs.iter().join(", "));
         wln!(
             self,
             r#"
@@ -506,7 +510,7 @@ pub extern "C" fn {mangled_name}(
     o: *mut u8,
 ) {{
     let this = ZngurCppOpaqueObject {{ data, destructor }};
-    let r: Box<dyn Fn(i32) -> i32> = Box::new(move |i0| unsafe {{
+    let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
         _ = &this;
         let data = this.data;
 "#,
@@ -570,6 +574,39 @@ pub extern "C" fn {mangled_name}("#
         }
         wln!(self, ")) }} }}");
         mangled_name
+    }
+
+    pub(crate) fn add_wellknown_trait(
+        &mut self,
+        ty: &RustType,
+        wellknown_trait: ZngurWellknownTrait,
+    ) -> ZngurWellknownTraitData {
+        match wellknown_trait {
+            ZngurWellknownTrait::Debug => {
+                let pretty_print = mangle_name(&format!("{ty}=debug_pretty"));
+                let debug_print = mangle_name(&format!("{ty}=debug_print"));
+                wln!(
+                    self,
+                    r#"
+#[no_mangle]
+pub extern "C" fn {pretty_print}(v: *mut u8) {{
+    eprintln!("{{:#?}}", unsafe {{ &*(v as *mut {ty}) }});
+}}"#
+                );
+                wln!(
+                    self,
+                    r#"
+#[no_mangle]
+pub extern "C" fn {debug_print}(v: *mut u8) {{
+    eprintln!("{{:?}}", unsafe {{ &*(v as *mut {ty}) }});
+}}"#
+                );
+                ZngurWellknownTraitData::Debug {
+                    pretty_print,
+                    debug_print,
+                }
+            }
+        }
     }
 }
 

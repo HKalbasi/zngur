@@ -76,6 +76,7 @@ enum ParsedConstructorArgs<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedTypeItem<'a> {
     Properties(Vec<(&'a str, usize)>),
+    Traits(Vec<&'a str>),
     Constructor {
         name: &'a str,
         args: ParsedConstructorArgs<'a>,
@@ -120,6 +121,7 @@ impl ParsedItem<'_> {
             ParsedItem::Type { ty, items } => {
                 let mut methods = vec![];
                 let mut constructors = vec![];
+                let mut wellknown_traits = vec![];
                 let mut size = 0;
                 let mut align = 0;
                 let mut is_copy = false;
@@ -140,6 +142,12 @@ impl ParsedItem<'_> {
                                     _ => todo!(),
                                 }
                             }
+                        }
+                        ParsedTypeItem::Traits(tr) => {
+                            wellknown_traits.extend(tr.into_iter().map(|x| match x {
+                                "Debug" => crate::ZngurWellknownTrait::Debug,
+                                _ => panic!("unknown trait {x}"),
+                            }));
                         }
                         ParsedTypeItem::Constructor { name, args } => {
                             constructors.push(ZngurConstructor {
@@ -163,6 +171,7 @@ impl ParsedItem<'_> {
                     align,
                     is_copy,
                     methods,
+                    wellknown_traits,
                     constructors,
                 });
             }
@@ -338,6 +347,21 @@ enum Token<'a> {
     Number(usize),
 }
 
+impl<'a> Token<'a> {
+    fn ident_or_kw(ident: &'a str) -> Self {
+        match ident {
+            "dyn" => Token::KwDyn,
+            "mod" => Token::KwMod,
+            "type" => Token::KwType,
+            "trait" => Token::KwTrait,
+            "crate" => Token::KwCrate,
+            "fn" => Token::KwFn,
+            "mut" => Token::KwMut,
+            x => Token::Ident(x),
+        }
+    }
+}
+
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -381,15 +405,8 @@ fn lexer<'src>(
         just("=").to(Token::Eq),
         just(",").to(Token::Comma),
         just(";").to(Token::Semicolon),
-        just("dyn").to(Token::KwDyn),
-        just("mod").to(Token::KwMod),
-        just("type").to(Token::KwType),
-        just("trait").to(Token::KwTrait),
-        just("crate").to(Token::KwCrate),
-        just("fn").to(Token::KwFn),
-        just("mut").to(Token::KwMut),
     ])
-    .or(text::ident().map(|x| Token::Ident(x)))
+    .or(text::ident().map(Token::ident_or_kw))
     .or(text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())));
     token
         .map_with_span(|tok, span| (tok, span))
@@ -604,7 +621,18 @@ fn type_item<'a>(
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
             )
-            .map(|x| ParsedTypeItem::Properties(x));
+            .map(ParsedTypeItem::Properties);
+        let trait_item = select! {
+            Token::Ident(c) => c,
+        };
+        let traits = just(Token::Ident("wellknown_traits"))
+            .ignore_then(
+                trait_item
+                    .separated_by(just(Token::Comma))
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+            )
+            .map(ParsedTypeItem::Traits);
         let constructor_args = rust_type()
             .separated_by(just(Token::Comma))
             .collect::<Vec<_>>()
@@ -619,6 +647,7 @@ fn type_item<'a>(
             .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
         );
         properties
+            .or(traits)
             .or(constructor)
             .or(method().map(ParsedTypeItem::Method))
             .then_ignore(just(Token::Semicolon))

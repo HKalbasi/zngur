@@ -2,6 +2,8 @@ use std::fmt::{Display, Write};
 
 use iter_tools::Itertools;
 
+use crate::ZngurWellknownTraitData;
+
 pub struct CppPath(pub Vec<String>);
 
 impl CppPath {
@@ -290,6 +292,7 @@ pub struct CppTypeDefinition {
     pub methods: Vec<CppMethod>,
     pub from_function: Option<BuildFromFunction>,
     pub from_trait: Option<CppTraitDefinition>,
+    pub wellknown_traits: Vec<ZngurWellknownTraitData>,
 }
 
 impl Default for CppTypeDefinition {
@@ -300,6 +303,7 @@ impl Default for CppTypeDefinition {
             align: 0,
             is_copy: false,
             methods: vec![],
+            wellknown_traits: vec![],
             from_function: None,
             from_trait: None,
         }
@@ -347,6 +351,8 @@ private:
     friend void ::rust::__zngur_internal_assume_init(T& t);
     template<typename T>
     friend void ::rust::__zngur_internal_assume_deinit(T& t);
+    template<typename T>
+    friend void ::rust::zngur_pretty_print(T& t);
 "#,
                 align = self.align,
                 size = self.size,
@@ -438,7 +444,7 @@ private:
                 method.sig.emit_cpp_def(state, &method.name)?;
                 if method.kind != CppMethodKind::StaticOnly {
                     let CppFnSig {
-                        rust_link_name,
+                        rust_link_name: _,
                         inputs,
                         output,
                     } = &method.sig;
@@ -469,6 +475,32 @@ private:
             }
             writeln!(state, "}};")
         })?;
+        let check = if self.is_copy {
+            ""
+        } else {
+            "if (!t.drop_flag) { ::std::terminate(); }"
+        };
+        let ty = &self.ty;
+        for tr in &self.wellknown_traits {
+            match tr {
+                ZngurWellknownTraitData::Debug {
+                    pretty_print,
+                    debug_print,
+                } => {
+                    writeln!(
+                        state,
+                        r#"
+            namespace rust {{
+                template<>
+                void zngur_pretty_print({ty}& t) {{
+                    {check}
+                    {pretty_print}((uint8_t*)&t.data);
+                }}
+            }}"#,
+                    )?;
+                }
+            }
+        }
         writeln!(
             state,
             r#"
@@ -489,12 +521,6 @@ namespace rust {{
         {assume_deinit}
     }}
 }}"#,
-            ty = self.ty,
-            check = if self.is_copy {
-                ""
-            } else {
-                "if (!t.drop_flag) { ::std::terminate(); }"
-            },
             assume_init = if self.is_copy {
                 ""
             } else {
@@ -514,10 +540,21 @@ namespace rust {{
         for method in &self.methods {
             method.sig.emit_rust_link(state)?;
         }
+        for tr in &self.wellknown_traits {
+            match tr {
+                ZngurWellknownTraitData::Debug {
+                    pretty_print,
+                    debug_print,
+                } => {
+                    writeln!(state, "void {pretty_print}(uint8_t *data);")?;
+                    writeln!(state, "void {debug_print}(uint8_t *data);")?;
+                }
+            }
+        }
         if let Some(ff) = &self.from_trait {
             let CppTraitDefinition {
-                as_ty,
-                methods,
+                as_ty: _,
+                methods: _,
                 link_name,
             } = ff;
             // TODO: too special
@@ -533,8 +570,8 @@ namespace rust {{
                 sig:
                     CppFnSig {
                         rust_link_name,
-                        inputs,
-                        output,
+                        inputs: _,
+                        output: _,
                     },
             } = ff;
             // TODO: too special
@@ -564,6 +601,8 @@ impl CppFile {
 #include <iostream>
 #include <functional>
 
+#define zngur_dbg(x) {}
+
 namespace rust {
     template<typename T>
     uint8_t* __zngur_internal_data_ptr(T& t);
@@ -592,6 +631,9 @@ namespace rust {
 
     template<typename T>
     void __zngur_internal_assume_init(::rust::Ref<T>& t) {}
+
+    template<typename T>
+    void zngur_pretty_print(T& t) {}
 
     template<typename T>
     void __zngur_internal_assume_deinit(::rust::Ref<T>& t) {}
