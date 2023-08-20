@@ -1,5 +1,5 @@
 [workspace]
-members = ["zngur", "simple-example", "zngur-generator"]
+members = ["zngur", "examples/simple", "zngur-generator"]
 resolver = "2"
 
 [profile.dev]

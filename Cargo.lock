@@ -178,6 +178,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-simple"
+version = "0.1.0"
+
+[[package]]
 name = "hashbrown"
 version = "0.13.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -284,10 +288,6 @@ dependencies = [
  "linux-raw-sys",
  "windows-sys",
 ]
-
-[[package]]
-name = "simple-example"
-version = "0.1.0"
 
 [[package]]
 name = "stacker"

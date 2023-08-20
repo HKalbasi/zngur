@@ -1,4 +1,4 @@
-use std::{fs::File, io::Write};
+use std::{fs::File, io::Write, path::PathBuf};
 
 use clap::Parser;
 // use ra_ap_hir::db::DefDatabase;
@@ -69,21 +69,26 @@ fn parse_repo() {
 #[derive(Parser)]
 enum Command {
     #[command(alias = "g")]
-    Generate,
+    Generate { path: PathBuf },
 }
 
 fn main() {
     let cmd = Command::parse();
-    let file = std::fs::read_to_string("../simple-example/main.zng").unwrap();
-    let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
+    match cmd {
+        Command::Generate { path } => {
+            let file = std::fs::read_to_string(&path).unwrap();
+            let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
 
-    let (rust, cpp) = file.render();
-    File::create("../simple-example/src/generated.rs")
-        .unwrap()
-        .write_all(rust.as_bytes())
-        .unwrap();
-    File::create("../simple-example/generated.h")
-        .unwrap()
-        .write_all(cpp.as_bytes())
-        .unwrap();
+            let (rust, cpp) = file.render();
+            let path = path.parent().unwrap();
+            File::create(path.join("src/generated.rs"))
+                .unwrap()
+                .write_all(rust.as_bytes())
+                .unwrap();
+            File::create(path.join("generated.h"))
+                .unwrap()
+                .write_all(cpp.as_bytes())
+                .unwrap();
+        }
+    }
 }

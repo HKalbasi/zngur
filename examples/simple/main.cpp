@@ -50,15 +50,3 @@ int main() {
   auto t = ::crate::collect_vec(std::move(vec_as_iter));
   zngur_dbg(t);
 }
-
-// template <>
-// Option<int32_t> rust::Impl<::std::vector<int32_t>,
-//                            ::rust::std::iter::Iterator<int32_t>>::next() {
-//   if (self.empty()) {
-//     return Option<int32_t>::None();
-//   } else {
-//     auto r = self.back();
-//     self.pop_back();
-//     return Option<int32_t>::Some(r);
-//   }
-// }
