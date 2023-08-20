@@ -249,11 +249,9 @@ impl CppTraitDefinition {
             state,
             r#"
 namespace rust {{
-template<typename T>
-class Impl<T, {}> {{
+template<>
+class Impl<{}> {{
 public:
-    T self;
-    Impl(T&& val) : self(val) {{}}
 "#,
             self.as_ty,
         )?;
@@ -261,7 +259,7 @@ public:
             write!(
                 state,
                 r#"
-        {output} {name}({input});
+        virtual {output} {name}({input}) = 0;
 "#,
                 output = method.output,
                 name = method.name,
@@ -416,17 +414,17 @@ private:
                 writeln!(
                     state,
                     r#"
-    template<typename T>
-    static {ty} build(T f) {{
-        auto data = new {rust_impl}(::std::move(f));
+    template<typename T, typename... ARGS>
+    static {ty} make_box(ARGS&&... args) {{
+        auto data = new T(::std::forward<ARGS>(args)...);
         {ty} o;
         ::rust::__zngur_internal_assume_init(o);
         {link_name}(
             (uint8_t *)data,
-            [](uint8_t *d) {{ delete ({rust_impl} *)d; }},
+            [](uint8_t *d) {{ delete (T *)d; }},
             [](uint8_t *d, uint8_t *o) {{
                 ::std::array<uint8_t, 8> *oo = (::std::array<uint8_t, 8> *)o;
-                auto dd = ({rust_impl} *)d;
+                auto dd = (T *)d;
                 auto ooo = dd->next();
                 *oo = *(::std::array<uint8_t, 8> *)::rust::__zngur_internal_data_ptr(ooo);
             }},
@@ -434,7 +432,6 @@ private:
         return o;
     }}
     "#,
-                    rust_impl = format!("::rust::Impl<T, {}>", from_trait.as_ty),
                     ty = self.ty.path.name(),
                     link_name = from_trait.link_name,
                 )?;
@@ -601,7 +598,11 @@ impl CppFile {
 #include <iostream>
 #include <functional>
 
-#define zngur_dbg(x) {}
+#define zngur_dbg(x)                                                           \
+  {                                                                            \
+    cerr << "[" << __FILE__ << ":" << __LINE__ << "] " << #x << " = ";         \
+    ::rust::zngur_pretty_print(x);                                             \
+  }
 
 namespace rust {
     template<typename T>
@@ -645,7 +646,7 @@ namespace rust {
     void __zngur_internal_assume_init(int32_t& t) {}
     void __zngur_internal_assume_deinit(int32_t& t) {}
 
-    template<typename Type, typename Trait>
+    template<typename Type>
     class Impl;
 }
 
