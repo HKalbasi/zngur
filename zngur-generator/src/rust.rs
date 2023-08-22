@@ -16,7 +16,7 @@ pub enum ScalarRustType {
     Int(u32),
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RustPathAndGenerics {
     pub path: Vec<String>,
     pub generics: Vec<RustType>,
@@ -48,7 +48,7 @@ impl RustPathAndGenerics {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RustTrait {
     Normal(RustPathAndGenerics),
     Fn {
@@ -95,7 +95,7 @@ impl From<&str> for RustTrait {
     }
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RustType {
     Scalar(ScalarRustType),
     Ref(Box<RustType>),
@@ -390,11 +390,12 @@ fn mangle_name(name: &str) -> String {
     let bads = [
         (1, "::<", 'm'),
         (1, ">::", 'n'),
+        (1, "->", 'a'),
+        (2, "&", 'r'),
         (2, "=", 'e'),
         (2, "<", 'x'),
         (2, ">", 'y'),
         (2, "::", 's'),
-        (2, "->", 'a'),
         (2, ",", 'c'),
         (2, "(", 'p'),
         (2, ")", 'q'),

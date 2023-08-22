@@ -343,15 +343,12 @@ namespace rust {{
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
-    template<typename T>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(T& t);
-    template<typename T>
-    friend void ::rust::__zngur_internal_assume_init(T& t);
-    template<typename T>
-    friend void ::rust::__zngur_internal_assume_deinit(T& t);
-    template<typename T>
-    friend void ::rust::zngur_pretty_print(T& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr({ty}& t);
+    friend void ::rust::__zngur_internal_assume_init({ty}& t);
+    friend void ::rust::__zngur_internal_assume_deinit({ty}& t);
+    friend void ::rust::zngur_pretty_print({ty}& t);
 "#,
+                ty = self.ty,
                 align = self.align,
                 size = self.size,
             )?;
@@ -366,7 +363,7 @@ private:
     {ty}() : drop_flag(false) {{}}
     ~{ty}() {{
         if (drop_flag) {{
-            ::std::cout << "dropped";
+            // TODO: call drop in place glue code
         }}
     }}
     {ty}(const {ty}& other) = delete;
@@ -639,18 +636,30 @@ namespace rust {
     template<typename T>
     void __zngur_internal_assume_deinit(::rust::Ref<T>& t) {}
 
-    uint8_t* __zngur_internal_data_ptr(int32_t& t) {
-        return (uint8_t*)&t;
-    }
-
-    void __zngur_internal_assume_init(int32_t& t) {}
-    void __zngur_internal_assume_deinit(int32_t& t) {}
-
     template<typename Type>
     class Impl;
-}
-
 "#;
+        for s in [8, 16, 32, 64] {
+            writeln!(
+                state,
+                r#"
+    uint8_t* __zngur_internal_data_ptr(int{s}_t& t) {{
+        return (uint8_t*)&t;
+    }}
+
+    void __zngur_internal_assume_init(int{s}_t& t) {{}}
+    void __zngur_internal_assume_deinit(int{s}_t& t) {{}}
+
+    uint8_t* __zngur_internal_data_ptr(uint{s}_t& t) {{
+        return (uint8_t*)&t;
+    }}
+
+    void __zngur_internal_assume_init(uint{s}_t& t) {{}}
+    void __zngur_internal_assume_deinit(uint{s}_t& t) {{}}
+"#
+            )?;
+        }
+        writeln!(state, "}}")?;
         writeln!(state, "extern \"C\" {{")?;
         for f in &self.fn_defs {
             f.sig.emit_rust_link(state)?;

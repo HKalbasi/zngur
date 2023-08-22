@@ -1,0 +1,63 @@
+type () {
+    properties(size = 0, align = 1, is_copy = 1);
+}
+
+type &::core::primitive::str {
+    properties(size = 16, align = 8, is_copy = 1);
+}
+
+mod crate {
+    fn as_ptr(&::core::primitive::str) -> u64;
+    fn len(&::core::primitive::str) -> u64;
+}
+
+mod ::std {
+    type string::String {
+        properties(size = 24, align = 8);
+        fn as_str(&self) -> &::core::primitive::str;
+    }
+}
+
+mod ::rustyline {
+    type error::ReadlineError {
+        properties(size = 16, align = 8);
+
+        constructor Interrupted;
+        constructor Eof;
+    }
+
+    type Result<DefaultEditor> {
+        properties(size = 688, align = 8);
+
+        // TODO: fn unwrap() -> DefaultEditor;
+    }
+
+    type Result<::std::string::String> {
+        properties(size = 24, align = 8);
+    
+        fn is_err(&self) -> u8;
+        fn unwrap(self) -> ::std::string::String;
+        fn unwrap_err(self) -> error::ReadlineError;
+    }
+
+    type Result<()> {
+        properties(size = 16, align = 8);
+    
+        fn is_err(&self) -> u8;
+    }
+
+    type DefaultEditor {
+        properties(size = 688, align = 8);
+    
+        fn new() -> Result<DefaultEditor>;
+        fn readline(&mut self, &::core::primitive::str) -> Result<::std::string::String>;
+        fn load_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
+        fn add_history_entry<&::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
+        fn save_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
+    }
+}
+
+mod crate {
+    fn build_editor() -> ::rustyline::DefaultEditor;
+    fn rust_str(u64) -> &::core::primitive::str;
+}

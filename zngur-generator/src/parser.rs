@@ -179,7 +179,18 @@ impl ParsedItem<'_> {
                 tr: tr.to_zngur(base),
                 methods: methods.into_iter().map(|m| m.to_zngur(base)).collect(),
             }),
-            ParsedItem::Fn(f) => r.funcs.push(f.to_zngur(base)),
+            ParsedItem::Fn(f) => {
+                let method = f.to_zngur(base);
+                r.funcs.push(crate::ZngurFn {
+                    path: RustPathAndGenerics {
+                        path: base.iter().chain(Some(&method.name)).cloned().collect(),
+                        generics: method.generics,
+                        named_generics: vec![],
+                    },
+                    inputs: method.inputs,
+                    output: method.output,
+                })
+            }
         }
     }
 }
@@ -408,8 +419,14 @@ fn lexer<'src>(
     ])
     .or(text::ident().map(Token::ident_or_kw))
     .or(text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())));
+
+    let comment = just("//")
+        .then(any().and_is(just('\n').not()).repeated())
+        .padded();
+
     token
         .map_with_span(|tok, span| (tok, span))
+        .padded_by(comment.repeated())
         .padded()
         .repeated()
         .collect()

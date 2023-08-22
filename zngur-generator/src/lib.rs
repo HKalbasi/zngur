@@ -9,6 +9,7 @@ use cpp::CppTraitDefinition;
 use cpp::CppTraitMethod;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
+use rust::RustPathAndGenerics;
 pub use rust::{RustTrait, RustType};
 
 pub mod cpp;
@@ -26,10 +27,18 @@ pub enum ZngurMethodReceiver {
     Move,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ZngurMethod {
     pub name: String,
     pub generics: Vec<RustType>,
     pub receiver: ZngurMethodReceiver,
+    pub inputs: Vec<RustType>,
+    pub output: RustType,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ZngurFn {
+    pub path: RustPathAndGenerics,
     pub inputs: Vec<RustType>,
     pub output: RustType,
 }
@@ -89,7 +98,7 @@ pub struct ZngurTrait {
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub traits: Vec<ZngurTrait>,
-    pub funcs: Vec<ZngurMethod>,
+    pub funcs: Vec<ZngurFn>,
 }
 
 impl ZngurFile {
@@ -218,10 +227,9 @@ impl ZngurFile {
             })
         }
         for func in self.funcs {
-            let rust_link_name =
-                rust_file.add_function(&format!("crate::{}", func.name), func.inputs.len());
+            let rust_link_name = rust_file.add_function(&func.path.to_string(), func.inputs.len());
             cpp_file.fn_defs.push(CppFnDefinition {
-                name: CppPath::from(&*format!("crate::{}", func.name)),
+                name: CppPath(func.path.path),
                 sig: CppFnSig {
                     rust_link_name,
                     inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),
