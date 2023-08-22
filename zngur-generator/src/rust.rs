@@ -407,6 +407,11 @@ fn mangle_name(name: &str) -> String {
     name
 }
 
+pub struct ConstructorMangledNames {
+    pub constructor: String,
+    pub match_check: String,
+}
+
 impl RustFile {
     fn call_cpp_function(&mut self, name: &str, inputs: usize) {
         for n in 0..inputs {
@@ -531,13 +536,14 @@ pub extern "C" fn {mangled_name}(
         &mut self,
         rust_name: &str,
         args: impl Iterator<Item = &'a str> + Clone,
-    ) -> String {
-        let mangled_name = mangle_name(rust_name);
+    ) -> ConstructorMangledNames {
+        let constructor = mangle_name(rust_name);
+        let match_check = format!("{constructor}_check");
         w!(
             self,
             r#"
 #[no_mangle]
-pub extern "C" fn {mangled_name}("#
+pub extern "C" fn {constructor}("#
         );
         for name in args.clone() {
             w!(self, "f_{name}: *mut u8, ");
@@ -551,7 +557,18 @@ pub extern "C" fn {mangled_name}("#
             w!(self, "{name}: ::std::ptr::read(f_{name} as *mut _), ");
         }
         wln!(self, "}}) }} }}");
-        mangled_name
+        w!(
+            self,
+            r#"
+#[no_mangle]
+pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
+    *o = matches!(&*(i as *mut &_), {rust_name} {{ .. }}) as u8;
+}} }}"#
+        );
+        ConstructorMangledNames {
+            constructor,
+            match_check,
+        }
     }
 
     pub fn add_function(&mut self, rust_name: &str, arg_count: usize) -> String {

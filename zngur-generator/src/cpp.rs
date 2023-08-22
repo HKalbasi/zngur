@@ -60,6 +60,13 @@ pub struct CppType {
 }
 
 impl CppType {
+    pub fn into_ref(self) -> CppType {
+        CppType {
+            path: CppPath::from("rust::Ref"),
+            generic_args: vec![self],
+        }
+    }
+
     fn emit_header(&self, state: &mut State) -> std::fmt::Result {
         for x in &self.generic_args {
             x.emit_header(state)?;
@@ -597,7 +604,7 @@ impl CppFile {
 
 #define zngur_dbg(x)                                                           \
   {                                                                            \
-    cerr << "[" << __FILE__ << ":" << __LINE__ << "] " << #x << " = ";         \
+    ::std::cerr << "[" << __FILE__ << ":" << __LINE__ << "] " << #x << " = ";  \
     ::rust::zngur_pretty_print(x);                                             \
   }
 

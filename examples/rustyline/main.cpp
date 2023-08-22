@@ -15,6 +15,12 @@ int main() {
     auto r = editor.readline(::crate::rust_str((uint64_t) ">>> "));
     if (r.is_err()) {
       auto e = r.unwrap_err();
+      if (e.matches_Eof()) {
+        std::cout << "CTRL-D" << std::endl;
+      }
+      if (e.matches_Interrupted()) {
+        std::cout << "CTRL-C" << std::endl;
+      }
       break;
     } else {
       auto owned_s = r.unwrap();

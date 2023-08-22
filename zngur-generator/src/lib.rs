@@ -7,6 +7,7 @@ use cpp::CppMethodKind;
 use cpp::CppPath;
 use cpp::CppTraitDefinition;
 use cpp::CppTraitMethod;
+use cpp::CppType;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
 use rust::RustPathAndGenerics;
@@ -115,7 +116,7 @@ impl ZngurFile {
             let mut cpp_methods = vec![];
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
-                let rust_link_name = rust_file.add_constructor(
+                let rust_link_names = rust_file.add_constructor(
                     &format!("{}::{}", ty_def.ty, constructor.name),
                     constructor.inputs.iter().map(|x| &*x.0),
                 );
@@ -123,9 +124,18 @@ impl ZngurFile {
                     name: cpp_handle_keyword(&constructor.name).to_owned(),
                     kind: CppMethodKind::StaticOnly,
                     sig: CppFnSig {
-                        rust_link_name,
+                        rust_link_name: rust_link_names.constructor,
                         inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
                         output: ty_def.ty.into_cpp(),
+                    },
+                });
+                cpp_methods.push(CppMethod {
+                    name: format!("matches_{}", cpp_handle_keyword(&constructor.name)),
+                    kind: CppMethodKind::Lvalue,
+                    sig: CppFnSig {
+                        rust_link_name: rust_link_names.match_check,
+                        inputs: vec![ty_def.ty.into_cpp().into_ref()],
+                        output: CppType::from("uint8_t"),
                     },
                 });
             }
