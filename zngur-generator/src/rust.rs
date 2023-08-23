@@ -7,6 +7,7 @@ use iter_tools::{Either, Itertools};
 
 use crate::{
     cpp::{cpp_handle_keyword, CppPath, CppType},
+    parser::Mutability,
     ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
@@ -14,6 +15,8 @@ use crate::{
 pub enum ScalarRustType {
     Uint(u32),
     Int(u32),
+    Usize,
+    Bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,21 +88,11 @@ impl RustTrait {
     }
 }
 
-impl From<&str> for RustTrait {
-    fn from(value: &str) -> Self {
-        let ty = RustType::from(&*format!("dyn {value}"));
-        match ty {
-            RustType::Dyn(x) => x,
-            _ => unreachable!(),
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RustType {
     Scalar(ScalarRustType),
-    Ref(Box<RustType>),
-    RefMut(Box<RustType>),
+    Ref(Mutability, Box<RustType>),
+    Raw(Mutability, Box<RustType>),
     Boxed(Box<RustType>),
     Dyn(RustTrait),
     Tuple(Vec<RustType>),
@@ -159,9 +152,13 @@ impl Display for RustType {
             RustType::Scalar(s) => match s {
                 ScalarRustType::Uint(s) => write!(f, "u{s}"),
                 ScalarRustType::Int(s) => write!(f, "i{s}"),
+                ScalarRustType::Usize => write!(f, "usize"),
+                ScalarRustType::Bool => write!(f, "bool"),
             },
-            RustType::Ref(ty) => write!(f, "&{ty}"),
-            RustType::RefMut(ty) => write!(f, "&mut {ty}"),
+            RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
+            RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),
+            RustType::Raw(Mutability::Not, ty) => write!(f, "*const {ty}"),
+            RustType::Raw(Mutability::Mut, ty) => write!(f, "*mut {ty}"),
             RustType::Boxed(ty) => write!(f, "Box<{ty}>"),
             RustType::Tuple(v) => write!(f, "({})", v.iter().join(", ")),
             RustType::Adt(pg) => write!(f, "{pg}"),
@@ -170,159 +167,43 @@ impl Display for RustType {
     }
 }
 
-impl From<&str> for RustType {
-    fn from(value: &str) -> Self {
-        use chumsky::prelude::*;
-
-        #[derive(Debug, Clone, PartialEq, Eq)]
-        enum Token<'a> {
-            ColonColon,
-            Arrow,
-            BracketOpen,
-            BracketClose,
-            ParenOpen,
-            ParenClose,
-            And,
-            Eq,
-            Comma,
-            Dyn,
-            Ident(&'a str),
-        }
-
-        let lexer = choice([
-            just::<_, _, extra::Err<Simple<'_, char>>>("::").to(Token::ColonColon),
-            just("->").to(Token::Arrow),
-            just("<").to(Token::BracketOpen),
-            just(">").to(Token::BracketClose),
-            just("(").to(Token::ParenOpen),
-            just(")").to(Token::ParenClose),
-            just("&").to(Token::And),
-            just("=").to(Token::Eq),
-            just(",").to(Token::Comma),
-            just("dyn").to(Token::Dyn),
-        ])
-        .or(text::ident().map(|x| Token::Ident(x)))
-        .padded()
-        .repeated()
-        .collect();
-
-        let tokens: Vec<Token> = lexer.parse(value).into_output().unwrap();
-
-        let as_scalar = |s: &str, head: char| -> Option<u32> {
-            let s = s.strip_prefix(head)?;
-            s.parse().ok()
-        };
-
-        let scalar = select! {
-            Token::Ident(c) if as_scalar(c, 'u').is_some() => RustType::Scalar(ScalarRustType::Uint(as_scalar(c, 'u').unwrap())),
-            Token::Ident(c) if as_scalar(c, 'i').is_some() => RustType::Scalar(ScalarRustType::Int(as_scalar(c, 'i').unwrap())),
-        };
-
-        let path = just(Token::ColonColon)
-            .then(select! {
-                Token::Ident(c) => c,
-            })
-            .map(|x| x.1.to_string())
-            .repeated()
-            .at_least(1)
-            .collect::<Vec<_>>();
-
-        let parser = recursive::<_, RustType, extra::Err<Simple<'_, Token>>, _, _>(|parser| {
-            let named_generic = select! {
-                Token::Ident(c) => c.to_owned(),
-            }
-            .then_ignore(just(Token::Eq))
-            .then(parser.clone())
-            .map(Either::Left);
-            let generics = just(Token::ColonColon).repeated().at_most(1).ignore_then(
-                named_generic
-                    .or(parser.clone().map(Either::Right))
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::BracketOpen), just(Token::BracketClose)),
-            );
-            let pg = path
-                .then(generics.clone().repeated().at_most(1).collect::<Vec<_>>())
-                .map(|x| {
-                    let generics = x.1.into_iter().next().unwrap_or_default();
-                    let (named_generics, generics) = generics.into_iter().partition_map(|x| x);
-                    RustPathAndGenerics {
-                        path: x.0,
-                        generics,
-                        named_generics,
-                    }
-                });
-            let adt = pg.clone().map(RustType::Adt);
-
-            let fn_args = parser
-                .clone()
-                .separated_by(just(Token::Comma))
-                .allow_trailing()
-                .collect::<Vec<_>>()
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
-                .then_ignore(just(Token::Arrow))
-                .then(parser.clone());
-
-            let fn_trait = select! {
-                Token::Ident(c) => c,
-            }
-            .then(fn_args)
-            .map(|x| RustTrait::Fn {
-                name: x.0.to_owned(),
-                inputs: x.1 .0,
-                output: Box::new(x.1 .1),
-            });
-
-            let dyn_trait = just(Token::Dyn)
-                .ignore_then(pg.map(RustTrait::Normal).or(fn_trait))
-                .map(RustType::Dyn);
-            let boxed = just(Token::Ident("Box")).then(generics).map(|(_, x)| {
-                assert_eq!(x.len(), 1);
-                RustType::Boxed(Box::new(x.into_iter().next().unwrap().right().unwrap()))
-            });
-            let unit = just(Token::ParenOpen)
-                .then(just(Token::ParenClose))
-                .map(|_| RustType::Tuple(vec![]));
-            let reference = just(Token::And)
-                .then(parser)
-                .map(|x| RustType::Ref(Box::new(x.1)));
-            scalar
-                .or(unit)
-                .or(adt)
-                .or(reference)
-                .or(boxed)
-                .or(dyn_trait)
-        });
-        let (result, errors) = parser.parse(tokens.as_slice()).into_output_errors();
-        match result {
-            None => panic!("{errors:?}"),
-            Some(x) => x,
-        }
-    }
-}
-
 impl RustType {
     const UNIT: Self = RustType::Tuple(Vec::new());
 
-    pub fn into_cpp(&self) -> CppType {
+    pub fn into_cpp_builtin(&self) -> Option<CppType> {
         match self {
             RustType::Scalar(s) => match s {
-                ScalarRustType::Uint(s) => CppType::from(&*format!("uint{s}_t")),
-                ScalarRustType::Int(s) => CppType::from(&*format!("int{s}_t")),
+                ScalarRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
+                ScalarRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
+                ScalarRustType::Usize => Some(CppType::from("size_t")),
+                ScalarRustType::Bool => None,
+            },
+            RustType::Raw(_, t) => Some(CppType::from(&*format!(
+                "{}*",
+                t.into_cpp_builtin()?.to_string().strip_prefix("::")?
+            ))),
+            _ => None,
+        }
+    }
+
+    pub fn into_cpp(&self) -> CppType {
+        if let Some(builtin) = self.into_cpp_builtin() {
+            return builtin;
+        }
+        match self {
+            RustType::Scalar(s) => match s {
+                ScalarRustType::Bool => CppType::from("rust::Bool"),
+                _ => unreachable!(),
             },
             RustType::Boxed(t) => CppType {
                 path: CppPath::from("rust::Box"),
                 generic_args: vec![t.into_cpp()],
             },
-            RustType::Ref(t) => CppType {
+            RustType::Ref(_, t) => CppType {
                 path: CppPath::from("rust::Ref"),
                 generic_args: vec![t.into_cpp()],
             },
-            RustType::RefMut(t) => CppType {
-                path: CppPath::from("rust::Ref"),
-                generic_args: vec![t.into_cpp()],
-            },
+            RustType::Raw(_, t) => todo!(),
             RustType::Adt(pg) => pg.into_cpp(),
             RustType::Tuple(v) => {
                 if v.is_empty() {
@@ -470,8 +351,8 @@ pub extern "C" fn {mangled_name}(
                 crate::ZngurMethodReceiver::Static => {
                     panic!("traits with static methods are not object safe");
                 }
-                crate::ZngurMethodReceiver::Ref => w!(self, "&self"),
-                crate::ZngurMethodReceiver::RefMut => w!(self, "&mut self"),
+                crate::ZngurMethodReceiver::Ref(Mutability::Not) => w!(self, "&self"),
+                crate::ZngurMethodReceiver::Ref(Mutability::Mut) => w!(self, "&mut self"),
                 crate::ZngurMethodReceiver::Move => w!(self, "self"),
             }
             for (i, ty) in method.inputs.iter().enumerate() {
@@ -571,7 +452,12 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         }
     }
 
-    pub fn add_function(&mut self, rust_name: &str, arg_count: usize) -> String {
+    pub fn add_function(
+        &mut self,
+        rust_name: &str,
+        inputs: &[RustType],
+        output: &RustType,
+    ) -> String {
         let mangled_name = mangle_name(rust_name);
         w!(
             self,
@@ -579,16 +465,16 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
 #[no_mangle]
 pub extern "C" fn {mangled_name}("#
         );
-        for n in 0..arg_count {
+        for n in 0..inputs.len() {
             w!(self, "i{n}: *mut u8, ");
         }
         w!(
             self,
             r#"o: *mut u8) {{ unsafe {{
-    ::std::ptr::write(o as *mut _, {rust_name}("#
+    ::std::ptr::write(o as *mut {output}, {rust_name}("#
         );
-        for n in 0..arg_count {
-            w!(self, "::std::ptr::read(i{n} as *mut _), ");
+        for (n, ty) in inputs.iter().enumerate() {
+            w!(self, "::std::ptr::read(i{n} as *mut {ty}), ");
         }
         wln!(self, ")) }} }}");
         mangled_name
@@ -625,27 +511,5 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 }
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::RustType;
-
-    fn parse_pretty(s: &str) {
-        let ty = RustType::from(s);
-        let pretty = ty.to_string();
-        assert_eq!(s, pretty);
-    }
-
-    #[test]
-    fn scalar() {
-        parse_pretty("&u32");
-        parse_pretty("Box<i64>");
-        parse_pretty("Box<dyn ::std::fmt::Debug>");
-        parse_pretty("Box<dyn ::std::iter::Iterator::<Item = i32>>");
-        parse_pretty("Box<dyn Fn(i32, ::hello::World) -> Box<u64>>");
-        parse_pretty("::Vec::<i32>");
-        parse_pretty("::std::result::Result::<::Vec::<&u32>, ::Err>");
     }
 }

@@ -359,6 +359,20 @@ private:
                 align = self.align,
                 size = self.size,
             )?;
+            if self.ty.path.to_string() == "::rust::Bool" {
+                assert_eq!(self.size, 1);
+                assert_eq!(self.align, 1);
+                writeln!(
+                    state,
+                    r#"
+public:
+    operator bool() {{
+        return data[0];
+    }}
+private:
+    "#,
+                )?;
+            }
             if !self.is_copy {
                 writeln!(state, "   bool drop_flag;")?;
             }
@@ -663,6 +677,20 @@ namespace rust {
 
     void __zngur_internal_assume_init(uint{s}_t& t) {{}}
     void __zngur_internal_assume_deinit(uint{s}_t& t) {{}}
+
+    uint8_t* __zngur_internal_data_ptr(int{s}_t*& t) {{
+        return (uint8_t*)&t;
+    }}
+
+    void __zngur_internal_assume_init(int{s}_t*& t) {{}}
+    void __zngur_internal_assume_deinit(int{s}_t*& t) {{}}
+
+    uint8_t* __zngur_internal_data_ptr(uint{s}_t*& t) {{
+        return (uint8_t*)&t;
+    }}
+
+    void __zngur_internal_assume_init(uint{s}_t*& t) {{}}
+    void __zngur_internal_assume_deinit(uint{s}_t*& t) {{}}
 "#
             )?;
         }

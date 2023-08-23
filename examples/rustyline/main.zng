@@ -6,9 +6,13 @@ type &::core::primitive::str {
     properties(size = 16, align = 8, is_copy = 1);
 }
 
+type bool {
+    properties(size = 1, align = 1, is_copy = 1);
+}
+
 mod crate {
-    fn as_ptr(&::core::primitive::str) -> u64;
-    fn len(&::core::primitive::str) -> u64;
+    fn as_ptr(&::core::primitive::str) -> *const u8;
+    fn len(&::core::primitive::str) -> usize;
 }
 
 mod ::std {
@@ -35,7 +39,7 @@ mod ::rustyline {
     type Result<::std::string::String> {
         properties(size = 24, align = 8);
     
-        fn is_err(&self) -> u8;
+        fn is_err(&self) -> bool;
         fn unwrap(self) -> ::std::string::String;
         fn unwrap_err(self) -> error::ReadlineError;
     }
@@ -43,7 +47,13 @@ mod ::rustyline {
     type Result<()> {
         properties(size = 16, align = 8);
     
-        fn is_err(&self) -> u8;
+        fn is_err(&self) -> bool;
+    }
+
+    type Result<bool> {
+        properties(size = 16, align = 8);
+    
+        fn is_err(&self) -> bool;
     }
 
     type DefaultEditor {
@@ -52,12 +62,12 @@ mod ::rustyline {
         fn new() -> Result<DefaultEditor>;
         fn readline(&mut self, &::core::primitive::str) -> Result<::std::string::String>;
         fn load_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
-        fn add_history_entry<&::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
+        fn add_history_entry<&::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<bool>;
         fn save_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
     }
 }
 
 mod crate {
     fn build_editor() -> ::rustyline::DefaultEditor;
-    fn rust_str(u64) -> &::core::primitive::str;
+    fn rust_str(*const i8) -> &::core::primitive::str;
 }

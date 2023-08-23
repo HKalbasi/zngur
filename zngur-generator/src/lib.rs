@@ -10,6 +10,7 @@ use cpp::CppTraitMethod;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
+use parser::Mutability;
 use rust::RustPathAndGenerics;
 pub use rust::{RustTrait, RustType};
 
@@ -23,8 +24,7 @@ pub use rust::RustFile;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZngurMethodReceiver {
     Static,
-    Ref,
-    RefMut,
+    Ref(Mutability),
     Move,
 }
 
@@ -47,26 +47,6 @@ pub struct ZngurFn {
 pub struct ZngurConstructor {
     pub name: String,
     pub inputs: Vec<(String, RustType)>,
-}
-
-impl From<&str> for ZngurConstructor {
-    fn from(value: &str) -> Self {
-        let (name, fields) = value.split_once("{").unwrap();
-        ZngurConstructor {
-            name: name.trim().to_owned(),
-            inputs: fields
-                .strip_suffix("}")
-                .unwrap()
-                .split(",")
-                .map(|x| x.trim())
-                .filter(|x| !x.is_empty())
-                .map(|x| {
-                    let (name, ty) = x.split_once(":").unwrap();
-                    (name.trim().to_owned(), RustType::from(ty))
-                })
-                .collect(),
-        }
-    }
 }
 
 pub enum ZngurWellknownTrait {
@@ -146,15 +126,16 @@ impl ZngurFile {
             for method in ty_def.methods {
                 let receiver_type = match method.receiver {
                     ZngurMethodReceiver::Static => None,
-                    ZngurMethodReceiver::Ref => Some(RustType::Ref(Box::new(ty_def.ty.clone()))),
-                    ZngurMethodReceiver::RefMut => Some(RustType::Ref(Box::new(ty_def.ty.clone()))),
+                    ZngurMethodReceiver::Ref(m) => {
+                        Some(RustType::Ref(m, Box::new(ty_def.ty.clone())))
+                    }
                     ZngurMethodReceiver::Move => Some(ty_def.ty.clone()),
                 };
-                let inputs = receiver_type
+                let rusty_inputs = receiver_type
                     .into_iter()
                     .chain(method.inputs)
-                    .map(|x| x.into_cpp())
-                    .collect_vec();
+                    .collect::<Vec<_>>();
+                let inputs = rusty_inputs.iter().map(|x| x.into_cpp()).collect_vec();
                 let rust_link_name = rust_file.add_function(
                     &format!(
                         "{}::{}::<{}>",
@@ -162,15 +143,14 @@ impl ZngurFile {
                         method.name,
                         method.generics.iter().join(", ")
                     ),
-                    inputs.len(),
+                    &rusty_inputs,
+                    &method.output,
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
                     kind: match method.receiver {
                         ZngurMethodReceiver::Static => CppMethodKind::StaticOnly,
-                        ZngurMethodReceiver::Ref | ZngurMethodReceiver::RefMut => {
-                            CppMethodKind::Lvalue
-                        }
+                        ZngurMethodReceiver::Ref(_) => CppMethodKind::Lvalue,
                         ZngurMethodReceiver::Move => CppMethodKind::Rvalue,
                     },
                     sig: CppFnSig {
@@ -237,7 +217,8 @@ impl ZngurFile {
             })
         }
         for func in self.funcs {
-            let rust_link_name = rust_file.add_function(&func.path.to_string(), func.inputs.len());
+            let rust_link_name =
+                rust_file.add_function(&func.path.to_string(), &func.inputs, &func.output);
             cpp_file.fn_defs.push(CppFnDefinition {
                 name: CppPath(func.path.path),
                 sig: CppFnSig {

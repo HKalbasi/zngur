@@ -7,12 +7,12 @@
 
 int main() {
   auto editor = ::crate::build_editor();
-  if (editor.load_history(::crate::rust_str((uint64_t) "history.txt"))
+  if (editor.load_history(::crate::rust_str((signed char *)"history.txt"))
           .is_err()) {
     std::cout << "No previous history." << std::endl;
   }
   while (true) {
-    auto r = editor.readline(::crate::rust_str((uint64_t) ">>> "));
+    auto r = editor.readline(::crate::rust_str((signed char *)">>> "));
     if (r.is_err()) {
       auto e = r.unwrap_err();
       if (e.matches_Eof()) {
@@ -25,10 +25,10 @@ int main() {
     } else {
       auto owned_s = r.unwrap();
       auto s = owned_s.as_str();
-      std::string cpp_s((char *)::crate::as_ptr(s), (size_t)::crate::len(s));
+      std::string cpp_s((char *)::crate::as_ptr(s), ::crate::len(s));
       std::cout << "Line: " << cpp_s << std::endl;
-      editor.add_history_entry(::crate::rust_str((uint64_t)cpp_s.c_str()));
+      editor.add_history_entry(::crate::rust_str((signed char *)cpp_s.c_str()));
     }
   }
-  editor.save_history(::crate::rust_str((uint64_t) "history.txt"));
+  editor.save_history(::crate::rust_str((signed char *)"history.txt"));
 }

@@ -195,11 +195,17 @@ impl ParsedItem<'_> {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mutability {
+    Mut,
+    Not,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedRustType<'a> {
     Scalar(ScalarRustType),
-    Ref(Box<ParsedRustType<'a>>),
-    RefMut(Box<ParsedRustType<'a>>),
+    Ref(Mutability, Box<ParsedRustType<'a>>),
+    Raw(Mutability, Box<ParsedRustType<'a>>),
     Boxed(Box<ParsedRustType<'a>>),
     Dyn(ParsedRustTrait<'a>),
     Tuple(Vec<ParsedRustType<'a>>),
@@ -210,8 +216,8 @@ impl ParsedRustType<'_> {
     fn to_zngur(self, base: &[String]) -> RustType {
         match self {
             ParsedRustType::Scalar(s) => RustType::Scalar(s),
-            ParsedRustType::Ref(s) => RustType::Ref(Box::new(s.to_zngur(base))),
-            ParsedRustType::RefMut(s) => RustType::RefMut(Box::new(s.to_zngur(base))),
+            ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(base))),
+            ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(base))),
             ParsedRustType::Dyn(tr) => RustType::Dyn(tr.to_zngur(base)),
             ParsedRustType::Tuple(v) => {
@@ -331,6 +337,7 @@ fn handle_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>, filename: &str
             .print(sources([(filename.to_string(), text)]))
             .unwrap();
     }
+    exit(101);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -344,6 +351,7 @@ enum Token<'a> {
     BraceOpen,
     BraceClose,
     And,
+    Star,
     Eq,
     Comma,
     Semicolon,
@@ -354,6 +362,7 @@ enum Token<'a> {
     KwTrait,
     KwFn,
     KwMut,
+    KwConst,
     Ident(&'a str),
     Number(usize),
 }
@@ -368,6 +377,7 @@ impl<'a> Token<'a> {
             "crate" => Token::KwCrate,
             "fn" => Token::KwFn,
             "mut" => Token::KwMut,
+            "const" => Token::KwConst,
             x => Token::Ident(x),
         }
     }
@@ -385,6 +395,7 @@ impl Display for Token<'_> {
             Token::BraceOpen => write!(f, "{{"),
             Token::BraceClose => write!(f, "}}"),
             Token::And => write!(f, "&"),
+            Token::Star => write!(f, "*"),
             Token::Eq => write!(f, "="),
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
@@ -395,6 +406,7 @@ impl Display for Token<'_> {
             Token::KwTrait => write!(f, "trait"),
             Token::KwFn => write!(f, "fn"),
             Token::KwMut => write!(f, "mut"),
+            Token::KwConst => write!(f, "const"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
         }
@@ -413,6 +425,7 @@ fn lexer<'src>(
         just("{").to(Token::BraceOpen),
         just("}").to(Token::BraceClose),
         just("&").to(Token::And),
+        just("*").to(Token::Star),
         just("=").to(Token::Eq),
         just(",").to(Token::Comma),
         just(";").to(Token::Semicolon),
@@ -447,9 +460,11 @@ fn rust_type<'a>(
     };
 
     let scalar = select! {
-        Token::Ident(c) if as_scalar(c, 'u').is_some() => ParsedRustType::Scalar(ScalarRustType::Uint(as_scalar(c, 'u').unwrap())),
-        Token::Ident(c) if as_scalar(c, 'i').is_some() => ParsedRustType::Scalar(ScalarRustType::Int(as_scalar(c, 'i').unwrap())),
-    };
+        Token::Ident("bool") => ScalarRustType::Bool,
+        Token::Ident("usize") => ScalarRustType::Usize,
+        Token::Ident(c) if as_scalar(c, 'u').is_some() => ScalarRustType::Uint(as_scalar(c, 'u').unwrap()),
+        Token::Ident(c) if as_scalar(c, 'i').is_some() => ScalarRustType::Int(as_scalar(c, 'i').unwrap()),
+    }.map(ParsedRustType::Scalar);
 
     recursive(|parser| {
         let pg = rust_path_and_generics(parser.clone());
@@ -468,18 +483,27 @@ fn rust_type<'a>(
             .then(just(Token::ParenClose))
             .map(|_| ParsedRustType::Tuple(vec![]));
         let reference = just(Token::And)
+            .ignore_then(
+                just(Token::KwMut)
+                    .to(Mutability::Mut)
+                    .or(empty().to(Mutability::Not)),
+            )
             .then(parser.clone())
-            .map(|x| ParsedRustType::Ref(Box::new(x.1)));
-        let reference_mut = just(Token::And)
-            .then(just(Token::KwMut))
-            .ignore_then(parser)
-            .map(|x| ParsedRustType::RefMut(Box::new(x)));
+            .map(|(m, x)| ParsedRustType::Ref(m, Box::new(x)));
+        let raw_ptr = just(Token::Star)
+            .ignore_then(
+                just(Token::KwMut)
+                    .to(Mutability::Mut)
+                    .or(just(Token::KwConst).to(Mutability::Not)),
+            )
+            .then(parser)
+            .map(|(m, x)| ParsedRustType::Raw(m, Box::new(x)));
         scalar
             .or(boxed)
             .or(unit)
             .or(adt)
-            .or(reference_mut)
             .or(reference)
+            .or(raw_ptr)
             .or(dyn_trait)
     })
 }
@@ -600,11 +624,8 @@ fn method<'a>(
             };
             let (inputs, receiver) = match args.0.get(0) {
                 Some(x) if is_self(&x) => (args.0[1..].to_vec(), ZngurMethodReceiver::Move),
-                Some(ParsedRustType::Ref(x)) if is_self(&x) => {
-                    (args.0[1..].to_vec(), ZngurMethodReceiver::Ref)
-                }
-                Some(ParsedRustType::RefMut(x)) if is_self(&x) => {
-                    (args.0[1..].to_vec(), ZngurMethodReceiver::RefMut)
+                Some(ParsedRustType::Ref(m, x)) if is_self(&x) => {
+                    (args.0[1..].to_vec(), ZngurMethodReceiver::Ref(*m))
                 }
                 _ => (args.0, ZngurMethodReceiver::Static),
             };
