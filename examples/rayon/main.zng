@@ -1,0 +1,41 @@
+type () {
+    properties(size = 0, align = 1, is_copy = 1);
+}
+
+type ::std::option::Option<&u64> {
+    properties(size = 8, align = 8, is_copy = 1);
+    wellknown_traits(Debug);
+    
+    fn unwrap(self) -> &u64;
+}
+
+type Box<dyn Fn(&u64) -> i32> {
+    properties(size = 16, align = 8);
+}
+
+type ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32>> {
+    properties(size = 32, align = 8);
+
+    fn sum<i32>(self) -> i32 use ::rayon::iter::ParallelIterator;
+}
+
+type ::rayon::slice::Iter<u64> {
+    properties(size = 16, align = 8);
+
+    fn sum<u64>(self) -> u64 use ::rayon::iter::ParallelIterator;
+    fn map<Box<dyn Fn(&u64) -> i32>, i32>(self, Box<dyn Fn(&u64) -> i32>)
+                -> ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32>>
+                use ::rayon::iter::ParallelIterator;
+}
+
+type [u64] {
+    properties(size = 0, align = 1);
+    wellknown_traits(?Sized);
+
+    fn get(&self, usize) -> ::std::option::Option<&u64>;
+    fn par_iter(&self) -> ::rayon::slice::Iter<u64> use ::rayon::iter::IntoParallelRefIterator;
+}
+
+mod ::std::slice {
+    fn from_raw_parts(*const u64, usize) -> &[u64];
+}

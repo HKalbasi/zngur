@@ -499,21 +499,33 @@ private:
                 }
                 if let Some(from_function) = &self.from_function {
                     // TODO: too special
+                    let as_std_function = format!(
+                        "::std::function<{}({})>",
+                        from_function.sig.output,
+                        from_function.sig.inputs.iter().join(", ")
+                    );
+                    let ii_args = from_function
+                        .sig
+                        .inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
+                        .join("\n");
                     writeln!(
                         state,
                         r#"
-    static {ty} build(::std::function<int32_t(int32_t)> f) {{
-        auto data = new ::std::function<int32_t(int32_t)>(f);
+    static {ty} build({as_std_function} f) {{
+        auto data = new {as_std_function}(f);
         {ty} o;
         ::rust::__zngur_internal_assume_init(o);
         {link_name}(
             (uint8_t *)data,
-            [](uint8_t *d) {{ delete (::std::function<int32_t(int32_t)> *)d; }},
-            [](uint8_t *d, uint8_t *i1, uint8_t *o) {{
+            [](uint8_t *d) {{ delete ({as_std_function} *)d; }},
+            [](uint8_t *d, uint8_t *i0, uint8_t *o) {{
                 int32_t *oo = (int32_t *)o;
-                int32_t ii1 = *(int32_t *)i1;
-                auto dd = (::std::function<int32_t(int32_t)> *)d;
-                *oo = (*dd)(ii1);
+                {ii_args}
+                auto dd = ({as_std_function} *)d;
+                *oo = (*dd)(ii0);
             }},
             ::rust::__zngur_internal_data_ptr(o));
         return o;

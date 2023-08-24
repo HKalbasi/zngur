@@ -70,7 +70,7 @@ pub struct ZngurType {
     pub align: usize,
     pub is_copy: bool,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
-    pub methods: Vec<ZngurMethod>,
+    pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
     pub constructors: Vec<ZngurConstructor>,
 }
 
@@ -106,7 +106,7 @@ impl ZngurFile {
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
                 let rust_link_names = rust_file.add_constructor(
-                    &format!("{}::{}", ty_def.ty, constructor.name),
+                    &format!("<{}>::{}", ty_def.ty, constructor.name),
                     constructor.inputs.iter().map(|x| &*x.0),
                 );
                 cpp_methods.push(CppMethod {
@@ -132,7 +132,7 @@ impl ZngurFile {
                 let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
                 wellknown_traits.push(data);
             }
-            for method in ty_def.methods {
+            for (method, use_path) in ty_def.methods {
                 let receiver_type = match method.receiver {
                     ZngurMethodReceiver::Static => None,
                     ZngurMethodReceiver::Ref(m) => {
@@ -147,13 +147,14 @@ impl ZngurFile {
                 let inputs = rusty_inputs.iter().map(|x| x.into_cpp()).collect_vec();
                 let rust_link_name = rust_file.add_function(
                     &format!(
-                        "{}::{}::<{}>",
+                        "<{}>::{}::<{}>",
                         ty_def.ty,
                         method.name,
-                        method.generics.iter().join(", ")
+                        method.generics.iter().join(", "),
                     ),
                     &rusty_inputs,
                     &method.output,
+                    use_path,
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
@@ -227,7 +228,7 @@ impl ZngurFile {
         }
         for func in self.funcs {
             let rust_link_name =
-                rust_file.add_function(&func.path.to_string(), &func.inputs, &func.output);
+                rust_file.add_function(&func.path.to_string(), &func.inputs, &func.output, None);
             cpp_file.fn_defs.push(CppFnDefinition {
                 name: CppPath(func.path.path),
                 sig: CppFnSig {

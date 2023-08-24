@@ -94,6 +94,7 @@ pub enum RustType {
     Ref(Mutability, Box<RustType>),
     Raw(Mutability, Box<RustType>),
     Boxed(Box<RustType>),
+    Slice(Box<RustType>),
     Dyn(RustTrait),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
@@ -162,7 +163,8 @@ impl Display for RustType {
             RustType::Boxed(ty) => write!(f, "Box<{ty}>"),
             RustType::Tuple(v) => write!(f, "({})", v.iter().join(", ")),
             RustType::Adt(pg) => write!(f, "{pg}"),
-            RustType::Dyn(tr) => write!(f, "dyn {tr}"),
+            RustType::Dyn(tr) => write!(f, "dyn {tr} + Sync + Send"),
+            RustType::Slice(s) => write!(f, "[{s}]"),
         }
     }
 }
@@ -202,6 +204,10 @@ impl RustType {
             RustType::Ref(_, t) => CppType {
                 path: CppPath::from("rust::Ref"),
                 generic_args: vec![t.into_cpp()],
+            },
+            RustType::Slice(s) => CppType {
+                path: CppPath::from("rust::Slice"),
+                generic_args: vec![s.into_cpp()],
             },
             RustType::Raw(_, t) => todo!(),
             RustType::Adt(pg) => pg.into_cpp(),
@@ -276,8 +282,11 @@ fn mangle_name(name: &str) -> String {
         (2, "=", 'e'),
         (2, "<", 'x'),
         (2, ">", 'y'),
+        (2, "[", 'j'),
+        (2, "]", 'k'),
         (2, "::", 's'),
         (2, ",", 'c'),
+        (2, "+", 'l'),
         (2, "(", 'p'),
         (2, ")", 'q'),
     ];
@@ -457,6 +466,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         rust_name: &str,
         inputs: &[RustType],
         output: &RustType,
+        use_path: Option<Vec<String>>,
     ) -> String {
         let mangled_name = mangle_name(rust_name);
         w!(
@@ -468,10 +478,13 @@ pub extern "C" fn {mangled_name}("#
         for n in 0..inputs.len() {
             w!(self, "i{n}: *mut u8, ");
         }
+        wln!(self, "o: *mut u8) {{ unsafe {{");
+        if let Some(use_path) = use_path {
+            wln!(self, "    use ::{};", use_path.iter().join("::"));
+        }
         w!(
             self,
-            r#"o: *mut u8) {{ unsafe {{
-    ::std::ptr::write(o as *mut {output}, {rust_name}("#
+            "    ::std::ptr::write(o as *mut {output}, {rust_name}("
         );
         for (n, ty) in inputs.iter().enumerate() {
             w!(self, "::std::ptr::read(i{n} as *mut {ty}), ");

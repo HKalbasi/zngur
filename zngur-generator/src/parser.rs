@@ -81,7 +81,7 @@ enum ParsedTypeItem<'a> {
         name: &'a str,
         args: ParsedConstructorArgs<'a>,
     },
-    Method(ParsedMethod<'a>),
+    Method(ParsedMethod<'a>, Option<ParsedPath<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,7 +159,9 @@ impl ParsedItem<'_> {
                                 },
                             })
                         }
-                        ParsedTypeItem::Method(m) => methods.push(m.to_zngur(base)),
+                        ParsedTypeItem::Method(m, u) => {
+                            methods.push((m.to_zngur(base), u.map(|x| x.to_zngur(base))))
+                        }
                     }
                 }
                 r.types.push(ZngurType {
@@ -204,6 +206,7 @@ enum ParsedRustType<'a> {
     Ref(Mutability, Box<ParsedRustType<'a>>),
     Raw(Mutability, Box<ParsedRustType<'a>>),
     Boxed(Box<ParsedRustType<'a>>),
+    Slice(Box<ParsedRustType<'a>>),
     Dyn(ParsedRustTrait<'a>),
     Tuple(Vec<ParsedRustType<'a>>),
     Adt(ParsedRustPathAndGenerics<'a>),
@@ -216,6 +219,7 @@ impl ParsedRustType<'_> {
             ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(base))),
+            ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(base))),
             ParsedRustType::Dyn(tr) => RustType::Dyn(tr.to_zngur(base)),
             ParsedRustType::Tuple(v) => {
                 RustType::Tuple(v.into_iter().map(|s| s.to_zngur(base)).collect())
@@ -341,6 +345,8 @@ fn handle_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>, filename: &str
 enum Token<'a> {
     ColonColon,
     Arrow,
+    AngleOpen,
+    AngleClose,
     BracketOpen,
     BracketClose,
     ParenOpen,
@@ -354,6 +360,7 @@ enum Token<'a> {
     Comma,
     Semicolon,
     KwDyn,
+    KwUse,
     KwMod,
     KwCrate,
     KwType,
@@ -376,6 +383,7 @@ impl<'a> Token<'a> {
             "fn" => Token::KwFn,
             "mut" => Token::KwMut,
             "const" => Token::KwConst,
+            "use" => Token::KwUse,
             x => Token::Ident(x),
         }
     }
@@ -386,8 +394,10 @@ impl Display for Token<'_> {
         match self {
             Token::ColonColon => write!(f, "::"),
             Token::Arrow => write!(f, "->"),
-            Token::BracketOpen => write!(f, "<"),
-            Token::BracketClose => write!(f, ">"),
+            Token::AngleOpen => write!(f, "<"),
+            Token::AngleClose => write!(f, ">"),
+            Token::BracketOpen => write!(f, "["),
+            Token::BracketClose => write!(f, "]"),
             Token::ParenOpen => write!(f, "("),
             Token::ParenClose => write!(f, ")"),
             Token::BraceOpen => write!(f, "{{"),
@@ -399,6 +409,7 @@ impl Display for Token<'_> {
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
             Token::KwDyn => write!(f, "dyn"),
+            Token::KwUse => write!(f, "use"),
             Token::KwMod => write!(f, "mod"),
             Token::KwCrate => write!(f, "crate"),
             Token::KwType => write!(f, "type"),
@@ -417,8 +428,10 @@ fn lexer<'src>(
     let token = choice([
         just("::").to(Token::ColonColon),
         just("->").to(Token::Arrow),
-        just("<").to(Token::BracketOpen),
-        just(">").to(Token::BracketClose),
+        just("<").to(Token::AngleOpen),
+        just(">").to(Token::AngleClose),
+        just("[").to(Token::BracketOpen),
+        just("]").to(Token::BracketClose),
         just("(").to(Token::ParenOpen),
         just(")").to(Token::ParenClose),
         just("{").to(Token::BraceOpen),
@@ -482,6 +495,10 @@ fn rust_type<'a>(
         let unit = just(Token::ParenOpen)
             .then(just(Token::ParenClose))
             .map(|_| ParsedRustType::Tuple(vec![]));
+        let slice = parser
+            .clone()
+            .map(|x| ParsedRustType::Slice(Box::new(x)))
+            .delimited_by(just(Token::BracketOpen), just(Token::BracketClose));
         let reference = just(Token::And)
             .ignore_then(
                 just(Token::KwMut)
@@ -501,6 +518,7 @@ fn rust_type<'a>(
         scalar
             .or(boxed)
             .or(unit)
+            .or(slice)
             .or(adt)
             .or(reference)
             .or(raw_ptr)
@@ -529,7 +547,7 @@ fn rust_generics<'a>(
             .separated_by(just(Token::Comma))
             .allow_trailing()
             .collect::<Vec<_>>()
-            .delimited_by(just(Token::BracketOpen), just(Token::BracketClose)),
+            .delimited_by(just(Token::AngleOpen), just(Token::AngleClose)),
     )
 }
 
@@ -608,7 +626,7 @@ fn method<'a>(
             rust_type()
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::BracketOpen), just(Token::BracketClose))
+                .delimited_by(just(Token::AngleOpen), just(Token::AngleClose))
                 .or(empty().to(vec![])),
         )
         .then(fn_args(rust_type()))
@@ -690,7 +708,14 @@ fn type_item<'a>(
         properties
             .or(traits)
             .or(constructor)
-            .or(method().map(ParsedTypeItem::Method))
+            .or(method()
+                .then(
+                    just(Token::KwUse)
+                        .ignore_then(path())
+                        .map(Some)
+                        .or(empty().to(None)),
+                )
+                .map(|(m, u)| ParsedTypeItem::Method(m, u)))
             .then_ignore(just(Token::Semicolon))
     }
     just(Token::KwType)
