@@ -4,10 +4,6 @@ use rustyline::DefaultEditor;
 
 mod generated;
 
-pub fn build_editor() -> ::rustyline::DefaultEditor {
-    DefaultEditor::new().unwrap()
-}
-
 pub fn rust_str<'a>(c: *const i8) -> &'a str {
     let x = unsafe { CStr::from_ptr(c) };
     unsafe { core::str::from_utf8_unchecked(x.to_bytes()) }

@@ -6,7 +6,7 @@
 #include "./generated.h"
 
 int main() {
-  auto editor = ::crate::build_editor();
+  auto editor = ::rust::rustyline::DefaultEditor::new_().unwrap();
   if (editor.load_history(::crate::rust_str((signed char *)"history.txt"))
           .is_err()) {
     std::cout << "No previous history." << std::endl;

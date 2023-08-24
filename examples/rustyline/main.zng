@@ -33,7 +33,7 @@ mod ::rustyline {
     type Result<DefaultEditor> {
         properties(size = 688, align = 8);
 
-        // TODO: fn unwrap() -> DefaultEditor;
+        fn unwrap(self) -> DefaultEditor;
     }
 
     type Result<::std::string::String> {
@@ -68,6 +68,5 @@ mod ::rustyline {
 }
 
 mod crate {
-    fn build_editor() -> ::rustyline::DefaultEditor;
     fn rust_str(*const i8) -> &::core::primitive::str;
 }

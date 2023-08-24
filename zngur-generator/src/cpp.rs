@@ -183,6 +183,23 @@ impl CppFnSig {
         Ok(())
     }
 
+    fn emit_cpp_header(&self, state: &mut State, fn_name: &str) -> std::fmt::Result {
+        let CppFnSig {
+            inputs,
+            output,
+            rust_link_name,
+        } = self;
+        writeln!(
+            state,
+            "{output} {fn_name}({input_defs});",
+            input_defs = inputs
+                .iter()
+                .enumerate()
+                .map(|(n, ty)| format!("{ty} i{n}"))
+                .join(", "),
+        )
+    }
+
     fn emit_cpp_def(&self, state: &mut State, fn_name: &str) -> std::fmt::Result {
         let CppFnSig {
             inputs,
@@ -456,7 +473,7 @@ private:
             }
             for method in &self.methods {
                 write!(state, "static ")?;
-                method.sig.emit_cpp_def(state, &method.name)?;
+                method.sig.emit_cpp_header(state, &method.name)?;
                 if method.kind != CppMethodKind::StaticOnly {
                     let CppFnSig {
                         rust_link_name: _,
@@ -465,26 +482,14 @@ private:
                     } = &method.sig;
                     writeln!(
                         state,
-                        "{output} {fn_name}({input_defs})
-                    {{
-                        return {ty}::{fn_name}({this_arg}{input_args});
-                    }}",
+                        "{output} {fn_name}({input_defs});",
                         fn_name = &method.name,
-                        ty = self.ty.path.name(),
-                        this_arg = match method.kind {
-                            CppMethodKind::Lvalue => "*this",
-                            CppMethodKind::Rvalue => "::std::move(*this)",
-                            CppMethodKind::StaticOnly => unreachable!(),
-                        },
                         input_defs = inputs
                             .iter()
                             .skip(1)
                             .enumerate()
                             .map(|(n, ty)| format!("{ty} i{n}"))
                             .join(", "),
-                        input_args = (0..inputs.len() - 1)
-                            .map(|n| format!(", ::std::move(i{n})"))
-                            .join("")
                     )?;
                 }
             }
@@ -548,6 +553,44 @@ namespace rust {{
             },
         )?;
 
+        Ok(())
+    }
+
+    fn emit_cpp_fn_defs(&self, state: &mut State) -> std::fmt::Result {
+        let cpp_type = &self.ty.to_string();
+        let my_name = cpp_type.strip_prefix("::").unwrap();
+        for method in &self.methods {
+            let fn_name = my_name.to_owned() + "::" + &method.name;
+            method.sig.emit_cpp_def(state, &fn_name)?;
+            if method.kind != CppMethodKind::StaticOnly {
+                let CppFnSig {
+                    rust_link_name: _,
+                    inputs,
+                    output,
+                } = &method.sig;
+                writeln!(
+                    state,
+                    "{output} {fn_name}({input_defs})
+                {{
+                    return {fn_name}({this_arg}{input_args});
+                }}",
+                    this_arg = match method.kind {
+                        CppMethodKind::Lvalue => "*this",
+                        CppMethodKind::Rvalue => "::std::move(*this)",
+                        CppMethodKind::StaticOnly => unreachable!(),
+                    },
+                    input_defs = inputs
+                        .iter()
+                        .skip(1)
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
+                    input_args = (0..inputs.len() - 1)
+                        .map(|n| format!(", ::std::move(i{n})"))
+                        .join("")
+                )?;
+            }
+        }
         Ok(())
     }
 
@@ -711,6 +754,9 @@ namespace rust {
         // }
         for td in &self.type_defs {
             td.emit(state)?;
+        }
+        for td in &self.type_defs {
+            td.emit_cpp_fn_defs(state)?;
         }
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
