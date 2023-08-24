@@ -49,15 +49,19 @@ pub struct ZngurConstructor {
     pub inputs: Vec<(String, RustType)>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ZngurWellknownTrait {
     Debug,
+    Unsized,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ZngurWellknownTraitData {
     Debug {
         pretty_print: String,
         debug_print: String,
     },
+    Unsized,
 }
 
 pub struct ZngurType {
@@ -91,8 +95,13 @@ impl ZngurFile {
         let mut cpp_file = CppFile::default();
         let mut rust_file = RustFile::default();
         for ty_def in self.types {
-            rust_file.add_static_size_assert(&ty_def.ty, ty_def.size);
-            rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
+            let is_unsized = ty_def
+                .wellknown_traits
+                .contains(&ZngurWellknownTrait::Unsized);
+            if !is_unsized {
+                rust_file.add_static_size_assert(&ty_def.ty, ty_def.size);
+                rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
+            }
             let mut cpp_methods = vec![];
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {

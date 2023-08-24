@@ -333,7 +333,75 @@ impl Default for CppTypeDefinition {
 }
 
 impl CppTypeDefinition {
+    fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
+        let is_unsized = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Unsized);
+        if is_unsized {
+            writeln!(
+                state,
+                r#"
+template<>
+struct ::rust::Ref<{ty}> {{
+    Ref() {{
+        data = {{0, 0}};
+    }}
+private:
+    ::std::array<size_t, 2> data;
+    template<typename T2>
+    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+"#,
+                ty = self.ty,
+            )?;
+        } else {
+            writeln!(
+                state,
+                r#"
+template<>
+struct ::rust::Ref<{ty}> {{
+    Ref() {{
+        data = 0;
+    }}
+    Ref({ty}& t) {{
+        data = (size_t)__zngur_internal_data_ptr(t);
+    }}
+private:
+    size_t data;
+    template<typename T2>
+    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+"#,
+                ty = self.ty,
+            )?;
+        }
+        writeln!(state, "public:")?;
+        for method in &self.methods {
+            if method.kind == CppMethodKind::Lvalue {
+                let CppFnSig {
+                    rust_link_name: _,
+                    inputs,
+                    output,
+                } = &method.sig;
+                writeln!(
+                    state,
+                    "{output} {fn_name}({input_defs});",
+                    fn_name = &method.name,
+                    input_defs = inputs
+                        .iter()
+                        .skip(1)
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
+                )?;
+            }
+        }
+        writeln!(state, "}};")?;
+        Ok(())
+    }
+
     fn emit(&self, state: &mut State) -> std::fmt::Result {
+        let is_unsized = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Unsized);
         writeln!(
             state,
             r#"
@@ -361,9 +429,20 @@ namespace rust {{
                     self.ty.generic_args.iter().join(", ")
                 )?;
             }
-            writeln!(
-                state,
-                r#"
+            if is_unsized {
+                writeln!(
+                    state,
+                    r#"
+{{
+public:
+    {ty}() = delete;
+    "#,
+                    ty = self.ty.path.name(),
+                )?;
+            } else {
+                writeln!(
+                    state,
+                    r#"
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
@@ -372,32 +451,32 @@ private:
     friend void ::rust::__zngur_internal_assume_deinit({ty}& t);
     friend void ::rust::zngur_pretty_print({ty}& t);
 "#,
-                ty = self.ty,
-                align = self.align,
-                size = self.size,
-            )?;
-            if self.ty.path.to_string() == "::rust::Bool" {
-                assert_eq!(self.size, 1);
-                assert_eq!(self.align, 1);
-                writeln!(
-                    state,
-                    r#"
+                    ty = self.ty,
+                    align = self.align,
+                    size = self.size,
+                )?;
+                if self.ty.path.to_string() == "::rust::Bool" {
+                    assert_eq!(self.size, 1);
+                    assert_eq!(self.align, 1);
+                    writeln!(
+                        state,
+                        r#"
 public:
     operator bool() {{
         return data[0];
     }}
 private:
     "#,
-                )?;
-            }
-            if !self.is_copy {
-                writeln!(state, "   bool drop_flag;")?;
-            }
-            writeln!(state, "public:")?;
-            if !self.is_copy {
-                writeln!(
-                    state,
-                    r#"
+                    )?;
+                }
+                if !self.is_copy {
+                    writeln!(state, "   bool drop_flag;")?;
+                }
+                writeln!(state, "public:")?;
+                if !self.is_copy {
+                    writeln!(
+                        state,
+                        r#"
     {ty}() : drop_flag(false) {{}}
     ~{ty}() {{
         if (drop_flag) {{
@@ -415,14 +494,14 @@ private:
         return *this;
     }}
     "#,
-                    ty = self.ty.path.name(),
-                )?;
-            }
-            if let Some(from_function) = &self.from_function {
-                // TODO: too special
-                writeln!(
-                    state,
-                    r#"
+                        ty = self.ty.path.name(),
+                    )?;
+                }
+                if let Some(from_function) = &self.from_function {
+                    // TODO: too special
+                    writeln!(
+                        state,
+                        r#"
     static {ty} build(::std::function<int32_t(int32_t)> f) {{
         auto data = new ::std::function<int32_t(int32_t)>(f);
         {ty} o;
@@ -440,15 +519,15 @@ private:
         return o;
     }}
     "#,
-                    ty = self.ty.path.name(),
-                    link_name = from_function.sig.rust_link_name,
-                )?;
-            }
-            if let Some(from_trait) = &self.from_trait {
-                // TODO: too special
-                writeln!(
-                    state,
-                    r#"
+                        ty = self.ty.path.name(),
+                        link_name = from_function.sig.rust_link_name,
+                    )?;
+                }
+                if let Some(from_trait) = &self.from_trait {
+                    // TODO: too special
+                    writeln!(
+                        state,
+                        r#"
     template<typename T, typename... ARGS>
     static {ty} make_box(ARGS&&... args) {{
         auto data = new T(::std::forward<ARGS>(args)...);
@@ -467,9 +546,10 @@ private:
         return o;
     }}
     "#,
-                    ty = self.ty.path.name(),
-                    link_name = from_trait.link_name,
-                )?;
+                        ty = self.ty.path.name(),
+                        link_name = from_trait.link_name,
+                    )?;
+                }
             }
             for method in &self.methods {
                 write!(state, "static ")?;
@@ -519,11 +599,13 @@ private:
             }}"#,
                     )?;
                 }
+                ZngurWellknownTraitData::Unsized => (),
             }
         }
-        writeln!(
-            state,
-            r#"
+        if !is_unsized {
+            writeln!(
+                state,
+                r#"
 namespace rust {{
     template<>
     uint8_t* __zngur_internal_data_ptr({ty}& t) {{
@@ -541,28 +623,56 @@ namespace rust {{
         {assume_deinit}
     }}
 }}"#,
-            assume_init = if self.is_copy {
-                ""
-            } else {
-                "t.drop_flag = true;"
-            },
-            assume_deinit = if self.is_copy {
-                ""
-            } else {
-                "t.drop_flag = false;"
-            },
-        )?;
-
-        Ok(())
+                assume_init = if self.is_copy {
+                    ""
+                } else {
+                    "t.drop_flag = true;"
+                },
+                assume_deinit = if self.is_copy {
+                    ""
+                } else {
+                    "t.drop_flag = false;"
+                },
+            )?;
+        }
+        self.emit_ref_specialization(state)
     }
 
     fn emit_cpp_fn_defs(&self, state: &mut State) -> std::fmt::Result {
+        let is_unsized = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Unsized);
         let cpp_type = &self.ty.to_string();
         let my_name = cpp_type.strip_prefix("::").unwrap();
         for method in &self.methods {
             let fn_name = my_name.to_owned() + "::" + &method.name;
             method.sig.emit_cpp_def(state, &fn_name)?;
-            if method.kind != CppMethodKind::StaticOnly {
+            if method.kind == CppMethodKind::Lvalue {
+                let CppFnSig {
+                    rust_link_name: _,
+                    inputs,
+                    output,
+                } = &method.sig;
+                writeln!(
+                    state,
+                    "{output} rust::Ref<{ty}>::{method_name}({input_defs})
+                {{
+                    return {fn_name}(*this{input_args});
+                }}",
+                    ty = &self.ty,
+                    method_name = &method.name,
+                    input_defs = inputs
+                        .iter()
+                        .skip(1)
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
+                    input_args = (0..inputs.len() - 1)
+                        .map(|n| format!(", ::std::move(i{n})"))
+                        .join("")
+                )?;
+            }
+            if !is_unsized && method.kind != CppMethodKind::StaticOnly {
                 let CppFnSig {
                     rust_link_name: _,
                     inputs,
@@ -607,6 +717,7 @@ namespace rust {{
                     writeln!(state, "void {pretty_print}(uint8_t *data);")?;
                     writeln!(state, "void {debug_print}(uint8_t *data);")?;
                 }
+                ZngurWellknownTraitData::Unsized => (),
             }
         }
         if let Some(ff) = &self.from_trait {
@@ -677,6 +788,9 @@ namespace rust {
 
     template<typename T>
     struct Ref {
+        Ref() {
+            data = 0;
+        }
         Ref(T& t) {
             data = (size_t)__zngur_internal_data_ptr(t);
         }

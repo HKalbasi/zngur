@@ -7,7 +7,7 @@ use iter_tools::{Either, Itertools};
 use crate::{
     rust::{RustPathAndGenerics, ScalarRustType},
     RustTrait, RustType, ZngurConstructor, ZngurFile, ZngurMethod, ZngurMethodReceiver, ZngurTrait,
-    ZngurType,
+    ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -76,7 +76,7 @@ enum ParsedConstructorArgs<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedTypeItem<'a> {
     Properties(Vec<(&'a str, usize)>),
-    Traits(Vec<&'a str>),
+    Traits(Vec<ZngurWellknownTrait>),
     Constructor {
         name: &'a str,
         args: ParsedConstructorArgs<'a>,
@@ -144,10 +144,7 @@ impl ParsedItem<'_> {
                             }
                         }
                         ParsedTypeItem::Traits(tr) => {
-                            wellknown_traits.extend(tr.into_iter().map(|x| match x {
-                                "Debug" => crate::ZngurWellknownTrait::Debug,
-                                _ => panic!("unknown trait {x}"),
-                            }));
+                            wellknown_traits.extend(tr);
                         }
                         ParsedTypeItem::Constructor { name, args } => {
                             constructors.push(ZngurConstructor {
@@ -353,6 +350,7 @@ enum Token<'a> {
     And,
     Star,
     Eq,
+    Question,
     Comma,
     Semicolon,
     KwDyn,
@@ -397,6 +395,7 @@ impl Display for Token<'_> {
             Token::And => write!(f, "&"),
             Token::Star => write!(f, "*"),
             Token::Eq => write!(f, "="),
+            Token::Question => write!(f, "?"),
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
             Token::KwDyn => write!(f, "dyn"),
@@ -427,6 +426,7 @@ fn lexer<'src>(
         just("&").to(Token::And),
         just("*").to(Token::Star),
         just("=").to(Token::Eq),
+        just("?").to(Token::Question),
         just(",").to(Token::Comma),
         just(";").to(Token::Semicolon),
     ])
@@ -661,8 +661,11 @@ fn type_item<'a>(
             )
             .map(ParsedTypeItem::Properties);
         let trait_item = select! {
-            Token::Ident(c) => c,
-        };
+            Token::Ident("Debug") => ZngurWellknownTrait::Debug,
+        }
+        .or(just(Token::Question)
+            .then(just(Token::Ident("Sized")))
+            .to(ZngurWellknownTrait::Unsized));
         let traits = just(Token::Ident("wellknown_traits"))
             .ignore_then(
                 trait_item

@@ -486,6 +486,7 @@ pub extern "C" fn {mangled_name}("#
         wellknown_trait: ZngurWellknownTrait,
     ) -> ZngurWellknownTraitData {
         match wellknown_trait {
+            ZngurWellknownTrait::Unsized => ZngurWellknownTraitData::Unsized,
             ZngurWellknownTrait::Debug => {
                 let pretty_print = mangle_name(&format!("{ty}=debug_pretty"));
                 let debug_print = mangle_name(&format!("{ty}=debug_print"));

@@ -2,17 +2,16 @@ type () {
     properties(size = 0, align = 1, is_copy = 1);
 }
 
-type &::core::primitive::str {
-    properties(size = 16, align = 8, is_copy = 1);
+type ::core::primitive::str {
+    properties(size = 0, align = 1);
+    wellknown_traits(?Sized);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
 }
 
 type bool {
     properties(size = 1, align = 1, is_copy = 1);
-}
-
-mod crate {
-    fn as_ptr(&::core::primitive::str) -> *const u8;
-    fn len(&::core::primitive::str) -> usize;
 }
 
 mod ::std {
