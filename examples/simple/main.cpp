@@ -9,6 +9,7 @@ using namespace std;
 
 template <typename T> using Vec = ::rust::std::vec::Vec<T>;
 template <typename T> using Option = ::rust::std::option::Option<T>;
+template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
 
 template <typename T>
 class VectorIterator : public rust::Impl<::rust::std::iter::Iterator<T>> {
@@ -35,18 +36,16 @@ int main() {
   Vec<int32_t>::push(s, 3);
   cout << s.clone().into_iter().sum() << endl;
   int state = 0;
-  auto f = ::rust::Box<::rust::Dyn<::rust::Fn<int32_t, int32_t>>>::build(
-      [&](int32_t x) {
-        state += x;
-        std::cout << "hello " << x << " " << state << "\n";
-        return x * 2;
-      });
+  auto f = BoxDyn<::rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
+    state += x;
+    std::cout << "hello " << x << " " << state << "\n";
+    return x * 2;
+  });
   auto x = s.into_iter().map(std::move(f)).sum();
   std::cout << x << " " << state << "\n";
   std::vector<int32_t> vec{10, 20, 60};
-  auto vec_as_iter =
-      ::rust::Box<::rust::Dyn<::rust::std::iter::Iterator<int32_t>>>::make_box<
-          VectorIterator<int32_t>>(std::move(vec));
+  auto vec_as_iter = BoxDyn<::rust::std::iter::Iterator<int32_t>>::make_box<
+      VectorIterator<int32_t>>(std::move(vec));
   auto t = ::crate::collect_vec(std::move(vec_as_iter));
   zngur_dbg(t);
 }

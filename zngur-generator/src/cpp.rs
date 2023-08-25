@@ -799,18 +799,7 @@ namespace rust {
     void __zngur_internal_assume_deinit(T& t);
 
     template<typename T>
-    struct Ref {
-        Ref() {
-            data = 0;
-        }
-        Ref(T& t) {
-            data = (size_t)__zngur_internal_data_ptr(t);
-        }
-        private:
-            size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
-    };
+    struct Ref;
 
     template<typename T>
     uint8_t* __zngur_internal_data_ptr(::rust::Ref<T>& t) {
@@ -829,37 +818,44 @@ namespace rust {
     template<typename Type>
     class Impl;
 "#;
-        for s in [8, 16, 32, 64] {
+        for ty in [8, 16, 32, 64]
+            .into_iter()
+            .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
+        {
             writeln!(
                 state,
                 r#"
-    uint8_t* __zngur_internal_data_ptr(int{s}_t& t) {{
+    uint8_t* __zngur_internal_data_ptr({ty}& t) {{
         return (uint8_t*)&t;
     }}
 
-    void __zngur_internal_assume_init(int{s}_t& t) {{}}
-    void __zngur_internal_assume_deinit(int{s}_t& t) {{}}
+    void __zngur_internal_assume_init({ty}& t) {{}}
+    void __zngur_internal_assume_deinit({ty}& t) {{}}
 
-    uint8_t* __zngur_internal_data_ptr(uint{s}_t& t) {{
+    uint8_t* __zngur_internal_data_ptr({ty}*& t) {{
         return (uint8_t*)&t;
     }}
 
-    void __zngur_internal_assume_init(uint{s}_t& t) {{}}
-    void __zngur_internal_assume_deinit(uint{s}_t& t) {{}}
+    void __zngur_internal_assume_init({ty}*& t) {{}}
+    void __zngur_internal_assume_deinit({ty}*& t) {{}}
 
-    uint8_t* __zngur_internal_data_ptr(int{s}_t*& t) {{
-        return (uint8_t*)&t;
-    }}
+    template<>
+    struct Ref<{ty}> {{
+        Ref() {{
+            data = 0;
+        }}
+        Ref({ty}& t) {{
+            data = (size_t)__zngur_internal_data_ptr(t);
+        }}
 
-    void __zngur_internal_assume_init(int{s}_t*& t) {{}}
-    void __zngur_internal_assume_deinit(int{s}_t*& t) {{}}
-
-    uint8_t* __zngur_internal_data_ptr(uint{s}_t*& t) {{
-        return (uint8_t*)&t;
-    }}
-
-    void __zngur_internal_assume_init(uint{s}_t*& t) {{}}
-    void __zngur_internal_assume_deinit(uint{s}_t*& t) {{}}
+        {ty}& operator*() {{
+            return *({ty}*)data;
+        }}
+        private:
+            size_t data;
+        template<typename T2>
+        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    }};
 "#
             )?;
         }

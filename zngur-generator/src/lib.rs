@@ -106,7 +106,7 @@ impl ZngurFile {
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
                 let rust_link_names = rust_file.add_constructor(
-                    &format!("<{}>::{}", ty_def.ty, constructor.name),
+                    &format!("{}::{}", ty_def.ty, constructor.name),
                     constructor.inputs.iter().map(|x| &*x.0),
                 );
                 cpp_methods.push(CppMethod {
@@ -179,11 +179,14 @@ impl ZngurFile {
                 from_trait: None,
                 wellknown_traits,
                 from_function: if let RustType::Boxed(b) = &ty_def.ty {
-                    if let RustType::Dyn(rust::RustTrait::Fn {
-                        name,
-                        inputs,
-                        output,
-                    }) = b.as_ref()
+                    if let RustType::Dyn(
+                        rust::RustTrait::Fn {
+                            name,
+                            inputs,
+                            output,
+                        },
+                        _,
+                    ) = b.as_ref()
                     {
                         let rust_link_name = rust_file.add_builder_for_dyn_fn(name, inputs, output);
                         Some(cpp::BuildFromFunction {
@@ -204,7 +207,34 @@ impl ZngurFile {
         for tr in self.traits {
             let link_name = rust_file.add_builder_for_dyn_trait(&tr);
             cpp_file.type_defs.push(CppTypeDefinition {
-                ty: RustType::Boxed(Box::new(RustType::Dyn(tr.tr.clone()))).into_cpp(),
+                ty: RustType::Boxed(Box::new(RustType::Dyn(tr.tr.clone(), vec![]))).into_cpp(),
+                size: 16,
+                align: 8,
+                is_copy: false,
+                methods: vec![],
+                from_function: None,
+                from_trait: Some(CppTraitDefinition {
+                    as_ty: tr.tr.into_cpp_type(),
+                    methods: tr
+                        .methods
+                        .clone()
+                        .into_iter()
+                        .map(|x| CppTraitMethod {
+                            name: x.name,
+                            inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
+                            output: x.output.into_cpp(),
+                        })
+                        .collect(),
+                    link_name: link_name.clone(),
+                }),
+                wellknown_traits: vec![],
+            });
+            cpp_file.type_defs.push(CppTypeDefinition {
+                ty: RustType::Boxed(Box::new(RustType::Dyn(
+                    tr.tr.clone(),
+                    ["Sync", "Send"].iter().map(|x| x.to_string()).collect(),
+                )))
+                .into_cpp(),
                 size: 16,
                 align: 8,
                 is_copy: false,
@@ -224,7 +254,7 @@ impl ZngurFile {
                     link_name,
                 }),
                 wellknown_traits: vec![],
-            })
+            });
         }
         for func in self.funcs {
             let rust_link_name =

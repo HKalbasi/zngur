@@ -9,11 +9,11 @@ type ::std::option::Option<&u64> {
     fn unwrap(self) -> &u64;
 }
 
-type Box<dyn Fn(&u64) -> i32> {
+type Box<dyn Fn(&u64) -> i32 + Sync + Send> {
     properties(size = 16, align = 8);
 }
 
-type ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32>> {
+type ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32 + Sync + Send>> {
     properties(size = 32, align = 8);
 
     fn sum<i32>(self) -> i32 use ::rayon::iter::ParallelIterator;
@@ -23,8 +23,8 @@ type ::rayon::slice::Iter<u64> {
     properties(size = 16, align = 8);
 
     fn sum<u64>(self) -> u64 use ::rayon::iter::ParallelIterator;
-    fn map<Box<dyn Fn(&u64) -> i32>, i32>(self, Box<dyn Fn(&u64) -> i32>)
-                -> ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32>>
+    fn map<Box<dyn Fn(&u64) -> i32 + Sync + Send>, i32>(self, Box<dyn Fn(&u64) -> i32 + Sync + Send>)
+                -> ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32 + Sync + Send>>
                 use ::rayon::iter::ParallelIterator;
 }
 

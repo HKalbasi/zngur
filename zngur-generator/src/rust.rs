@@ -95,7 +95,7 @@ pub enum RustType {
     Raw(Mutability, Box<RustType>),
     Boxed(Box<RustType>),
     Slice(Box<RustType>),
-    Dyn(RustTrait),
+    Dyn(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
 }
@@ -163,7 +163,13 @@ impl Display for RustType {
             RustType::Boxed(ty) => write!(f, "Box<{ty}>"),
             RustType::Tuple(v) => write!(f, "({})", v.iter().join(", ")),
             RustType::Adt(pg) => write!(f, "{pg}"),
-            RustType::Dyn(tr) => write!(f, "dyn {tr} + Sync + Send"),
+            RustType::Dyn(tr, marker_bounds) => {
+                write!(f, "dyn {tr}")?;
+                for mb in marker_bounds {
+                    write!(f, "+ {mb}")?;
+                }
+                Ok(())
+            }
             RustType::Slice(s) => write!(f, "[{s}]"),
         }
     }
@@ -217,11 +223,18 @@ impl RustType {
                 }
                 todo!()
             }
-            RustType::Dyn(tr) => {
+            RustType::Dyn(tr, marker_bounds) => {
                 let tr_as_cpp_type = tr.into_cpp_type();
                 CppType {
                     path: CppPath::from("rust::Dyn"),
-                    generic_args: vec![tr_as_cpp_type],
+                    generic_args: [tr_as_cpp_type]
+                        .into_iter()
+                        .chain(
+                            marker_bounds
+                                .iter()
+                                .map(|x| CppType::from(&*format!("rust::{x}"))),
+                        )
+                        .collect(),
                 }
             }
         }

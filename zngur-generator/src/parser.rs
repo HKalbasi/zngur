@@ -207,7 +207,7 @@ enum ParsedRustType<'a> {
     Raw(Mutability, Box<ParsedRustType<'a>>),
     Boxed(Box<ParsedRustType<'a>>),
     Slice(Box<ParsedRustType<'a>>),
-    Dyn(ParsedRustTrait<'a>),
+    Dyn(ParsedRustTrait<'a>, Vec<&'a str>),
     Tuple(Vec<ParsedRustType<'a>>),
     Adt(ParsedRustPathAndGenerics<'a>),
 }
@@ -220,7 +220,10 @@ impl ParsedRustType<'_> {
             ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(base))),
             ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(base))),
-            ParsedRustType::Dyn(tr) => RustType::Dyn(tr.to_zngur(base)),
+            ParsedRustType::Dyn(tr, bounds) => RustType::Dyn(
+                tr.to_zngur(base),
+                bounds.into_iter().map(|x| x.to_owned()).collect(),
+            ),
             ParsedRustType::Tuple(v) => {
                 RustType::Tuple(v.into_iter().map(|s| s.to_zngur(base)).collect())
             }
@@ -355,6 +358,7 @@ enum Token<'a> {
     BraceClose,
     And,
     Star,
+    Plus,
     Eq,
     Question,
     Comma,
@@ -404,6 +408,7 @@ impl Display for Token<'_> {
             Token::BraceClose => write!(f, "}}"),
             Token::And => write!(f, "&"),
             Token::Star => write!(f, "*"),
+            Token::Plus => write!(f, "+"),
             Token::Eq => write!(f, "="),
             Token::Question => write!(f, "?"),
             Token::Comma => write!(f, ","),
@@ -438,6 +443,7 @@ fn lexer<'src>(
         just("}").to(Token::BraceClose),
         just("&").to(Token::And),
         just("*").to(Token::Star),
+        just("+").to(Token::Plus),
         just("=").to(Token::Eq),
         just("?").to(Token::Question),
         just(",").to(Token::Comma),
@@ -485,7 +491,15 @@ fn rust_type<'a>(
 
         let dyn_trait = just(Token::KwDyn)
             .ignore_then(rust_trait(parser.clone()))
-            .map(ParsedRustType::Dyn);
+            .then(
+                just(Token::Plus)
+                    .ignore_then(select! {
+                        Token::Ident(c) => c,
+                    })
+                    .repeated()
+                    .collect::<Vec<_>>(),
+            )
+            .map(|(x, y)| ParsedRustType::Dyn(x, y));
         let boxed = just(Token::Ident("Box"))
             .then(rust_generics(parser.clone()))
             .map(|(_, x)| {
