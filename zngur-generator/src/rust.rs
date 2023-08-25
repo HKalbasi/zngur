@@ -3,7 +3,7 @@ use std::{
     iter,
 };
 
-use iter_tools::{Either, Itertools};
+use iter_tools::Itertools;
 
 use crate::{
     cpp::{cpp_handle_keyword, CppPath, CppType},
@@ -11,7 +11,7 @@ use crate::{
     ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ScalarRustType {
     Uint(u32),
     Int(u32),
@@ -19,7 +19,7 @@ pub enum ScalarRustType {
     Bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RustPathAndGenerics {
     pub path: Vec<String>,
     pub generics: Vec<RustType>,
@@ -51,7 +51,7 @@ impl RustPathAndGenerics {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustTrait {
     Normal(RustPathAndGenerics),
     Fn {
@@ -88,7 +88,7 @@ impl RustTrait {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustType {
     Scalar(ScalarRustType),
     Ref(Mutability, Box<RustType>),

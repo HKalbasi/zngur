@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use cpp::cpp_handle_keyword;
 use cpp::CppFile;
 use cpp::CppFnDefinition;
@@ -21,14 +23,14 @@ mod rust;
 pub use parser::ParsedZngFile;
 pub use rust::RustFile;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZngurMethodReceiver {
     Static,
     Ref(Mutability),
     Move,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ZngurMethod {
     pub name: String,
     pub generics: Vec<RustType>,
@@ -37,7 +39,7 @@ pub struct ZngurMethod {
     pub output: RustType,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ZngurFn {
     pub path: RustPathAndGenerics,
     pub inputs: Vec<RustType>,
@@ -49,13 +51,13 @@ pub struct ZngurConstructor {
     pub inputs: Vec<(String, RustType)>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZngurWellknownTrait {
     Debug,
     Unsized,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ZngurWellknownTraitData {
     Debug {
         pretty_print: String,
@@ -82,7 +84,7 @@ pub struct ZngurTrait {
 #[derive(Default)]
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
-    pub traits: Vec<ZngurTrait>,
+    pub traits: HashMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
 }
 
@@ -176,84 +178,57 @@ impl ZngurFile {
                 align: ty_def.align,
                 is_copy: ty_def.is_copy,
                 methods: cpp_methods,
-                from_trait: None,
                 wellknown_traits,
-                from_function: if let RustType::Boxed(b) = &ty_def.ty {
-                    if let RustType::Dyn(
-                        rust::RustTrait::Fn {
-                            name,
-                            inputs,
-                            output,
-                        },
-                        _,
-                    ) = b.as_ref()
-                    {
-                        let rust_link_name = rust_file.add_builder_for_dyn_fn(name, inputs, output);
-                        Some(cpp::BuildFromFunction {
-                            sig: CppFnSig {
-                                rust_link_name,
-                                inputs: inputs.iter().map(|x| x.into_cpp()).collect(),
-                                output: output.into_cpp(),
-                            },
-                        })
+                from_trait: if let RustType::Boxed(b) = &ty_def.ty {
+                    if let RustType::Dyn(tr, _) = b.as_ref() {
+                        match tr {
+                            RustTrait::Normal(_) => {
+                                if let Some(ztr) = self.traits.get(tr) {
+                                    let link_name = rust_file.add_builder_for_dyn_trait(ztr);
+                                    Some(CppTraitDefinition::Normal {
+                                        as_ty: ztr.tr.into_cpp_type(),
+                                        methods: ztr
+                                            .methods
+                                            .clone()
+                                            .into_iter()
+                                            .map(|x| CppTraitMethod {
+                                                name: x.name,
+                                                inputs: x
+                                                    .inputs
+                                                    .into_iter()
+                                                    .map(|x| x.into_cpp())
+                                                    .collect(),
+                                                output: x.output.into_cpp(),
+                                            })
+                                            .collect(),
+                                        link_name: link_name.clone(),
+                                    })
+                                } else {
+                                    None
+                                }
+                            }
+                            RustTrait::Fn {
+                                name,
+                                inputs,
+                                output,
+                            } => {
+                                let rust_link_name =
+                                    rust_file.add_builder_for_dyn_fn(name, inputs, output);
+                                Some(CppTraitDefinition::Fn {
+                                    sig: CppFnSig {
+                                        rust_link_name,
+                                        inputs: inputs.iter().map(|x| x.into_cpp()).collect(),
+                                        output: output.into_cpp(),
+                                    },
+                                })
+                            }
+                        }
                     } else {
                         None
                     }
                 } else {
                     None
                 },
-            });
-        }
-        for tr in self.traits {
-            let link_name = rust_file.add_builder_for_dyn_trait(&tr);
-            cpp_file.type_defs.push(CppTypeDefinition {
-                ty: RustType::Boxed(Box::new(RustType::Dyn(tr.tr.clone(), vec![]))).into_cpp(),
-                size: 16,
-                align: 8,
-                is_copy: false,
-                methods: vec![],
-                from_function: None,
-                from_trait: Some(CppTraitDefinition {
-                    as_ty: tr.tr.into_cpp_type(),
-                    methods: tr
-                        .methods
-                        .clone()
-                        .into_iter()
-                        .map(|x| CppTraitMethod {
-                            name: x.name,
-                            inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                            output: x.output.into_cpp(),
-                        })
-                        .collect(),
-                    link_name: link_name.clone(),
-                }),
-                wellknown_traits: vec![],
-            });
-            cpp_file.type_defs.push(CppTypeDefinition {
-                ty: RustType::Boxed(Box::new(RustType::Dyn(
-                    tr.tr.clone(),
-                    ["Sync", "Send"].iter().map(|x| x.to_string()).collect(),
-                )))
-                .into_cpp(),
-                size: 16,
-                align: 8,
-                is_copy: false,
-                methods: vec![],
-                from_function: None,
-                from_trait: Some(CppTraitDefinition {
-                    as_ty: tr.tr.into_cpp_type(),
-                    methods: tr
-                        .methods
-                        .into_iter()
-                        .map(|x| CppTraitMethod {
-                            name: x.name,
-                            inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                            output: x.output.into_cpp(),
-                        })
-                        .collect(),
-                    link_name,
-                }),
-                wellknown_traits: vec![],
             });
         }
         for func in self.funcs {

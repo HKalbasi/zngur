@@ -17,7 +17,7 @@ type ParserInput<'a> = chumsky::input::SpannedInput<Token<'a>, Span, &'a [(Token
 #[derive(Debug)]
 pub struct ParsedZngFile<'a>(Vec<ParsedItem<'a>>);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 enum ParsedPathStart {
     Absolute,
     Relative,
@@ -174,10 +174,16 @@ impl ParsedItem<'_> {
                     constructors,
                 });
             }
-            ParsedItem::Trait { tr, methods } => r.traits.push(ZngurTrait {
-                tr: tr.to_zngur(base),
-                methods: methods.into_iter().map(|m| m.to_zngur(base)).collect(),
-            }),
+            ParsedItem::Trait { tr, methods } => {
+                let tr = tr.to_zngur(base);
+                r.traits.insert(
+                    tr.clone(),
+                    ZngurTrait {
+                        tr,
+                        methods: methods.into_iter().map(|m| m.to_zngur(base)).collect(),
+                    },
+                );
+            }
             ParsedItem::Fn(f) => {
                 let method = f.to_zngur(base);
                 r.funcs.push(crate::ZngurFn {
@@ -194,7 +200,7 @@ impl ParsedItem<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mutability {
     Mut,
     Not,
@@ -344,7 +350,7 @@ fn handle_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>, filename: &str
     exit(101);
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Token<'a> {
     ColonColon,
     Arrow,

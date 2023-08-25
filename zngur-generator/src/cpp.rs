@@ -244,7 +244,7 @@ impl CppFnDefinition {
     }
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 pub enum CppMethodKind {
     StaticOnly,
     Lvalue,
@@ -261,14 +261,27 @@ pub struct BuildFromFunction {
     pub sig: CppFnSig,
 }
 
-pub struct CppTraitDefinition {
-    pub as_ty: CppType,
-    pub methods: Vec<CppTraitMethod>,
-    pub link_name: String,
+pub enum CppTraitDefinition {
+    Fn {
+        sig: CppFnSig,
+    },
+    Normal {
+        as_ty: CppType,
+        methods: Vec<CppTraitMethod>,
+        link_name: String,
+    },
 }
 
 impl CppTraitDefinition {
     fn emit(&self, state: &mut State) -> std::fmt::Result {
+        let CppTraitDefinition::Normal {
+            as_ty,
+            methods,
+            link_name,
+        } = self
+        else {
+            return Ok(());
+        };
         write!(
             state,
             r#"
@@ -277,9 +290,9 @@ template<>
 class Impl<{}> {{
 public:
 "#,
-            self.as_ty,
+            as_ty,
         )?;
-        for method in &self.methods {
+        for method in methods {
             write!(
                 state,
                 r#"
@@ -312,7 +325,6 @@ pub struct CppTypeDefinition {
     pub align: usize,
     pub is_copy: bool,
     pub methods: Vec<CppMethod>,
-    pub from_function: Option<BuildFromFunction>,
     pub from_trait: Option<CppTraitDefinition>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
 }
@@ -326,7 +338,6 @@ impl Default for CppTypeDefinition {
             is_copy: false,
             methods: vec![],
             wellknown_traits: vec![],
-            from_function: None,
             from_trait: None,
         }
     }
@@ -497,15 +508,14 @@ private:
                         ty = self.ty.path.name(),
                     )?;
                 }
-                if let Some(from_function) = &self.from_function {
+                if let Some(CppTraitDefinition::Fn { sig }) = &self.from_trait {
                     // TODO: too special
                     let as_std_function = format!(
                         "::std::function<{}({})>",
-                        from_function.sig.output,
-                        from_function.sig.inputs.iter().join(", ")
+                        sig.output,
+                        sig.inputs.iter().join(", ")
                     );
-                    let ii_args = from_function
-                        .sig
+                    let ii_args = sig
                         .inputs
                         .iter()
                         .enumerate()
@@ -532,10 +542,15 @@ private:
     }}
     "#,
                         ty = self.ty.path.name(),
-                        link_name = from_function.sig.rust_link_name,
+                        link_name = sig.rust_link_name,
                     )?;
                 }
-                if let Some(from_trait) = &self.from_trait {
+                if let Some(CppTraitDefinition::Normal {
+                    as_ty,
+                    methods,
+                    link_name,
+                }) = &self.from_trait
+                {
                     // TODO: too special
                     writeln!(
                         state,
@@ -559,7 +574,7 @@ private:
     }}
     "#,
                         ty = self.ty.path.name(),
-                        link_name = from_trait.link_name,
+                        link_name = link_name,
                     )?;
                 }
             }
@@ -732,36 +747,38 @@ namespace rust {{
                 ZngurWellknownTraitData::Unsized => (),
             }
         }
-        if let Some(ff) = &self.from_trait {
-            let CppTraitDefinition {
-                as_ty: _,
-                methods: _,
-                link_name,
-            } = ff;
-            // TODO: too special
-            writeln!(
-                state,
-                "void {link_name}(uint8_t *data, void destructor(uint8_t *),
-            void f_next(uint8_t *, uint8_t *),
-            uint8_t *o);"
-            )?;
-        }
-        if let Some(ff) = &self.from_function {
-            let BuildFromFunction {
-                sig:
-                    CppFnSig {
-                        rust_link_name,
-                        inputs: _,
-                        output: _,
-                    },
-            } = ff;
-            // TODO: too special
-            writeln!(
-                state,
-                "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
-            void call(uint8_t *, uint8_t *, uint8_t *),
-            uint8_t *o);"
-            )?;
+        if let Some(trd) = &self.from_trait {
+            match trd {
+                CppTraitDefinition::Fn {
+                    sig:
+                        CppFnSig {
+                            rust_link_name,
+                            inputs: _,
+                            output: _,
+                        },
+                } => {
+                    // TODO: too special
+                    writeln!(
+                        state,
+                        "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
+                    void call(uint8_t *, uint8_t *, uint8_t *),
+                    uint8_t *o);"
+                    )?;
+                }
+                CppTraitDefinition::Normal {
+                    as_ty: _,
+                    methods: _,
+                    link_name,
+                } => {
+                    // TODO: too special
+                    writeln!(
+                        state,
+                        "void {link_name}(uint8_t *data, void destructor(uint8_t *),
+                void f_next(uint8_t *, uint8_t *),
+                uint8_t *o);"
+                    )?;
+                }
+            };
         }
         Ok(())
     }

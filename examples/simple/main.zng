@@ -6,6 +6,12 @@ type Box<dyn Fn(i32) -> i32> {
     properties(size = 16, align = 8);
 }
 
+type Box<dyn ::std::iter::Iterator<Item = i32>> {
+    properties(size = 16, align = 8);
+
+    fn collect<::std::vec::Vec<i32>>(self) -> ::std::vec::Vec<i32>;
+}
+
 mod ::std {
     type option::Option<i32> {
         properties(size = 8, align = 4, is_copy = 1);
@@ -45,8 +51,4 @@ mod ::std {
     trait iter::Iterator::<Item = i32> {
         fn next(&mut self) -> ::std::option::Option<i32>;
     }
-}
-
-mod crate {
-    fn collect_vec(Box<dyn ::std::iter::Iterator<Item = i32>>) -> ::std::vec::Vec<i32>;
 }
