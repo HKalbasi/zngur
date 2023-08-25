@@ -1,3 +1,36 @@
+# Zngur
+
+Zngur (/zængɑr/) is a radical approach to the C++/Rust interoperability problem.
+
+## Idea
+
+Rust and C++ are similar languages, but with some important differences. Particularly:
+
+- Rust is a memory safe language with strong boundary between `safe` and `unsafe`, C++
+  is an unsafe language with no such difference.
+- C++ has macro-like templates, which supports variadic, specialization and are checked
+  at instantiation time. Rust generics on the other hand, are type checked at definition
+  time using trait bounds.
+- Rust move is a `memcpy` with compiler support for not destructing the moved out of variable, but C++
+  move can execute arbitrary code.
+
+In all of these differences, C++ has more freedom relative to the Rust:
+
+- Rust considers C++ functions as unsafe, but C++ will happily call Rust code (even unsafe) as there
+  is no difference between it and normal C++ code.
+- Every rust generic code is valid C++ template, but not vise versa.
+- C++ can simulate Rust moves very easily (by doing an actual memcpy of data, and tracking the state of destruction in
+  a boolean flag) but Rust has difficulty with C++ moves. Specially, since Rust assumes that every type is
+  Rust-moveable, it can never store C++ things by value, just over some indirection and `Pin`.
+
+Considering that, Zngur tries to expose a full and detailed image of the Rust code into the C++, so that you write your Rust
+as a normal Rust crate, with no `unsafe`, raw pointer, `Pin` and similar in its API, working with traits, closures and everything
+that you use in your normal Rust code, and finally using it in C++ with minimal effort and maximal ease, feeling that
+you are using a normal C++ library, not something in a foreign language.
+
+## Demo
+
+```C++
 #include <iostream>
 #include <vector>
 
@@ -57,6 +90,27 @@ int main() {
   // Then use it like a normal Rust value.
   auto t = vec_as_iter.collect();
   // Some utilities are also provided. For example, `zngur_dbg` is the
-  // equivalent of `dbg!` macros.
+  // equivalent of `dbg!` macro.
   zngur_dbg(t);
 }
+```
+
+Output:
+
+```
+17
+hello 2 2
+hello 5 7
+hello 7 14
+hello 3 17
+34 17
+[main.cpp:61] t = [
+    10,
+    20,
+    60,
+]
+```
+
+See the `examples/simple` directory if you want to actually build and run it.
+
+## How it compares to CXX, AutoCXX, ...?
