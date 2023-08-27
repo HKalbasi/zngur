@@ -1,0 +1,6 @@
+[book]
+authors = ["hkalbasi"]
+language = "en"
+multilingual = false
+src = "src"
+title = "Zngur"
