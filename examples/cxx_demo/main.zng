@@ -1,0 +1,28 @@
+type () {
+    properties(size = 0, align = 1, is_copy = 1);
+}
+
+type ::core::primitive::str {
+    properties(size = 0, align = 1);
+    wellknown_traits(?Sized);
+}
+
+mod crate {
+    type MultiBuf {
+        properties(size = 32, align = 8);
+    }
+
+    type BlobMetadata {
+        properties(size = 32, align = 8);    
+    }
+
+    trait BlobStoreTrait {
+        fn put(&self, &mut MultiBuf) -> u64;
+        fn tag(&self, u64, &::core::primitive::str);
+        fn metadata(&self, u64) -> BlobMetadata;
+    }
+
+    type Box<dyn BlobStoreTrait> {
+        properties(size = 16, align = 8);
+    }
+}

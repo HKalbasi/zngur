@@ -4,6 +4,7 @@ members = [
     "examples/simple",
     "examples/rustyline",
     "examples/rayon",
+    "examples/cxx_demo",
     "zngur-generator",
 ]
 resolver = "2"
