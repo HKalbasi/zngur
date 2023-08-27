@@ -208,7 +208,7 @@ impl CppFnSig {
         } = self;
         writeln!(
             state,
-            "{output} {fn_name}({input_defs})
+            "inline {output} {fn_name}({input_defs})
         {{
             {output} o;
             ::rust::__zngur_internal_assume_init(o);
@@ -418,11 +418,11 @@ private:
             r#"
 namespace rust {{
     template<>
-    uint8_t* __zngur_internal_data_ptr({ty}& t);
+    inline uint8_t* __zngur_internal_data_ptr({ty}& t);
     template<>
-    void __zngur_internal_assume_init({ty}& t);
+    inline void __zngur_internal_assume_init({ty}& t);
     template<>
-    void __zngur_internal_assume_deinit({ty}& t);
+    inline void __zngur_internal_assume_deinit({ty}& t);
 }}"#,
             ty = self.ty,
         )?;
@@ -619,7 +619,7 @@ private:
                         r#"
             namespace rust {{
                 template<>
-                void zngur_pretty_print({ty}& t) {{
+                inline void zngur_pretty_print({ty}& t) {{
                     {check}
                     {pretty_print}((uint8_t*)&t.data);
                 }}
@@ -635,18 +635,18 @@ private:
                 r#"
 namespace rust {{
     template<>
-    uint8_t* __zngur_internal_data_ptr({ty}& t) {{
+    inline uint8_t* __zngur_internal_data_ptr({ty}& t) {{
         {check}
         return (uint8_t*)&t.data;
     }}
 
     template<>
-    void __zngur_internal_assume_init({ty}& t) {{
+    inline void __zngur_internal_assume_init({ty}& t) {{
         {assume_init}
     }}
 
     template<>
-    void __zngur_internal_assume_deinit({ty}& t) {{
+    inline void __zngur_internal_assume_deinit({ty}& t) {{
         {assume_deinit}
     }}
 }}"#,
@@ -682,7 +682,7 @@ namespace rust {{
                 } = &method.sig;
                 writeln!(
                     state,
-                    "{output} rust::Ref<{ty}>::{method_name}({input_defs})
+                    "inline {output} rust::Ref<{ty}>::{method_name}({input_defs})
                 {{
                     return {fn_name}(*this{input_args});
                 }}",
@@ -707,7 +707,7 @@ namespace rust {{
                 } = &method.sig;
                 writeln!(
                     state,
-                    "{output} {fn_name}({input_defs})
+                    "inline {output} {fn_name}({input_defs})
                 {{
                     return {fn_name}({this_arg}{input_args});
                 }}",
@@ -842,19 +842,19 @@ namespace rust {
             writeln!(
                 state,
                 r#"
-    uint8_t* __zngur_internal_data_ptr({ty}& t) {{
+    inline uint8_t* __zngur_internal_data_ptr({ty}& t) {{
         return (uint8_t*)&t;
     }}
 
-    void __zngur_internal_assume_init({ty}& t) {{}}
-    void __zngur_internal_assume_deinit({ty}& t) {{}}
+    inline void __zngur_internal_assume_init({ty}& t) {{}}
+    inline void __zngur_internal_assume_deinit({ty}& t) {{}}
 
-    uint8_t* __zngur_internal_data_ptr({ty}*& t) {{
+    inline uint8_t* __zngur_internal_data_ptr({ty}*& t) {{
         return (uint8_t*)&t;
     }}
 
-    void __zngur_internal_assume_init({ty}*& t) {{}}
-    void __zngur_internal_assume_deinit({ty}*& t) {{}}
+    inline void __zngur_internal_assume_init({ty}*& t) {{}}
+    inline void __zngur_internal_assume_deinit({ty}*& t) {{}}
 
     template<>
     struct Ref<{ty}> {{
