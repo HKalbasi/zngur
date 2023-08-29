@@ -364,7 +364,7 @@ impl CppTypeDefinition {
                 state,
                 r#"
 template<>
-struct ::rust::Ref<{ty}> {{
+struct rust::Ref<{ty}> {{
     Ref() {{
         data = {{0, 0}};
     }}
@@ -380,7 +380,7 @@ private:
                 state,
                 r#"
 template<>
-struct ::rust::Ref<{ty}> {{
+struct rust::Ref<{ty}> {{
     Ref() {{
         data = 0;
     }}
@@ -429,11 +429,11 @@ private:
             r#"
 namespace rust {{
     template<>
-    inline uint8_t* __zngur_internal_data_ptr({ty}& t);
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t);
     template<>
-    inline void __zngur_internal_assume_init({ty}& t);
+    inline void __zngur_internal_assume_init<{ty}>({ty}& t);
     template<>
-    inline void __zngur_internal_assume_deinit({ty}& t);
+    inline void __zngur_internal_assume_deinit<{ty}>({ty}& t);
 }}"#,
             ty = self.ty,
         )?;
@@ -468,10 +468,10 @@ public:
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr({ty}& t);
-    friend void ::rust::__zngur_internal_assume_init({ty}& t);
-    friend void ::rust::__zngur_internal_assume_deinit({ty}& t);
-    friend void ::rust::zngur_pretty_print({ty}& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<{ty}>({ty}& t);
+    friend void ::rust::__zngur_internal_assume_init<{ty}>({ty}& t);
+    friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
+    friend void ::rust::zngur_pretty_print<{ty}>({ty}& t);
 "#,
                     ty = self.ty,
                     align = self.align,
@@ -630,7 +630,7 @@ private:
                         r#"
             namespace rust {{
                 template<>
-                inline void zngur_pretty_print({ty}& t) {{
+                inline void zngur_pretty_print<{ty}>({ty}& t) {{
                     {check}
                     {pretty_print}((uint8_t*)&t.data);
                 }}
@@ -646,18 +646,18 @@ private:
                 r#"
 namespace rust {{
     template<>
-    inline uint8_t* __zngur_internal_data_ptr({ty}& t) {{
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
         {check}
         return (uint8_t*)&t.data;
     }}
 
     template<>
-    inline void __zngur_internal_assume_init({ty}& t) {{
+    inline void __zngur_internal_assume_init<{ty}>({ty}& t) {{
         {assume_init}
     }}
 
     template<>
-    inline void __zngur_internal_assume_deinit({ty}& t) {{
+    inline void __zngur_internal_assume_deinit<{ty}>({ty}& t) {{
         {assume_deinit}
     }}
 }}"#,
