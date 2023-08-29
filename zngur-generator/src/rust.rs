@@ -347,6 +347,26 @@ impl RustFile {
         let trait_name = tr.tr.to_string();
         let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
         let mangled_name = mangle_name(&trait_name);
+        let method_and_types = tr
+            .methods
+            .iter()
+            .map(|x| {
+                format!(
+                    r#"f_{}: extern "C" fn(data: *mut u8, {}, o: *mut u8),"#,
+                    x.name,
+                    x.inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, _)| format!("i{n}: *mut u8"))
+                        .join(", ")
+                )
+            })
+            .join("\n");
+        let method_names = tr
+            .methods
+            .iter()
+            .map(|x| format!("f_{},", x.name))
+            .join("\n");
         wln!(
             self,
             r#"
@@ -354,12 +374,12 @@ impl RustFile {
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
-    f_next: extern "C" fn(data: *mut u8, o: *mut u8),
+    {method_and_types}
     o: *mut u8,
 ) {{
     struct Wrapper {{ 
         value: ZngurCppOpaqueObject,
-        f_next: extern "C" fn(data: *mut u8, o: *mut u8),
+        {method_and_types}
     }}
     impl {trait_without_assocs} for Wrapper {{
 "#
@@ -382,7 +402,10 @@ pub extern "C" fn {mangled_name}(
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
             wln!(self, "            let data = self.value.data;");
-            self.call_cpp_function("(self.f_next)(data, ", 0);
+            self.call_cpp_function(
+                &format!("(self.f_{})(data, ", method.name),
+                method.inputs.len(),
+            );
             wln!(self, "        }} }}");
         }
         wln!(
@@ -391,7 +414,7 @@ pub extern "C" fn {mangled_name}(
     }}
     let this = Wrapper {{
         value: ZngurCppOpaqueObject {{ data, destructor }},
-        f_next,
+        {method_names}
     }};
     let r: Box<dyn {trait_name}> = Box::new(this);
     unsafe {{ std::ptr::write(o as *mut _, r) }}
@@ -493,7 +516,7 @@ extern "C" {{ fn {mangled_name}("#
         w!(
             self,
             r#"
-pub fn {rust_name}("#
+pub(crate) fn {rust_name}("#
         );
         for (n, ty) in inputs.iter().enumerate() {
             w!(self, "i{n}: {ty}, ");

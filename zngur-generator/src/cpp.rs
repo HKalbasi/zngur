@@ -417,6 +417,18 @@ private:
             }
         }
         writeln!(state, "}};")?;
+        writeln!(
+            state,
+            r#"
+namespace rust {{
+template<>
+inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
+    return {size};
+}}
+}}"#,
+            ty = self.ty,
+            size = if is_unsized { 16 } else { 8 },
+        )?;
         Ok(())
     }
 
@@ -434,6 +446,8 @@ namespace rust {{
     inline void __zngur_internal_assume_init<{ty}>({ty}& t);
     template<>
     inline void __zngur_internal_assume_deinit<{ty}>({ty}& t);
+    template<>
+    inline size_t __zngur_internal_size_of<{ty}>();
 }}"#,
             ty = self.ty,
         )?;
@@ -507,7 +521,7 @@ private:
     }}
     {ty}(const {ty}& other) = delete;
     {ty}& operator=(const {ty}& other) = delete;
-    {ty}({ty}&& other) : drop_flag(true), data(other.data) {{
+    {ty}({ty}&& other) : data(other.data), drop_flag(true) {{
         if (!other.drop_flag) {{ ::std::terminate(); }}
         other.drop_flag = false;
     }}
@@ -574,18 +588,38 @@ private:
         {link_name}(
             (uint8_t *)data,
             [](uint8_t *d) {{ delete (T *)d; }},
-            [](uint8_t *d, uint8_t *o) {{
-                ::std::array<uint8_t, 8> *oo = (::std::array<uint8_t, 8> *)o;
-                auto dd = (T *)d;
-                auto ooo = dd->next();
-                *oo = *(::std::array<uint8_t, 8> *)::rust::__zngur_internal_data_ptr(ooo);
-            }},
+    "#,
+                        ty = self.ty.path.name(),
+                        link_name = link_name,
+                    )?;
+                    for method in methods {
+                        writeln!(
+                            state,
+                            r#"
+                [](uint8_t *d, {input_args}, uint8_t *o) {{
+                    T* dd = (T *)d;
+                    {input_inits}
+                    {output} oo = dd->{name}({input_names});
+                    memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{output}>());
+                }},
+        "#,
+                            name = method.name,
+                            input_args = (0..method.inputs.len()).map(|n| format!("uint8_t* i{n}")).join(", "),
+                            input_names = (0..method.inputs.len()).map(|n| format!("ii{n}")).join(", "),
+                            input_inits = method.inputs.iter().enumerate().map(|(n, ty)| {
+                                format!("{ty} ii{n}; ::rust::__zngur_internal_assume_init(ii{n});\
+                                memcpy(::rust::__zngur_internal_data_ptr(ii{n}), i{n}, ::rust::__zngur_internal_size_of<{ty}>());")
+                            }).join("\n"),
+                            output = method.output,
+                        )?;
+                    }
+                    writeln!(
+                        state,
+                        r#"
             ::rust::__zngur_internal_data_ptr(o));
         return o;
     }}
     "#,
-                        ty = self.ty.path.name(),
-                        link_name = link_name,
                     )?;
                 }
             }
@@ -652,15 +686,21 @@ namespace rust {{
     }}
 
     template<>
-    inline void __zngur_internal_assume_init<{ty}>({ty}& t) {{
+    inline void __zngur_internal_assume_init<{ty}>({ty}&{maybe_unused_t}) {{
         {assume_init}
     }}
 
     template<>
-    inline void __zngur_internal_assume_deinit<{ty}>({ty}& t) {{
+    inline void __zngur_internal_assume_deinit<{ty}>({ty}&{maybe_unused_t}) {{
         {assume_deinit}
     }}
+
+    template<>
+    inline size_t __zngur_internal_size_of<{ty}>() {{
+        return {size};
+    }}
 }}"#,
+                maybe_unused_t = if self.is_copy { "" } else { " t" },
                 assume_init = if self.is_copy {
                     ""
                 } else {
@@ -671,6 +711,7 @@ namespace rust {{
                 } else {
                     "t.drop_flag = false;"
                 },
+                size = self.size,
             )?;
         }
         self.emit_ref_specialization(state)
@@ -778,16 +819,23 @@ namespace rust {{
                 }
                 CppTraitDefinition::Normal {
                     as_ty: _,
-                    methods: _,
+                    methods,
                     link_name,
                 } => {
                     // TODO: too special
                     writeln!(
                         state,
-                        "void {link_name}(uint8_t *data, void destructor(uint8_t *),
-                void f_next(uint8_t *, uint8_t *),
-                uint8_t *o);"
+                        "void {link_name}(uint8_t *data, void destructor(uint8_t *),"
                     )?;
+                    for method in methods {
+                        writeln!(
+                            state,
+                            "void f_{}({}),",
+                            method.name,
+                            (0..method.inputs.len() + 2).map(|_| "uint8_t*").join(", ")
+                        )?;
+                    }
+                    writeln!(state, "uint8_t *o);")?;
                 }
             };
         }
@@ -807,6 +855,7 @@ impl CppFile {
         state.text += r#"
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
 #include <array>
 #include <iostream>
 #include <functional>
@@ -828,6 +877,9 @@ namespace rust {
     void __zngur_internal_assume_deinit(T& t);
 
     template<typename T>
+    inline size_t __zngur_internal_size_of();
+
+    template<typename T>
     struct Ref;
 
     template<typename T>
@@ -836,13 +888,13 @@ namespace rust {
     }
 
     template<typename T>
-    void __zngur_internal_assume_init(::rust::Ref<T>& t) {}
+    void __zngur_internal_assume_init(::rust::Ref<T>&) {}
 
     template<typename T>
-    void zngur_pretty_print(T& t) {}
+    void zngur_pretty_print(T&) {}
 
     template<typename T>
-    void __zngur_internal_assume_deinit(::rust::Ref<T>& t) {}
+    void __zngur_internal_assume_deinit(::rust::Ref<T>&) {}
 
     template<typename Type>
     class Impl;
@@ -858,15 +910,20 @@ namespace rust {
         return (uint8_t*)&t;
     }}
 
-    inline void __zngur_internal_assume_init({ty}& t) {{}}
-    inline void __zngur_internal_assume_deinit({ty}& t) {{}}
+    inline void __zngur_internal_assume_init({ty}&) {{}}
+    inline void __zngur_internal_assume_deinit({ty}&) {{}}
+
+    template<>
+    inline size_t __zngur_internal_size_of<{ty}>() {{
+        return sizeof({ty});
+    }}
 
     inline uint8_t* __zngur_internal_data_ptr({ty}*& t) {{
         return (uint8_t*)&t;
     }}
 
-    inline void __zngur_internal_assume_init({ty}*& t) {{}}
-    inline void __zngur_internal_assume_deinit({ty}*& t) {{}}
+    inline void __zngur_internal_assume_init({ty}*&) {{}}
+    inline void __zngur_internal_assume_deinit({ty}*&) {{}}
 
     template<>
     struct Ref<{ty}> {{
@@ -912,6 +969,15 @@ namespace rust {
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
         }
+        for func in &self.exported_fn_defs {
+            writeln!(state, "namespace rust {{ namespace exported_functions {{")?;
+            write!(state, "   {} {}(", func.sig.output, func.name)?;
+            for (n, ty) in func.sig.inputs.iter().enumerate() {
+                write!(state, "{ty} i{n}, ")?;
+            }
+            writeln!(state, ");")?;
+            writeln!(state, "}} }}")?;
+        }
         // for fd in &self.trait_defs {
         //     fd.emit(state)?;
         // }
@@ -925,6 +991,18 @@ namespace rust {
             writeln!(state, "extern \"C\" {{")?;
             func.sig.emit_rust_link(state)?;
             writeln!(state, "{{")?;
+            write!(
+                state,
+                "   {} oo = ::rust::exported_functions::{}(",
+                func.sig.output, func.name
+            )?;
+            for input in &func.sig.inputs {}
+            writeln!(state, ");")?;
+            writeln!(
+                state,
+                "   memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{}>());",
+                func.sig.output,
+            )?;
             writeln!(state, "}}")?;
             writeln!(state, "}}")?;
         }

@@ -19,10 +19,22 @@ impl MultiBuf {
     }
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 struct BlobMetadata {
     size: usize,
     tags: Vec<String>,
+}
+
+impl BlobMetadata {
+    fn set_size(&mut self, size: usize) {
+        self.size = size;
+    }
+
+    fn push_tag(&mut self, c: *const i8) {
+        self.tags.push(
+            String::from_utf8_lossy(unsafe { std::ffi::CStr::from_ptr(c).to_bytes() }).to_string(),
+        );
+    }
 }
 
 trait BlobStoreTrait {
@@ -45,5 +57,5 @@ fn main() {
 
     // Read back the tags.
     let metadata = client.metadata(blob_id);
-    println!("tags = {:?}", metadata.tags);
+    println!("metadata = {:?}", metadata);
 }
