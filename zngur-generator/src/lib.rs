@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 
 use cpp::cpp_handle_keyword;
+use cpp::CppExportedFnDefinition;
 use cpp::CppFile;
 use cpp::CppFnDefinition;
 use cpp::CppFnSig;
@@ -46,6 +47,13 @@ pub struct ZngurFn {
     pub output: RustType,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ZngurExternCppFn {
+    pub name: String,
+    pub inputs: Vec<RustType>,
+    pub output: RustType,
+}
+
 pub struct ZngurConstructor {
     pub name: String,
     pub inputs: Vec<(String, RustType)>,
@@ -86,6 +94,7 @@ pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub traits: HashMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
+    pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
 }
 
 impl ZngurFile {
@@ -93,7 +102,7 @@ impl ZngurFile {
         zng.into_zngur_file()
     }
 
-    pub fn render(self) -> (String, String) {
+    pub fn render(self) -> (String, String, Option<String>) {
         let mut cpp_file = CppFile::default();
         let mut rust_file = RustFile::default();
         for ty_def in self.types {
@@ -243,6 +252,19 @@ impl ZngurFile {
                 },
             });
         }
-        (rust_file.0, cpp_file.render())
+        for func in self.extern_cpp_funcs {
+            let rust_link_name =
+                rust_file.add_extern_cpp_function(&func.name, &func.inputs, &func.output);
+            cpp_file.exported_fn_defs.push(CppExportedFnDefinition {
+                name: func.name.clone(),
+                sig: CppFnSig {
+                    rust_link_name,
+                    inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),
+                    output: func.output.into_cpp(),
+                },
+            });
+        }
+        let (h, cpp) = cpp_file.render();
+        (rust_file.0, h, cpp)
     }
 }

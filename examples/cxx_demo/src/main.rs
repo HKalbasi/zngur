@@ -1,5 +1,7 @@
 mod generated;
 
+use generated::new_blob_store_client;
+
 // An iterator over contiguous chunks of a discontiguous file object. Toy
 // implementation uses a Vec<Vec<u8>> but in reality this might be iterating
 // over some more complex Rust data structure like a rope, or maybe loading
@@ -17,6 +19,7 @@ impl MultiBuf {
     }
 }
 
+#[derive(Default)]
 struct BlobMetadata {
     size: usize,
     tags: Vec<String>,
@@ -26,10 +29,6 @@ trait BlobStoreTrait {
     fn put(&self, buf: &mut MultiBuf) -> u64;
     fn tag(&self, blob_id: u64, tag: &str);
     fn metadata(&self, blob_id: u64) -> BlobMetadata;
-}
-
-fn new_blob_store_client() -> Box<dyn BlobStoreTrait> {
-    todo!()
 }
 
 fn main() {

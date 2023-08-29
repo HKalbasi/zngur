@@ -79,7 +79,7 @@ fn main() {
             let file = std::fs::read_to_string(&path).unwrap();
             let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
 
-            let (rust, cpp) = file.render();
+            let (rust, h, cpp) = file.render();
             let path = path.parent().unwrap();
             File::create(path.join("src/generated.rs"))
                 .unwrap()
@@ -87,8 +87,14 @@ fn main() {
                 .unwrap();
             File::create(path.join("generated.h"))
                 .unwrap()
-                .write_all(cpp.as_bytes())
+                .write_all(h.as_bytes())
                 .unwrap();
+            if let Some(cpp) = cpp {
+                File::create(path.join("generated.cpp"))
+                    .unwrap()
+                    .write_all(cpp.as_bytes())
+                    .unwrap();
+            }
         }
     }
 }

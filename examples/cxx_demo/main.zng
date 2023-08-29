@@ -13,7 +13,9 @@ mod crate {
     }
 
     type BlobMetadata {
-        properties(size = 32, align = 8);    
+        properties(size = 32, align = 8);
+
+        fn default() -> BlobMetadata;  
     }
 
     trait BlobStoreTrait {
@@ -25,4 +27,8 @@ mod crate {
     type Box<dyn BlobStoreTrait> {
         properties(size = 16, align = 8);
     }
+}
+
+extern "C++" {
+    fn new_blob_store_client() -> Box<dyn crate::BlobStoreTrait>;
 }

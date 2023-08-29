@@ -321,11 +321,11 @@ impl RustFile {
             wln!(self, "let mut i{n} = ::core::mem::MaybeUninit::new(i{n});")
         }
         wln!(self, "let mut r = ::core::mem::MaybeUninit::uninit();");
-        w!(self, "{name}(data");
+        w!(self, "{name}");
         for n in 0..inputs {
-            w!(self, ", i{n}.as_mut_ptr() as *mut u8");
+            w!(self, "i{n}.as_mut_ptr() as *mut u8, ");
         }
-        wln!(self, ", r.as_mut_ptr() as *mut u8);");
+        wln!(self, "r.as_mut_ptr() as *mut u8);");
         wln!(self, "r.assume_init()");
     }
 
@@ -382,7 +382,7 @@ pub extern "C" fn {mangled_name}(
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
             wln!(self, "            let data = self.value.data;");
-            self.call_cpp_function("(self.f_next)", 0);
+            self.call_cpp_function("(self.f_next)(data, ", 0);
             wln!(self, "        }} }}");
         }
         wln!(
@@ -424,7 +424,7 @@ pub extern "C" fn {mangled_name}(
         let data = this.data;
 "#,
         );
-        self.call_cpp_function("call", 1);
+        self.call_cpp_function("call(data, ", 1);
         wln!(
             self,
             r#"
@@ -472,6 +472,36 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             constructor,
             match_check,
         }
+    }
+
+    pub fn add_extern_cpp_function(
+        &mut self,
+        rust_name: &str,
+        inputs: &[RustType],
+        output: &RustType,
+    ) -> String {
+        let mangled_name = mangle_name(rust_name);
+        w!(
+            self,
+            r#"
+extern "C" {{ fn {mangled_name}("#
+        );
+        for (n, _) in inputs.iter().enumerate() {
+            w!(self, "i{n}: *mut u8, ");
+        }
+        wln!(self, r#"o: *mut u8); }}"#);
+        w!(
+            self,
+            r#"
+pub fn {rust_name}("#
+        );
+        for (n, ty) in inputs.iter().enumerate() {
+            w!(self, "i{n}: {ty}, ");
+        }
+        wln!(self, ") -> {output} {{ unsafe {{");
+        self.call_cpp_function(&format!("{mangled_name}("), inputs.len());
+        wln!(self, "}} }}");
+        mangled_name
     }
 
     pub fn add_function(

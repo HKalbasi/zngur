@@ -179,7 +179,13 @@ impl CppFnSig {
         for n in 0..self.inputs.len() {
             write!(state, "uint8_t* i{n},")?;
         }
-        writeln!(state, "uint8_t* o);")?;
+        write!(state, "uint8_t* o)")?;
+        Ok(())
+    }
+
+    fn emit_rust_link_decl(&self, state: &mut State) -> std::fmt::Result {
+        self.emit_rust_link(state)?;
+        writeln!(state, ";")?;
         Ok(())
     }
 
@@ -233,6 +239,11 @@ impl CppFnSig {
 
 pub struct CppFnDefinition {
     pub name: CppPath,
+    pub sig: CppFnSig,
+}
+
+pub struct CppExportedFnDefinition {
+    pub name: String,
     pub sig: CppFnSig,
 }
 
@@ -733,7 +744,7 @@ namespace rust {{
 
     fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
         for method in &self.methods {
-            method.sig.emit_rust_link(state)?;
+            method.sig.emit_rust_link_decl(state)?;
         }
         for tr in &self.wellknown_traits {
             match tr {
@@ -788,10 +799,11 @@ namespace rust {{
 pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
+    pub exported_fn_defs: Vec<CppExportedFnDefinition>,
 }
 
 impl CppFile {
-    fn emit(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
         state.text += r#"
 #include <cstddef>
 #include <cstdint>
@@ -879,7 +891,7 @@ namespace rust {
         writeln!(state, "}}")?;
         writeln!(state, "extern \"C\" {{")?;
         for f in &self.fn_defs {
-            f.sig.emit_rust_link(state)?;
+            f.sig.emit_rust_link_decl(state)?;
         }
         for td in &self.type_defs {
             td.emit_rust_links(state)?;
@@ -906,18 +918,38 @@ namespace rust {
         Ok(())
     }
 
-    pub fn render(self) -> String {
-        let mut state = State {
+    fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
+        writeln!(state, r#"#include "./generated.h""#)?;
+        for func in &self.exported_fn_defs {
+            *is_really_needed = true;
+            writeln!(state, "extern \"C\" {{")?;
+            func.sig.emit_rust_link(state)?;
+            writeln!(state, "{{")?;
+            writeln!(state, "}}")?;
+            writeln!(state, "}}")?;
+        }
+        Ok(())
+    }
+
+    pub fn render(self) -> (String, Option<String>) {
+        let mut h_file = State {
             text: "".to_owned(),
         };
-        self.emit(&mut state).unwrap();
-        state.text
+        let mut cpp_file = State {
+            text: "".to_owned(),
+        };
+        self.emit_h_file(&mut h_file).unwrap();
+        let mut is_cpp_needed = false;
+        self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
+            .unwrap();
+        (h_file.text, is_cpp_needed.then_some(cpp_file.text))
     }
 }
 
 pub fn cpp_handle_keyword(name: &str) -> &str {
     match name {
         "new" => "new_",
+        "default" => "default_",
         x => x,
     }
 }

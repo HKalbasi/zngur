@@ -65,6 +65,7 @@ enum ParsedItem<'a> {
         methods: Vec<ParsedMethod<'a>>,
     },
     Fn(ParsedMethod<'a>),
+    ExternCpp(Vec<ParsedMethod<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -195,6 +196,16 @@ impl ParsedItem<'_> {
                     inputs: method.inputs,
                     output: method.output,
                 })
+            }
+            ParsedItem::ExternCpp(methods) => {
+                for method in methods {
+                    let method = method.to_zngur(base);
+                    r.extern_cpp_funcs.push(crate::ZngurExternCppFn {
+                        name: method.name.to_string(),
+                        inputs: method.inputs,
+                        output: method.output,
+                    });
+                }
             }
         }
     }
@@ -378,7 +389,9 @@ enum Token<'a> {
     KwFn,
     KwMut,
     KwConst,
+    KwExtern,
     Ident(&'a str),
+    Str(&'a str),
     Number(usize),
 }
 
@@ -394,6 +407,7 @@ impl<'a> Token<'a> {
             "mut" => Token::KwMut,
             "const" => Token::KwConst,
             "use" => Token::KwUse,
+            "extern" => Token::KwExtern,
             x => Token::Ident(x),
         }
     }
@@ -428,8 +442,10 @@ impl Display for Token<'_> {
             Token::KwFn => write!(f, "fn"),
             Token::KwMut => write!(f, "mut"),
             Token::KwConst => write!(f, "const"),
+            Token::KwExtern => write!(f, "extern"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
+            Token::Str(s) => write!(f, r#""{s}""#),
         }
     }
 }
@@ -456,7 +472,10 @@ fn lexer<'src>(
         just(";").to(Token::Semicolon),
     ])
     .or(text::ident().map(Token::ident_or_kw))
-    .or(text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())));
+    .or(text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())))
+    .or(just('"')
+        .ignore_then(none_of('"').repeated().map_slice(Token::Str))
+        .then_ignore(just('"')));
 
     let comment = just("//")
         .then(any().and_is(just('\n').not()).repeated())
@@ -772,6 +791,21 @@ fn fn_item<'a>(
         .map(ParsedItem::Fn)
 }
 
+fn extern_cpp_item<'a>(
+) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+    just(Token::KwExtern)
+        .then(just(Token::Str("C++")))
+        .ignore_then(
+            method()
+                .then_ignore(just(Token::Semicolon))
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+        )
+        .map(ParsedItem::ExternCpp)
+}
+
 fn item<'a>(
 ) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
@@ -786,6 +820,7 @@ fn item<'a>(
             .map(|(path, items)| ParsedItem::Mod { path, items })
             .or(type_item())
             .or(trait_item())
+            .or(extern_cpp_item())
             .or(fn_item())
     })
 }
@@ -793,11 +828,12 @@ fn item<'a>(
 fn path<'a>(
 ) -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
-    let start = choice([
-        just(Token::ColonColon).to(ParsedPathStart::Absolute),
-        just(Token::KwCrate).to(ParsedPathStart::Crate),
-    ])
-    .or(empty().to(ParsedPathStart::Relative));
+    let start = just(Token::ColonColon)
+        .to(ParsedPathStart::Absolute)
+        .or(just(Token::KwCrate)
+            .then(just(Token::ColonColon))
+            .to(ParsedPathStart::Crate))
+        .or(empty().to(ParsedPathStart::Relative));
     start
         .then(
             (select! {
