@@ -511,13 +511,17 @@ private:
                 }
                 writeln!(state, "public:")?;
                 if !self.is_copy {
+                    let drop_in_place = self.wellknown_traits.iter().find_map(|x| match x {
+                        ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
+                        _ => None,
+                    }).unwrap();
                     writeln!(
                         state,
                         r#"
     {ty}() : drop_flag(false) {{}}
     ~{ty}() {{
         if (drop_flag) {{
-            // TODO: call drop in place glue code
+            {drop_in_place}(&data[0]);
         }}
     }}
     {ty}(const {ty}& other) = delete;
@@ -597,7 +601,7 @@ private:
                         writeln!(
                             state,
                             r#"
-                [](uint8_t *d, {input_args}, uint8_t *o) {{
+                [](uint8_t *d, {input_args} uint8_t *o) {{
                     T* dd = (T *)d;
                     {input_inits}
                     {output} oo = dd->{name}({input_names});
@@ -605,7 +609,7 @@ private:
                 }},
         "#,
                             name = method.name,
-                            input_args = (0..method.inputs.len()).map(|n| format!("uint8_t* i{n}")).join(", "),
+                            input_args = (0..method.inputs.len()).map(|n| format!("uint8_t* i{n},")).join(" "),
                             input_names = (0..method.inputs.len()).map(|n| format!("ii{n}")).join(", "),
                             input_inits = method.inputs.iter().enumerate().map(|(n, ty)| {
                                 format!("{ty} ii{n}; ::rust::__zngur_internal_assume_init(ii{n});\
@@ -672,7 +676,8 @@ private:
             }}"#,
                     )?;
                 }
-                ZngurWellknownTraitData::Unsized => (),
+                ZngurWellknownTraitData::Unsized => {}
+                ZngurWellknownTraitData::Drop { .. } => {}
             }
         }
         if !is_unsized {
@@ -798,6 +803,9 @@ namespace rust {{
                     writeln!(state, "void {debug_print}(uint8_t *data);")?;
                 }
                 ZngurWellknownTraitData::Unsized => (),
+                ZngurWellknownTraitData::Drop { drop_in_place } => {
+                    writeln!(state, "void {drop_in_place}(uint8_t *data);")?;
+                }
             }
         }
         if let Some(trd) = &self.from_trait {

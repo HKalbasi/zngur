@@ -352,13 +352,13 @@ impl RustFile {
             .iter()
             .map(|x| {
                 format!(
-                    r#"f_{}: extern "C" fn(data: *mut u8, {}, o: *mut u8),"#,
+                    r#"f_{}: extern "C" fn(data: *mut u8, {} o: *mut u8),"#,
                     x.name,
                     x.inputs
                         .iter()
                         .enumerate()
-                        .map(|(n, _)| format!("i{n}: *mut u8"))
-                        .join(", ")
+                        .map(|(n, _)| format!("i{n}: *mut u8,"))
+                        .join(" ")
                 )
             })
             .join("\n");
@@ -566,6 +566,18 @@ pub extern "C" fn {mangled_name}("#
     ) -> ZngurWellknownTraitData {
         match wellknown_trait {
             ZngurWellknownTrait::Unsized => ZngurWellknownTraitData::Unsized,
+            ZngurWellknownTrait::Drop => {
+                let drop_in_place = mangle_name(&format!("{ty}=drop_in_place"));
+                wln!(
+                    self,
+                    r#"
+#[no_mangle]
+pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
+    ::std::ptr::drop_in_place(v as *mut {ty});
+}} }}"#
+                );
+                ZngurWellknownTraitData::Drop { drop_in_place }
+            }
             ZngurWellknownTrait::Debug => {
                 let pretty_print = mangle_name(&format!("{ty}=debug_pretty"));
                 let debug_print = mangle_name(&format!("{ty}=debug_print"));

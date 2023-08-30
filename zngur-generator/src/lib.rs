@@ -62,6 +62,7 @@ pub struct ZngurConstructor {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZngurWellknownTrait {
     Debug,
+    Drop,
     Unsized,
 }
 
@@ -70,6 +71,9 @@ pub enum ZngurWellknownTraitData {
     Debug {
         pretty_print: String,
         debug_print: String,
+    },
+    Drop {
+        drop_in_place: String,
     },
     Unsized,
 }

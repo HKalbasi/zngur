@@ -17,6 +17,9 @@ class VectorIterator : public rust::Impl<::rust::std::iter::Iterator<T>> {
 
 public:
   VectorIterator(std::vector<T> &&v) : vec(v), pos(0) {}
+  ~VectorIterator() {
+    std::cout << "vector iterator has been destructed" << std::endl;
+  }
 
   Option<T> next() override {
     if (pos >= vec.size()) {

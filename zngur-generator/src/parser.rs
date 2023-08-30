@@ -165,6 +165,9 @@ impl ParsedItem<'_> {
                         }
                     }
                 }
+                if !is_copy {
+                    wellknown_traits.push(ZngurWellknownTrait::Drop);
+                }
                 r.types.push(ZngurType {
                     ty: ty.to_zngur(base),
                     size,
