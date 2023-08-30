@@ -4,3 +4,8 @@ language = "en"
 multilingual = false
 src = "src"
 title = "Zngur"
+
+[output.html]
+git-repository-url = "https://github.com/hkalbasi/zngur"
+playground = { copyable = false }
+print = { enable = false }

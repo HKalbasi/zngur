@@ -1,7 +1,7 @@
 # Summary
 
-- [Introduction](./chapter_1.md)
-- [Tutorial](./chapter_1.md)
+- [Zngur](./zngur.md)
+- [Tutorial](./tutorial.md)
 - [Calling Rust from C++](./chapter_1.md)
 - [Calling C++ from Rust](./chapter_1.md)
   - [`Box<dyn Fn>`](./chapter_1.md)
