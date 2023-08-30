@@ -300,6 +300,7 @@ namespace rust {{
 template<>
 class Impl<{}> {{
 public:
+    virtual ~Impl() {{}}
 "#,
             as_ty,
         )?;
