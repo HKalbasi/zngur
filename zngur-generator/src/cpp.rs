@@ -193,7 +193,7 @@ impl CppFnSig {
         let CppFnSig {
             inputs,
             output,
-            rust_link_name,
+            rust_link_name: _,
         } = self;
         writeln!(
             state,
@@ -288,7 +288,7 @@ impl CppTraitDefinition {
         let CppTraitDefinition::Normal {
             as_ty,
             methods,
-            link_name,
+            link_name: _,
         } = self
         else {
             return Ok(());
@@ -576,7 +576,7 @@ private:
                     )?;
                 }
                 if let Some(CppTraitDefinition::Normal {
-                    as_ty,
+                    as_ty: _,
                     methods,
                     link_name,
                 }) = &self.from_trait
@@ -606,6 +606,7 @@ private:
                     {input_inits}
                     {output} oo = dd->{name}({input_names});
                     memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{output}>());
+                    ::rust::__zngur_internal_assume_deinit(oo);
                 }},
         "#,
                             name = method.name,
@@ -662,7 +663,7 @@ private:
             match tr {
                 ZngurWellknownTraitData::Debug {
                     pretty_print,
-                    debug_print,
+                    debug_print: _, // TODO: use it
                 } => {
                     writeln!(
                         state,
@@ -1005,13 +1006,16 @@ namespace rust {
                 "   {} oo = ::rust::exported_functions::{}(",
                 func.sig.output, func.name
             )?;
-            for input in &func.sig.inputs {}
+            for _input in &func.sig.inputs {
+                // TODO: generate
+            }
             writeln!(state, ");")?;
             writeln!(
                 state,
                 "   memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{}>());",
                 func.sig.output,
             )?;
+            writeln!(state, "    ::rust::__zngur_internal_assume_deinit(oo);")?;
             writeln!(state, "}}")?;
             writeln!(state, "}}")?;
         }

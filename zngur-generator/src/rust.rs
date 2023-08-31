@@ -215,7 +215,7 @@ impl RustType {
                 path: CppPath::from("rust::Slice"),
                 generic_args: vec![s.into_cpp()],
             },
-            RustType::Raw(_, t) => todo!(),
+            RustType::Raw(_, _) => todo!(),
             RustType::Adt(pg) => pg.into_cpp(),
             RustType::Tuple(v) => {
                 if v.is_empty() {

@@ -165,7 +165,8 @@ impl ParsedItem<'_> {
                         }
                     }
                 }
-                if !is_copy {
+                let is_unsized = wellknown_traits.contains(&ZngurWellknownTrait::Unsized);
+                if !is_copy && !is_unsized {
                     wellknown_traits.push(ZngurWellknownTrait::Drop);
                 }
                 r.types.push(ZngurType {
