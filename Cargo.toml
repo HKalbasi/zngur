@@ -7,6 +7,7 @@ members = [
     "examples/rayon",
     "examples/cxx_demo",
     "zngur-generator",
+    "xtask",
 ]
 resolver = "2"
 

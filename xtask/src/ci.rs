@@ -1,14 +1,3 @@
-#!/usr/bin/env -S cargo +nightly -Zscript
-
-//! ```cargo
-//! [package]
-//! edition = "2021"
-//!
-//! [dependencies]
-//! xshell = "0.2.5"
-//! anyhow = "1.0"
-//! ```
-
 use anyhow::{Context, Result};
 use xshell::{cmd, Shell};
 
@@ -46,8 +35,9 @@ fn check_examples(sh: &Shell) -> Result<()> {
     Ok(())
 }
 
-fn main() -> Result<()> {
+pub fn main() -> Result<()> {
     let sh = &Shell::new()?;
+    println!("Cargo version = {}", cmd!(sh, "cargo --version").read()?);
     sh.set_var("RUSTFLAGS", "-D warnings");
     for dir in cmd!(sh, "ls").read()?.lines() {
         if sh.path_exists(format!("{dir}/Cargo.toml")) {
