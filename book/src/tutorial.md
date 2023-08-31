@@ -24,3 +24,160 @@ And create an empty `main.cpp` and `main.zng` file. Your directory tree should l
 ```
 
 ## Basic structure of `main.zng`
+
+Imagine we want to use this inventory in C++:
+
+```Rust
+struct Item {
+    name: String,
+    size: u32,
+}
+
+struct Inventory {
+    items: Vec<Item>,
+    remaining_space: u32,
+}
+
+impl Inventory {
+    fn new_empty(space: u32) -> Self {
+        Self {
+            items: vec![],
+            remaining_space: space,
+        }
+    }
+}
+```
+
+Copy it in `src/lib.rs`. Now we need to declare things that we need to access in C++ in the `main.zng` file:
+
+```
+type crate::Inventory {
+    properties(size = 32, align = 8);
+
+    fn new_empty(u32) -> crate::Inventory;
+}
+```
+
+Zngur needs to know the size and align of the types inside the bridge. You can figure it out using rust-analyzer (by hovering
+over the struct or type alias) or filling it with some random number and then fix it from the compiler error.
+
+> **Note:** Ideally `main.zng` file should be auto generated, but we are not there yet.
+
+Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files. It will generate a `./generated.h` C++ header file, and a
+`./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include generated Rust file. Then fill `main.cpp` file
+with the following content:
+
+```C++
+#include "./generated.h"
+
+int main() {
+  auto inventory = rust::crate::Inventory::new_empty(1000);
+}
+```
+
+To build it, you need to first build the Rust code using `cargo build`, which will generate a `libyourcrate.a` in the `./target/debug` folder, and
+you can build your C++ code by linking to it:
+
+```bash
+clang++ main.cpp -g -L ./target/debug/ -l your_crate
+```
+
+To ensure that everything works, let's add a `#[derive(Debug)]` to `Inventory` and use `zngur_dbg` to see it:
+
+```
+type crate::Inventory {
+    properties(size = 32, align = 8);
+    wellknown_traits(Debug);
+
+    fn new_empty(u32) -> crate::Inventory;
+}
+```
+
+```C++
+int main() {
+  auto inventory = rust::crate::Inventory::new_empty(1000);
+  zngur_dbg(inventory);
+}
+```
+
+There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.html) has the
+complete list of them.
+
+Assuming that everything works correct, you should see something like this after executing the program:
+
+```
+[main.cpp:5] inventory = Inventory {
+    items: [],
+    remaining_space: 1000,
+}
+```
+
+Now let's add some more methods to it:
+
+```Rust
+impl Inventory {
+    fn add_item(&mut self, item: Item) {
+        self.remaining_space -= item.size;
+        self.items.push(item);
+    }
+
+    fn add_banana(&mut self, count: u32) {
+        for _ in 0..count {
+            self.add_item(Item {
+                name: "banana".to_owned(),
+                size: 7,
+            });
+        }
+    }
+}
+```
+
+```
+type () {
+    properties(size = 0, align = 1);
+}
+
+type crate::Inventory {
+    properties(size = 32, align = 8);
+    wellknown_traits(Debug);
+
+    fn new_empty(u32) -> crate::Inventory;
+    fn add_banana(&mut self, u32);
+}
+```
+
+Note that the return type of `add_banana` is the `()` type, so we need to add it as well. Now we can use it in the C++ file:
+
+```C++
+#include "./generated.h"
+
+int main() {
+  auto inventory = rust::crate::Inventory::new_empty(1000);
+  inventory.add_banana(3);
+  zngur_dbg(inventory);
+}
+```
+
+```
+[main.cpp:6] inventory = Inventory {
+    items: [
+        Item {
+            name: "banana",
+            size: 7,
+        },
+        Item {
+            name: "banana",
+            size: 7,
+        },
+        Item {
+            name: "banana",
+            size: 7,
+        },
+    ],
+    remaining_space: 979,
+}
+```
+
+Bridging the `add_item` method requires a little more effort:
+
+## Generic types

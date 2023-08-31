@@ -19,7 +19,7 @@ alignas(align_value) ::std::array<uint8_t, size_value> data;
 
 To support running destructors of Rust types in C++, Zngur uses `std::ptr::drop_in_place` which has similar constraints to `read` and
 `write`. But to prevent double free, Zngur needs to track if a Rust type is moved out. It does this using a boolean field called
-`drop_flag`, which is `0` if the value doesn't need drop (it is uninitialized or moved out from) and otherwise `1`. So a C++ wrapper
+`drop_flag`, which is `false` if the value doesn't need drop (it is uninitialized or moved out from) and otherwise `true`. So a C++ wrapper
 for a typical Rust type will look like this:
 
 ```C++
@@ -44,4 +44,55 @@ public:
     other.drop_flag = false;
   }
 };
+```
+
+Note that drop flag [also exists in Rust](https://doc.rust-lang.org/stable/nomicon/drop-flags.html). It is not stored inside
+the type, but in the stack of the owner, and compiler generate them only if necessary.
+
+## Calling Rust functions from C++
+
+For exposing a function or method from Rust to C++, an `extern "C"` function is generated that takes all arguments as `*mut u8`, and
+takes output as an output parameter `o: *mut u8`. It then read arguments using `ptr::read`, calls the underlying function, and write
+the result in `o` using `ptr::write`. So for example for `Option<i32>::unwrap` some code like this will be generated:
+
+```Rust
+#[no_mangle]
+pub extern "C" fn __zngur___std_option_Option_i32__unwrap___x8s9s13s20m27y31n32m39y40(
+    i0: *mut u8,
+    o: *mut u8,
+) {
+    unsafe {
+        ::std::ptr::write(
+            o as *mut i32,
+            <::std::option::Option<i32>>::unwrap(::std::ptr::read(
+                i0 as *mut ::std::option::Option<i32>,
+            )),
+        )
+    }
+}
+```
+
+In the C++ side, this code will be generated for that function:
+
+```C++
+::rust::std::string::String rust::rustyline::Result<::rust::std::string::String>::unwrap(::rust::rustyline::Result<::rust::std::string::String> i0)
+{
+    ::rust::std::string::String o;
+    ::rust::__zngur_internal_assume_init(o);
+    __zngur___rustyline_Result__std_string_String__unwrap___x8s9s19m26s27s31s38y45n46m53y54(::rust::__zngur_internal_data_ptr(i0), ::rust::__zngur_internal_data_ptr(o));
+    ::rust::__zngur_internal_assume_deinit(i0);
+    return o;
+}
+```
+
+`::rust::std::string::String o;` creates an uninitialized `String`. `__zngur_internal_assume_init` sets it's drop flag to `true` so that it will become
+freed after being returned by this function. Then it will call the underlying Rust function, and by `__zngur_internal_assume_deinit` it will ensure
+that the destructor for `i0` is not called. `i0` is now semantically moved in Rust, and it's Rust responsibility to destruct it.
+
+## Calling C++ functions from Rust
+
+Similarly, for exposing a C++ to Rust, a function will be generated that take all inputs and output by `uint8_t*`.
+
+```C++
+222
 ```

@@ -292,6 +292,10 @@ name = "example-simple"
 version = "0.1.0"
 
 [[package]]
+name = "example-tutorial"
+version = "0.1.0"
+
+[[package]]
 name = "fd-lock"
 version = "3.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"

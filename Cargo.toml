@@ -2,6 +2,7 @@
 members = [
     "zngur",
     "examples/simple",
+    "examples/tutorial",
     "examples/rustyline",
     "examples/rayon",
     "examples/cxx_demo",
