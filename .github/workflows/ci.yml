@@ -2,22 +2,19 @@ name: CI
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "main" ]
+    branches: ["main"]
 
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Install Rust nightly
-      run: rustup toolchain install nightly
-    - name: Select Rust stable
-      run: rustup default stable
-    - run: ./scripts/ci.rs
+      - uses: actions/checkout@v3
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly
+      - run: cargo xtask ci
