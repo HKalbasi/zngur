@@ -94,5 +94,172 @@ that the destructor for `i0` is not called. `i0` is now semantically moved in Ru
 Similarly, for exposing a C++ to Rust, a function will be generated that take all inputs and output by `uint8_t*`.
 
 ```C++
-222
+extern "C" {
+void __zngur_new_blob_store_client_(uint8_t *o) {
+  ::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>> oo =
+      ::rust::exported_functions::new_blob_store_client();
+  memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
+         ::rust::__zngur_internal_size_of<
+             ::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>>>());
+}
+}
+```
+
+And that function is called in Rust by a function like this:
+
+```Rust
+pub(crate) fn new_blob_store_client() -> Box<dyn crate::BlobStoreTrait> {
+    unsafe {
+        let mut r = ::core::mem::MaybeUninit::uninit();
+        __zngur_new_blob_store_client_(r.as_mut_ptr() as *mut u8);
+        r.assume_init()
+    }
+}
+```
+
+This could be a free function like the above example, a function in an inherent impl block, or a trait impl block. All of them
+are implemented in this way.
+
+## Implementing Rust traits for C++ classes
+
+C++ types can't exist in Rust by value, since it might need non trivial move constructor incompatible with Rust moves. So for representing
+them in Rust, Zngur uses the following struct:
+
+```Rust
+struct ZngurCppOpaqueObject {
+    data: *mut u8,
+    destructor: extern "C" fn(*mut u8),
+}
+
+impl Drop for ZngurCppOpaqueObject {
+    fn drop(&mut self) {
+        (self.destructor)(self.data)
+    }
+}
+```
+
+Where `data` is a `new`ed pointer in C++, and `destructor` is a function pointer that can `delete` that data, i.e. `[](uint8_t *d) { delete (T *)d; }`. It's
+basically a type erased `unique_ptr`.
+
+For converting a C++ class into a `Box<dyn Trait>`, Zngur generates a code like this in the Rust side:
+
+```Rust
+#[no_mangle]
+pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
+    data: *mut u8,
+    destructor: extern "C" fn(*mut u8),
+    f_put: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
+    f_tag: extern "C" fn(data: *mut u8, i0: *mut u8, i1: *mut u8, o: *mut u8),
+    f_metadata: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
+    o: *mut u8,
+) {
+    struct Wrapper {
+        value: ZngurCppOpaqueObject,
+        f_put: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
+        f_tag: extern "C" fn(data: *mut u8, i0: *mut u8, i1: *mut u8, o: *mut u8),
+        f_metadata: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
+    }
+    impl crate::BlobStoreTrait for Wrapper {
+        fn put(&self, i0: &mut crate::MultiBuf) -> u64 {
+            unsafe {
+                let data = self.value.data;
+                let mut i0 = ::core::mem::MaybeUninit::new(i0);
+                let mut r = ::core::mem::MaybeUninit::uninit();
+                (self.f_put)(data, i0.as_mut_ptr() as *mut u8, r.as_mut_ptr() as *mut u8);
+                r.assume_init()
+            }
+        }
+        fn tag(&self, i0: u64, i1: &::core::primitive::str) -> () {
+            unsafe {
+                let data = self.value.data;
+                let mut i0 = ::core::mem::MaybeUninit::new(i0);
+                let mut i1 = ::core::mem::MaybeUninit::new(i1);
+                let mut r = ::core::mem::MaybeUninit::uninit();
+                (self.f_tag)(
+                    data,
+                    i0.as_mut_ptr() as *mut u8,
+                    i1.as_mut_ptr() as *mut u8,
+                    r.as_mut_ptr() as *mut u8,
+                );
+                r.assume_init()
+            }
+        }
+        fn metadata(&self, i0: u64) -> crate::BlobMetadata {
+            unsafe {
+                let data = self.value.data;
+                let mut i0 = ::core::mem::MaybeUninit::new(i0);
+                let mut r = ::core::mem::MaybeUninit::uninit();
+                (self.f_metadata)(data, i0.as_mut_ptr() as *mut u8, r.as_mut_ptr() as *mut u8);
+                r.assume_init()
+            }
+        }
+    }
+    let this = Wrapper {
+        value: ZngurCppOpaqueObject { data, destructor },
+        f_put,
+        f_tag,
+        f_metadata,
+    };
+    let r: Box<dyn crate::BlobStoreTrait> = Box::new(this);
+    unsafe { std::ptr::write(o as *mut _, r) }
+}
+```
+
+Which constructs a `Wrapper` around `ZngurCppOpaqueObject` which also contains the function pointers to the method implementation, and
+implements the trait for it. Inside of each trait function is very similar to a normal `C++` function used in Rust and contains the
+similar `MaybeUninit`s.
+
+Using that, `make_box` can be defined:
+
+```C++
+template <typename T, typename... ARGS> static Box make_box(ARGS &&...args) {
+  auto data = new T(::std::forward<ARGS>(args)...);
+  Box o;
+  ::rust::__zngur_internal_assume_init(o);
+  __zngur_crate_BlobStoreTrait_s13(
+      (uint8_t *)data, [](uint8_t *d) { delete (T *)d; },
+
+      [](uint8_t *d, uint8_t *i0, uint8_t *o) {
+        T *dd = (T *)d;
+        ::rust::Ref<::rust::crate::MultiBuf> ii0;
+        ::rust::__zngur_internal_assume_init(ii0);
+        memcpy(::rust::__zngur_internal_data_ptr(ii0), i0,
+                ::rust::__zngur_internal_size_of<
+                    ::rust::Ref<::rust::crate::MultiBuf>>());
+        ::uint64_t oo = dd->put(ii0);
+        memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
+                ::rust::__zngur_internal_size_of<::uint64_t>());
+      },
+
+      [](uint8_t *d, uint8_t *i0, uint8_t *i1, uint8_t *o) {
+        T *dd = (T *)d;
+        ::uint64_t ii0;
+        ::rust::__zngur_internal_assume_init(ii0);
+        memcpy(::rust::__zngur_internal_data_ptr(ii0), i0,
+                ::rust::__zngur_internal_size_of<::uint64_t>());
+        ::rust::Ref<::rust::core::primitive::str> ii1;
+        ::rust::__zngur_internal_assume_init(ii1);
+        memcpy(::rust::__zngur_internal_data_ptr(ii1), i1,
+                ::rust::__zngur_internal_size_of<
+                    ::rust::Ref<::rust::core::primitive::str>>());
+        ::rust::Unit oo = dd->tag(ii0, ii1);
+        memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
+                ::rust::__zngur_internal_size_of<::rust::Unit>());
+      },
+
+      [](uint8_t *d, uint8_t *i0, uint8_t *o) {
+        T *dd = (T *)d;
+        ::uint64_t ii0;
+        ::rust::__zngur_internal_assume_init(ii0);
+        memcpy(::rust::__zngur_internal_data_ptr(ii0), i0,
+                ::rust::__zngur_internal_size_of<::uint64_t>());
+        ::rust::crate::BlobMetadata oo = dd->metadata(ii0);
+        memcpy(
+            o, ::rust::__zngur_internal_data_ptr(oo),
+            ::rust::__zngur_internal_size_of<::rust::crate::BlobMetadata>());
+      },
+
+      ::rust::__zngur_internal_data_ptr(o));
+  return o;
+}
 ```
