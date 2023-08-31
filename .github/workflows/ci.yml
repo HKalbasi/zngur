@@ -18,4 +18,6 @@ jobs:
     - uses: actions/checkout@v3
     - name: Install Rust nightly
       run: rustup toolchain install nightly
+    - name: Select Rust stable
+      run: rustup default stable
     - run: ./scripts/ci.rs
