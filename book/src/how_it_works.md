@@ -32,7 +32,7 @@ public:
   MultiBuf() : drop_flag(false) {}
   ~MultiBuf() {
     if (drop_flag) {
-      // TODO: call drop in place glue code
+      __zngur_crate_MultiBuf_drop_in_place_s13e22(&data[0]);
     }
   }
   MultiBuf(const MultiBuf &other) = delete;
@@ -98,10 +98,21 @@ extern "C" {
 void __zngur_new_blob_store_client_(uint8_t *o) {
   ::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>> oo =
       ::rust::exported_functions::new_blob_store_client();
-  memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
-         ::rust::__zngur_internal_size_of<
-             ::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>>>());
+  ::rust::__zngur_internal_move_to_rust(o, oo);
 }
+}
+```
+
+Where `::rust::__zngur_internal_move_to_rust` is just this function:
+
+```C++
+template <typename T>
+inline void __zngur_internal_move_to_rust(uint8_t *dst, T &t) {
+  {
+    memcpy(dst, ::rust::__zngur_internal_data_ptr(t),
+           ::rust::__zngur_internal_size_of<T>());
+    ::rust::__zngur_internal_assume_deinit(t);
+  }
 }
 ```
 
@@ -227,8 +238,7 @@ template <typename T, typename... ARGS> static Box make_box(ARGS &&...args) {
                 ::rust::__zngur_internal_size_of<
                     ::rust::Ref<::rust::crate::MultiBuf>>());
         ::uint64_t oo = dd->put(ii0);
-        memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
-                ::rust::__zngur_internal_size_of<::uint64_t>());
+        ::rust::__zngur_internal_move_to_rust(o, oo);
       },
 
       [](uint8_t *d, uint8_t *i0, uint8_t *i1, uint8_t *o) {
@@ -243,8 +253,7 @@ template <typename T, typename... ARGS> static Box make_box(ARGS &&...args) {
                 ::rust::__zngur_internal_size_of<
                     ::rust::Ref<::rust::core::primitive::str>>());
         ::rust::Unit oo = dd->tag(ii0, ii1);
-        memcpy(o, ::rust::__zngur_internal_data_ptr(oo),
-                ::rust::__zngur_internal_size_of<::rust::Unit>());
+        ::rust::__zngur_internal_move_to_rust(o, oo);
       },
 
       [](uint8_t *d, uint8_t *i0, uint8_t *o) {
@@ -254,9 +263,7 @@ template <typename T, typename... ARGS> static Box make_box(ARGS &&...args) {
         memcpy(::rust::__zngur_internal_data_ptr(ii0), i0,
                 ::rust::__zngur_internal_size_of<::uint64_t>());
         ::rust::crate::BlobMetadata oo = dd->metadata(ii0);
-        memcpy(
-            o, ::rust::__zngur_internal_data_ptr(oo),
-            ::rust::__zngur_internal_size_of<::rust::crate::BlobMetadata>());
+        ::rust::__zngur_internal_move_to_rust(o, oo);
       },
 
       ::rust::__zngur_internal_data_ptr(o));
