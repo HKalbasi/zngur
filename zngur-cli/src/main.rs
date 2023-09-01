@@ -17,7 +17,7 @@ fn main() {
             Zngur::from_zng_file(&path)
                 .with_cpp_file(&pp.join("generated.cpp"))
                 .with_h_file(&pp.join("generated.h"))
-                .with_rs_file(&pp.join("src/generated.h"))
+                .with_rs_file(&pp.join("src/generated.rs"))
                 .generate();
         }
     }
