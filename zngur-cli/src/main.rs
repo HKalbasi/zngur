@@ -4,6 +4,7 @@ use clap::Parser;
 use zngur::Zngur;
 
 #[derive(Parser)]
+#[command(author, version, about, long_about = None)]
 enum Command {
     #[command(alias = "g")]
     Generate { path: PathBuf },
