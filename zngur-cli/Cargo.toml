@@ -1,9 +1,10 @@
 [package]
-name = "zngur"
+name = "zngur-cli"
 version = "0.1.0"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zngur-generator = { path = "../zngur-generator" }
+zngur = { path = "../zngur" }
+clap = { version = "4.3.21", features = ["derive"] }

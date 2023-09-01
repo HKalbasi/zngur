@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "zngur",
+    "zngur-cli",
     "zngur-def",
     "zngur-generator",
     "zngur-parser",

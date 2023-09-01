@@ -921,24 +921,30 @@ namespace rust {
             writeln!(
                 state,
                 r#"
-    inline uint8_t* __zngur_internal_data_ptr({ty}& t) {{
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
         return (uint8_t*)&t;
     }}
 
-    inline void __zngur_internal_assume_init({ty}&) {{}}
-    inline void __zngur_internal_assume_deinit({ty}&) {{}}
+    template<>
+    inline void __zngur_internal_assume_init<{ty}>({ty}&) {{}}
+    template<>
+    inline void __zngur_internal_assume_deinit<{ty}>({ty}&) {{}}
 
     template<>
     inline size_t __zngur_internal_size_of<{ty}>() {{
         return sizeof({ty});
     }}
 
-    inline uint8_t* __zngur_internal_data_ptr({ty}*& t) {{
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr<{ty}*>({ty}*& t) {{
         return (uint8_t*)&t;
     }}
 
-    inline void __zngur_internal_assume_init({ty}*&) {{}}
-    inline void __zngur_internal_assume_deinit({ty}*&) {{}}
+    template<>
+    inline void __zngur_internal_assume_init<{ty}*>({ty}*&) {{}}
+    template<>
+    inline void __zngur_internal_assume_deinit<{ty}*>({ty}*&) {{}}
 
     template<>
     struct Ref<{ty}> {{

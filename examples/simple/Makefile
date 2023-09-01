@@ -5,6 +5,6 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 	cargo build --release
 
 generated.h: main.zng
-	cd ../../zngur && cargo run g ../examples/simple/main.zng
+	cd ../../zngur-cli && cargo run g ../examples/simple/main.zng
 
 FORCE: ;

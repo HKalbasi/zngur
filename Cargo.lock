@@ -232,6 +232,7 @@ version = "0.1.0"
 dependencies = [
  "build-rs",
  "cc",
+ "zngur",
 ]
 
 [[package]]
@@ -729,8 +730,15 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 name = "zngur"
 version = "0.1.0"
 dependencies = [
- "clap",
  "zngur-generator",
+]
+
+[[package]]
+name = "zngur-cli"
+version = "0.1.0"
+dependencies = [
+ "clap",
+ "zngur",
 ]
 
 [[package]]
