@@ -1,5 +1,5 @@
 [package]
-name = "zngur-generator"
+name = "zngur-parser"
 version = "0.1.0"
 edition = "2021"
 
@@ -9,5 +9,4 @@ edition = "2021"
 ariadne = "0.3.0"
 chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 iter_tools = "0.1.4"
-zngur-parser = { path = "../zngur-parser" }
 zngur-def = { path = "../zngur-def" }

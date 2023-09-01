@@ -1,32 +1,19 @@
-use std::{
-    fmt::{Display, Write},
-    iter,
-};
+use std::{fmt::Write, iter};
 
 use iter_tools::Itertools;
 
 use crate::{
     cpp::{cpp_handle_keyword, CppPath, CppType},
-    parser::Mutability,
     ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ScalarRustType {
-    Uint(u32),
-    Int(u32),
-    Usize,
-    Bool,
+use zngur_def::*;
+
+pub trait IntoCpp {
+    fn into_cpp(&self) -> CppType;
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct RustPathAndGenerics {
-    pub path: Vec<String>,
-    pub generics: Vec<RustType>,
-    pub named_generics: Vec<(String, RustType)>,
-}
-
-impl RustPathAndGenerics {
+impl IntoCpp for RustPathAndGenerics {
     fn into_cpp(&self) -> CppType {
         let RustPathAndGenerics {
             path,
@@ -51,17 +38,8 @@ impl RustPathAndGenerics {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum RustTrait {
-    Normal(RustPathAndGenerics),
-    Fn {
-        name: String,
-        inputs: Vec<RustType>,
-        output: Box<RustType>,
-    },
-}
-impl RustTrait {
-    pub fn into_cpp_type(&self) -> CppType {
+impl IntoCpp for RustTrait {
+    fn into_cpp(&self) -> CppType {
         match self {
             RustTrait::Normal(pg) => pg.into_cpp(),
             RustTrait::Fn {
@@ -78,124 +56,26 @@ impl RustTrait {
             },
         }
     }
-
-    fn take_assocs(mut self) -> (Self, Vec<(String, RustType)>) {
-        let assocs = match &mut self {
-            RustTrait::Normal(p) => std::mem::take(&mut p.named_generics),
-            RustTrait::Fn { .. } => vec![],
-        };
-        (self, assocs)
-    }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum RustType {
-    Scalar(ScalarRustType),
-    Ref(Mutability, Box<RustType>),
-    Raw(Mutability, Box<RustType>),
-    Boxed(Box<RustType>),
-    Slice(Box<RustType>),
-    Dyn(RustTrait, Vec<String>),
-    Tuple(Vec<RustType>),
-    Adt(RustPathAndGenerics),
-}
-
-impl Display for RustPathAndGenerics {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let RustPathAndGenerics {
-            path,
-            generics,
-            named_generics,
-        } = self;
-        for p in path {
-            if p != "crate" {
-                write!(f, "::")?;
-            }
-            write!(f, "{p}")?;
-        }
-        if !generics.is_empty() || !named_generics.is_empty() {
-            write!(
-                f,
-                "::<{}>",
-                generics
-                    .iter()
-                    .map(|x| format!("{x}"))
-                    .chain(named_generics.iter().map(|x| format!("{} = {}", x.0, x.1)))
-                    .join(", ")
-            )?;
-        }
-        Ok(())
-    }
-}
-
-impl Display for RustTrait {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RustTrait::Normal(tr) => write!(f, "{tr}"),
-            RustTrait::Fn {
-                name,
-                inputs,
-                output,
-            } => {
-                write!(f, "{name}({})", inputs.iter().join(", "))?;
-                if **output != RustType::UNIT {
-                    write!(f, " -> {output}")?;
-                }
-                Ok(())
+impl IntoCpp for RustType {
+    fn into_cpp(&self) -> CppType {
+        fn for_builtin(this: &RustType) -> Option<CppType> {
+            match this {
+                RustType::Scalar(s) => match s {
+                    ScalarRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
+                    ScalarRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
+                    ScalarRustType::Usize => Some(CppType::from("size_t")),
+                    ScalarRustType::Bool => None,
+                },
+                RustType::Raw(_, t) => Some(CppType::from(&*format!(
+                    "{}*",
+                    for_builtin(t)?.to_string().strip_prefix("::")?
+                ))),
+                _ => None,
             }
         }
-    }
-}
-
-impl Display for RustType {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            RustType::Scalar(s) => match s {
-                ScalarRustType::Uint(s) => write!(f, "u{s}"),
-                ScalarRustType::Int(s) => write!(f, "i{s}"),
-                ScalarRustType::Usize => write!(f, "usize"),
-                ScalarRustType::Bool => write!(f, "bool"),
-            },
-            RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
-            RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),
-            RustType::Raw(Mutability::Not, ty) => write!(f, "*const {ty}"),
-            RustType::Raw(Mutability::Mut, ty) => write!(f, "*mut {ty}"),
-            RustType::Boxed(ty) => write!(f, "Box<{ty}>"),
-            RustType::Tuple(v) => write!(f, "({})", v.iter().join(", ")),
-            RustType::Adt(pg) => write!(f, "{pg}"),
-            RustType::Dyn(tr, marker_bounds) => {
-                write!(f, "dyn {tr}")?;
-                for mb in marker_bounds {
-                    write!(f, "+ {mb}")?;
-                }
-                Ok(())
-            }
-            RustType::Slice(s) => write!(f, "[{s}]"),
-        }
-    }
-}
-
-impl RustType {
-    const UNIT: Self = RustType::Tuple(Vec::new());
-
-    pub fn into_cpp_builtin(&self) -> Option<CppType> {
-        match self {
-            RustType::Scalar(s) => match s {
-                ScalarRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
-                ScalarRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
-                ScalarRustType::Usize => Some(CppType::from("size_t")),
-                ScalarRustType::Bool => None,
-            },
-            RustType::Raw(_, t) => Some(CppType::from(&*format!(
-                "{}*",
-                t.into_cpp_builtin()?.to_string().strip_prefix("::")?
-            ))),
-            _ => None,
-        }
-    }
-
-    pub fn into_cpp(&self) -> CppType {
-        if let Some(builtin) = self.into_cpp_builtin() {
+        if let Some(builtin) = for_builtin(self) {
             return builtin;
         }
         match self {
@@ -224,7 +104,7 @@ impl RustType {
                 todo!()
             }
             RustType::Dyn(tr, marker_bounds) => {
-                let tr_as_cpp_type = tr.into_cpp_type();
+                let tr_as_cpp_type = tr.into_cpp();
                 CppType {
                     path: CppPath::from("rust::Dyn"),
                     generic_args: [tr_as_cpp_type]

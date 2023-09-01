@@ -9,7 +9,7 @@ use clap::Parser;
 // use ra_ap_load_cargo::{load_workspace, LoadCargoConfig, ProcMacroServerChoice};
 // use ra_ap_paths::AbsPath;
 // use ra_ap_project_model::{CargoConfig, ProjectManifest, ProjectWorkspace, RustLibSource};
-use zngur_generator::{ParsedZngFile, ZngurFile};
+use zngur_generator::{ParsedZngFile, ZngurGenerator};
 
 #[cfg(False)]
 fn parse_repo() {
@@ -77,7 +77,8 @@ fn main() {
     match cmd {
         Command::Generate { path } => {
             let file = std::fs::read_to_string(&path).unwrap();
-            let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurFile::build_from_zng(f));
+            let file =
+                ParsedZngFile::parse("main.zng", &file, |f| ZngurGenerator::build_from_zng(f));
 
             let (rust, h, cpp) = file.render();
             let path = path.parent().unwrap();

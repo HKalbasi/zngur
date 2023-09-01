@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use cpp::cpp_handle_keyword;
 use cpp::CppExportedFnDefinition;
 use cpp::CppFile;
@@ -13,103 +11,29 @@ use cpp::CppTraitMethod;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
-use parser::Mutability;
-use rust::RustPathAndGenerics;
-pub use rust::{RustTrait, RustType};
+use rust::IntoCpp;
 
 pub mod cpp;
 mod parser;
 mod rust;
 
-pub use parser::ParsedZngFile;
 pub use rust::RustFile;
+pub use zngur_parser::ParsedZngFile;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ZngurMethodReceiver {
-    Static,
-    Ref(Mutability),
-    Move,
-}
+pub use zngur_def::*;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ZngurMethod {
-    pub name: String,
-    pub generics: Vec<RustType>,
-    pub receiver: ZngurMethodReceiver,
-    pub inputs: Vec<RustType>,
-    pub output: RustType,
-}
+pub struct ZngurGenerator(ZngurFile);
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ZngurFn {
-    pub path: RustPathAndGenerics,
-    pub inputs: Vec<RustType>,
-    pub output: RustType,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ZngurExternCppFn {
-    pub name: String,
-    pub inputs: Vec<RustType>,
-    pub output: RustType,
-}
-
-pub struct ZngurConstructor {
-    pub name: String,
-    pub inputs: Vec<(String, RustType)>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum ZngurWellknownTrait {
-    Debug,
-    Drop,
-    Unsized,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ZngurWellknownTraitData {
-    Debug {
-        pretty_print: String,
-        debug_print: String,
-    },
-    Drop {
-        drop_in_place: String,
-    },
-    Unsized,
-}
-
-pub struct ZngurType {
-    pub ty: RustType,
-    pub size: usize,
-    pub align: usize,
-    pub is_copy: bool,
-    pub wellknown_traits: Vec<ZngurWellknownTrait>,
-    pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
-    pub constructors: Vec<ZngurConstructor>,
-}
-
-pub struct ZngurTrait {
-    pub tr: RustTrait,
-    pub methods: Vec<ZngurMethod>,
-}
-
-#[derive(Default)]
-pub struct ZngurFile {
-    pub types: Vec<ZngurType>,
-    pub traits: HashMap<RustTrait, ZngurTrait>,
-    pub funcs: Vec<ZngurFn>,
-    pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
-}
-
-impl ZngurFile {
+impl ZngurGenerator {
     pub fn build_from_zng(zng: ParsedZngFile<'_>) -> Self {
-        zng.into_zngur_file()
+        ZngurGenerator(zng.into_zngur_file())
     }
 
     pub fn render(self) -> (String, String, Option<String>) {
+        let zng = self.0;
         let mut cpp_file = CppFile::default();
         let mut rust_file = RustFile::default();
-        for ty_def in self.types {
+        for ty_def in zng.types {
             let is_unsized = ty_def
                 .wellknown_traits
                 .contains(&ZngurWellknownTrait::Unsized);
@@ -196,10 +120,10 @@ impl ZngurFile {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
                         match tr {
                             RustTrait::Normal(_) => {
-                                if let Some(ztr) = self.traits.get(tr) {
+                                if let Some(ztr) = zng.traits.get(tr) {
                                     let link_name = rust_file.add_builder_for_dyn_trait(ztr);
                                     Some(CppTraitDefinition::Normal {
-                                        as_ty: ztr.tr.into_cpp_type(),
+                                        as_ty: ztr.tr.into_cpp(),
                                         methods: ztr
                                             .methods
                                             .clone()
@@ -244,7 +168,7 @@ impl ZngurFile {
                 },
             });
         }
-        for func in self.funcs {
+        for func in zng.funcs {
             let rust_link_name =
                 rust_file.add_function(&func.path.to_string(), &func.inputs, &func.output, None);
             cpp_file.fn_defs.push(CppFnDefinition {
@@ -256,7 +180,7 @@ impl ZngurFile {
                 },
             });
         }
-        for func in self.extern_cpp_funcs {
+        for func in zng.extern_cpp_funcs {
             let rust_link_name =
                 rust_file.add_extern_cpp_function(&func.name, &func.inputs, &func.output);
             cpp_file.exported_fn_defs.push(CppExportedFnDefinition {

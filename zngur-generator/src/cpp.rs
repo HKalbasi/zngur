@@ -605,8 +605,7 @@ private:
                     T* dd = (T *)d;
                     {input_inits}
                     {output} oo = dd->{name}({input_names});
-                    memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{output}>());
-                    ::rust::__zngur_internal_assume_deinit(oo);
+                    ::rust::__zngur_internal_move_to_rust(o, oo);
                 }},
         "#,
                             name = method.name,
@@ -890,6 +889,12 @@ namespace rust {
     inline size_t __zngur_internal_size_of();
 
     template<typename T>
+    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) {{
+        memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
+        ::rust::__zngur_internal_assume_deinit(t);
+    }}
+
+    template<typename T>
     struct Ref;
 
     template<typename T>
@@ -1010,12 +1015,7 @@ namespace rust {
                 // TODO: generate
             }
             writeln!(state, ");")?;
-            writeln!(
-                state,
-                "   memcpy(o, ::rust::__zngur_internal_data_ptr(oo), ::rust::__zngur_internal_size_of<{}>());",
-                func.sig.output,
-            )?;
-            writeln!(state, "    ::rust::__zngur_internal_assume_deinit(oo);")?;
+            writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
             writeln!(state, "}}")?;
             writeln!(state, "}}")?;
         }

@@ -734,10 +734,29 @@ dependencies = [
 ]
 
 [[package]]
+name = "zngur-def"
+version = "0.1.0"
+dependencies = [
+ "iter_tools",
+]
+
+[[package]]
 name = "zngur-generator"
 version = "0.1.0"
 dependencies = [
  "ariadne",
  "chumsky",
  "iter_tools",
+ "zngur-def",
+ "zngur-parser",
+]
+
+[[package]]
+name = "zngur-parser"
+version = "0.1.0"
+dependencies = [
+ "ariadne",
+ "chumsky",
+ "iter_tools",
+ "zngur-def",
 ]
