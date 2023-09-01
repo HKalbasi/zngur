@@ -1,4 +1,6 @@
-Line by line port of the `rustyline` example:
+# Example: Rustyline
+
+Line by line port of the [`rustyline` example](https://github.com/kkawakam/rustyline#example) in C++:
 
 ```Rust
 use rustyline::error::ReadlineError;
@@ -36,4 +38,11 @@ fn main() -> Result<()> {
     rl.save_history("history.txt");
     Ok(())
 }
+```
+
+To run this example:
+
+```
+make
+./a.out
 ```
