@@ -728,14 +728,14 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zngur"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "zngur-generator",
 ]
 
 [[package]]
 name = "zngur-cli"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "clap",
  "zngur",
@@ -743,14 +743,14 @@ dependencies = [
 
 [[package]]
 name = "zngur-def"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "iter_tools",
 ]
 
 [[package]]
 name = "zngur-generator"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "ariadne",
  "chumsky",
@@ -761,7 +761,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-parser"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "ariadne",
  "chumsky",
