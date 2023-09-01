@@ -4,7 +4,7 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 ../../target/release/libexample_rustyline.a: FORCE
 	cargo build --release
 
-generated.h: main.zng
+generated.h ./src/generated.rs: main.zng
 	cd ../../zngur-cli && cargo run g ../examples/rustyline/main.zng
 
 FORCE: ;
