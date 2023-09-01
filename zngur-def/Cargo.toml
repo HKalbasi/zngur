@@ -1,5 +1,6 @@
 [package]
 name = "zngur-def"
+description = "Data types that define the structure of a zng file"
 version = "0.0.3"
 edition.workspace = true
 license.workspace = true

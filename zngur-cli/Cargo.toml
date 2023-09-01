@@ -1,5 +1,6 @@
 [package]
 name = "zngur-cli"
+description = "CLI of the Zngur, a Rust/C++ interoperability tool"
 version = "0.0.3"
 edition.workspace = true
 license.workspace = true
