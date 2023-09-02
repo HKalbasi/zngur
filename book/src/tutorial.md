@@ -6,7 +6,13 @@ A Zngur project consists of 3 things:
 - A Rust crate (that can be everything, binary, rlib, static-lib, cdy-lib, ...)
 - A C++ project.
 
-For start, generate a new `staticlib` crate using `cargo init` and appending this to the `Cargo.toml`:
+For start, install Zngur:
+
+```
+cargo install zngur-cli
+```
+
+Then generate a new `staticlib` crate using `cargo init` and appending this to the `Cargo.toml`:
 
 ```Toml
 [lib]
@@ -181,3 +187,37 @@ int main() {
 Bridging the `add_item` method requires a little more effort:
 
 ## Generic types
+
+Now let's try to add and bridge the `into_items` method:
+
+```Rust
+impl Inventory {
+    fn into_items(self) -> Vec<Item> {
+        self.items
+    }
+}
+```
+
+`Vec` is a generic type, but the syntax to use it is not different:
+
+```
+type ::std::vec::Vec<crate::Item> {
+    properties(size = 24, align = 8);
+    wellknown_traits(Debug);
+}
+
+type crate::Inventory {
+    // Old things...
+    fn into_items(self) -> ::std::vec::Vec<crate::Item>;
+}
+```
+
+Note that this only brings `Vec<Item>`, for using `Vec<i32>` or `Vec<String>` or `Vec<SomethingElse>` you need to add each of
+them separately.
+
+Now you can use `into_items` method in C++:
+
+```C++
+rust::std::vec::Vec<rust::crate::Item> v = inventory.into_items();
+zngur_dbg(v);
+```

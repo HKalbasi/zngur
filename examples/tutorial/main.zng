@@ -2,10 +2,16 @@ type () {
     properties(size = 0, align = 1);
 }
 
+type ::std::vec::Vec<crate::Item> {
+    properties(size = 24, align = 8);
+    wellknown_traits(Debug);
+}
+
 type crate::Inventory {
     properties(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
     fn add_banana(&mut self, u32);
+    fn into_items(self) -> ::std::vec::Vec<crate::Item>;
 }

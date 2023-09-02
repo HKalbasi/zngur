@@ -35,4 +35,8 @@ impl Inventory {
             });
         }
     }
+
+    fn into_items(self) -> Vec<Item> {
+        self.items
+    }
 }
