@@ -223,8 +223,8 @@ similar `MaybeUninit`s.
 Using that, `make_box` can be defined:
 
 ```C++
-template <typename T, typename... ARGS> static Box make_box(ARGS &&...args) {
-  auto data = new T(::std::forward<ARGS>(args)...);
+template <typename T, typename... Args> static Box make_box(Args &&...args) {
+  auto data = new T(::std::forward<Args>(args)...);
   Box o;
   ::rust::__zngur_internal_assume_init(o);
   __zngur_crate_BlobStoreTrait_s13(

@@ -585,9 +585,9 @@ private:
                     writeln!(
                         state,
                         r#"
-    template<typename T, typename... ARGS>
-    static {ty} make_box(ARGS&&... args) {{
-        auto data = new T(::std::forward<ARGS>(args)...);
+    template<typename T, typename... Args>
+    static {ty} make_box(Args&&... args) {{
+        auto data = new T(::std::forward<Args>(args)...);
         {ty} o;
         ::rust::__zngur_internal_assume_init(o);
         {link_name}(
