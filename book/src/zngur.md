@@ -1,17 +1,17 @@
 # Zngur
 
-Zngur (/zængɑr/) is a C++/Rust interop tool. It tries to expose arbitrary Rust types, methods and functions, while preserving its
+Zngur (/zængɑr/) is a C++/Rust interop tool. It tries to expose arbitrary Rust types, methods, and functions while preserving its
 semantics and ergonomics as much as possible. Using Zngur, you can use arbitrary Rust crate in your C++ code as easily as using it in
 normal Rust code, and you can write idiomatic Rusty API for your C++ library inside C++.
 
 ## Idea
 
-Rust and C++ are similar languages, but with some important differences. Particularly:
+Rust and C++ are similar languages but with some important differences. Particularly:
 
-- Rust is a memory safe language with strong boundary between `safe` and `unsafe`, C++
-  is an unsafe language with no such difference.
-- C++ has macro-like templates, which supports variadic, specialization and are checked
-  at instantiation time. Rust generics on the other hand, are type checked at definition
+- Rust is a memory-safe language with a strong boundary between `safe` and `unsafe` declared using the `unsafe` keyword, C++
+  is an unsafe language with no such difference and keyword.
+- C++ has macro-like templates, which support variadic, specialization and are checked
+  at instantiation time. Rust generics, on the other hand, are type-checked at definition
   time using trait bounds.
 - Rust move is a `memcpy` with compiler support for not destructing the moved out of variable, but C++
   move can execute arbitrary code.
@@ -20,12 +20,12 @@ In all of these differences, C++ has more freedom relative to the Rust:
 
 - Rust considers C++ functions as unsafe, but C++ will happily call Rust code (even unsafe) as there
   is no difference between it and normal C++ code.
-- Every rust generic code is valid C++ template, but not vise versa.
-- C++ can simulate Rust moves very easily (by doing an actual memcpy of data, and tracking the state of destruction in
+- Every rust generic code is a valid C++ template, but not vice versa.
+- C++ can simulate Rust moves very easily (by doing an actual `memcpy` of data, and tracking the state of destruction in
   a boolean flag) but Rust has difficulty with C++ moves. Specially, since Rust assumes that every type is
-  Rust-moveable, it can never store C++ things by value, just over some indirection and `Pin`.
+  Rust-moveable, it can never store C++ objects by value, just over some indirection and `Pin`.
 
-So, Zngur allows you to use arbitrary Rust type in C++, store them by value in the C++ stack, call arbitrary Rust methods and functions
+So, Zngur allows you to use arbitrary Rust types in C++, store them by value in the C++ stack, and call arbitrary Rust methods and functions
 on them. But it doesn't bridge any C++ type into Rust, since it is not possible with the same ergonomic. Instead, Zngur allows you to
 write a rusty wrapper for your C++ library. It allows you to implement Rust traits for C++ types and cast them to
 the `Box<dyn Trait>`, implement inherent methods on Rust types, implement Rust traits for Rust types, and expose bare functions
