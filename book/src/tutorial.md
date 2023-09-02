@@ -6,7 +6,7 @@ A Zngur project consists of 3 things:
 - A Rust crate (that can be everything, binary, rlib, static-lib, cdy-lib, ...)
 - A C++ project.
 
-For start, install Zngur:
+To start, install Zngur:
 
 ```
 cargo install zngur-cli
@@ -54,7 +54,7 @@ impl Inventory {
 }
 ```
 
-Copy it in `src/lib.rs`. Now we need to declare things that we need to access in C++ in the `main.zng` file:
+Copy it into `src/lib.rs`. Now we need to declare things that we need to access in C++ in the `main.zng` file:
 
 ```
 type crate::Inventory {
@@ -64,13 +64,13 @@ type crate::Inventory {
 }
 ```
 
-Zngur needs to know the size and align of the types inside the bridge. You can figure it out using rust-analyzer (by hovering
-over the struct or type alias) or filling it with some random number and then fix it from the compiler error.
+Zngur needs to know the size and align of the types inside the bridge. You can figure it out using the rust-analyzer (by hovering
+over the struct or type alias) or fill it with some random number and then fix it from the compiler error.
 
-> **Note:** Ideally `main.zng` file should be auto generated, but we are not there yet.
+> **Note:** Ideally `main.zng` file should be auto-generated, but we are not there yet.
 
 Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files. It will generate a `./generated.h` C++ header file, and a
-`./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include generated Rust file. Then fill `main.cpp` file
+`./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include the generated Rust file. Then fill `main.cpp` file
 with the following content:
 
 ```C++
@@ -109,7 +109,7 @@ int main() {
 There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.html) has the
 complete list of them.
 
-Assuming that everything works correct, you should see something like this after executing the program:
+Assuming that everything works correctly, you should see something like this after executing the program:
 
 ```
 [main.cpp:5] inventory = Inventory {
