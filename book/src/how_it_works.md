@@ -6,9 +6,9 @@ be taken in transferring Rust types between Rust and C++.
 ## How a Rust type is represented in C++
 
 A normal rust type ABI is undefined, so passing it directly in a cross language function call is undefined behavior. The
-thing that is guaranteed, is that size and align of a type won't change during a compile session. By adding static assertions
+thing that is guaranteed is that the size and alignment of a type won't change during a compile session. By adding static assertions
 against the user provided size and align in the `main.zng` file, Zngur ensures that it knows the correct size and align of the
-type for this compile session. Knowing size and align of a type enables `std::ptr::read` and `std::ptr::write`. These functions
+type for this compile session. Knowing the size and align of a type enables `std::ptr::read` and `std::ptr::write`. These functions
 only need the pointer to be valid (which basically means `ptr..ptr+size` should belong to a single live chunk of memory,
 [read more](https://doc.rust-lang.org/std/ptr/index.html#safety)) and
 aligned. So Zngur can use the pointer to the below `data` in those functions:
@@ -46,13 +46,13 @@ public:
 };
 ```
 
-Note that drop flag [also exists in Rust](https://doc.rust-lang.org/stable/nomicon/drop-flags.html). It is not stored inside
-the type, but in the stack of the owner, and compiler generate them only if necessary.
+Note that the drop flag [also exists in Rust](https://doc.rust-lang.org/stable/nomicon/drop-flags.html). It is not stored inside
+the type, but in the stack of the owner, and the compiler generates them only if necessary.
 
 ## Calling Rust functions from C++
 
 For exposing a function or method from Rust to C++, an `extern "C"` function is generated that takes all arguments as `*mut u8`, and
-takes output as an output parameter `o: *mut u8`. It then read arguments using `ptr::read`, calls the underlying function, and write
+takes output as an output parameter `o: *mut u8`. It then reads arguments using `ptr::read`, calls the underlying function, and write
 the result in `o` using `ptr::write`. So for example for `Option<i32>::unwrap` some code like this will be generated:
 
 ```Rust
@@ -85,13 +85,13 @@ In the C++ side, this code will be generated for that function:
 }
 ```
 
-`::rust::std::string::String o;` creates an uninitialized `String`. `__zngur_internal_assume_init` sets it's drop flag to `true` so that it will become
+`::rust::std::string::String o;` creates an uninitialized `String`. `__zngur_internal_assume_init` sets its drop flag to `true` so that it will become
 freed after being returned by this function. Then it will call the underlying Rust function, and by `__zngur_internal_assume_deinit` it will ensure
 that the destructor for `i0` is not called. `i0` is now semantically moved in Rust, and it's Rust responsibility to destruct it.
 
 ## Calling C++ functions from Rust
 
-Similarly, for exposing a C++ to Rust, a function will be generated that take all inputs and output by `uint8_t*`.
+Similarly, for exposing a C++ function to Rust, a function will be generated that takes all inputs and output by `uint8_t*`.
 
 ```C++
 extern "C" {
@@ -133,7 +133,7 @@ are implemented in this way.
 
 ## Implementing Rust traits for C++ classes
 
-C++ types can't exist in Rust by value, since it might need non trivial move constructor incompatible with Rust moves. So for representing
+C++ types can't exist in Rust by value, since it might need a nontrivial move constructor incompatible with Rust moves. So for representing
 them in Rust, Zngur uses the following struct:
 
 ```Rust
