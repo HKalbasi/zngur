@@ -47,7 +47,7 @@ pub fn main() -> Result<()> {
         }
     }
     if !sh.path_exists("examples/osmium/map.osm") {
-        cmd!(sh, "wget -o examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
+        cmd!(sh, "wget -O examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
     }
     check_examples(sh).with_context(|| "Checking examples failed")?;
     Ok(())
