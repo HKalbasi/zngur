@@ -8,13 +8,13 @@ pub fn main() -> Result<()> {
     cmd!(sh, "git clone https://github.com/osmcode/libosmium").run()?;
     cmd!(
         sh,
-        "apt install cmake cmake-curses-gui make libexpat1-dev zlib1g-dev libbz2-dev libboost-dev libprotobuf-dev protobuf-compiler libosmpbf-dev libprotozero-dev libutfcpp-dev"
+        "sudo apt install cmake cmake-curses-gui make libexpat1-dev zlib1g-dev libbz2-dev libboost-dev libprotobuf-dev protobuf-compiler libosmpbf-dev libprotozero-dev libutfcpp-dev"
     ).run()?;
     sh.change_dir("libosmium");
     cmd!(sh, "mkdir build").run()?;
     sh.change_dir("build");
     cmd!(sh, "cmake ..").run()?;
     cmd!(sh, "make -j").run()?;
-    cmd!(sh, "make install").run()?;
+    cmd!(sh, "sudo make install").run()?;
     Ok(())
 }
