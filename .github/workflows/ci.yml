@@ -17,4 +17,6 @@ jobs:
       - uses: actions/checkout@v3
       - name: Install Rust nightly
         run: rustup toolchain install nightly
+      - name: Install osmium
+        run: cargo xtask install-osmium
       - run: cargo xtask ci
