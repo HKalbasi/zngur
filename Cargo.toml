@@ -5,11 +5,7 @@ members = [
     "zngur-def",
     "zngur-generator",
     "zngur-parser",
-    "examples/simple",
-    "examples/tutorial",
-    "examples/rustyline",
-    "examples/rayon",
-    "examples/cxx_demo",
+    "examples/*",
     "xtask",
 ]
 resolver = "2"

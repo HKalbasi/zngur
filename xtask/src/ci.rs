@@ -10,7 +10,7 @@ fn check_crate(sh: &Shell) -> Result<()> {
 }
 
 fn check_examples(sh: &Shell) -> Result<()> {
-    const CARGO_PROJECTS: &[&str] = &["cxx_demo"];
+    const CARGO_PROJECTS: &[&str] = &["cxx_demo", "osmium"];
     sh.change_dir("examples");
     let examples = cmd!(sh, "ls").read()?;
     for example in examples.lines() {

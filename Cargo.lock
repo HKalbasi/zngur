@@ -279,6 +279,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-osmium"
+version = "0.1.0"
+dependencies = [
+ "bitflags 2.4.0",
+ "build-rs",
+ "cc",
+ "zngur",
+]
+
+[[package]]
 name = "example-rayon"
 version = "0.0.0"
 dependencies = [
