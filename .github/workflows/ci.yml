@@ -18,5 +18,5 @@ jobs:
       - name: Install Rust nightly
         run: rustup toolchain install nightly
       - name: Install osmium
-        run: cargo xtask install-osmium
+        run: sudo apt install libosmium2-dev
       - run: cargo xtask ci

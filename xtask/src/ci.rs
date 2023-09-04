@@ -1,3 +1,5 @@
+use std::{fs::File, io::Write};
+
 use anyhow::{Context, Result};
 use xshell::{cmd, Shell};
 
@@ -45,6 +47,10 @@ pub fn main() -> Result<()> {
             check_crate(sh).with_context(|| format!("Checking crate {dir} failed"))?;
             sh.change_dir("..")
         }
+    }
+    if !sh.path_exists("examples/osmium/map.osm") {
+        let data = cmd!(sh, "wget https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").output()?.stdout;
+        File::create("./examples/osmium/map.osm")?.write_all(&data)?;
     }
     check_examples(sh).with_context(|| "Checking examples failed")?;
     Ok(())

@@ -9,7 +9,7 @@ pub fn main() -> Result<()> {
     cmd!(
         sh,
         "sudo apt install cmake cmake-curses-gui make libexpat1-dev zlib1g-dev libbz2-dev libboost-dev libprotobuf-dev protobuf-compiler libosmpbf-dev libprotozero-dev libutfcpp-dev"
-    ).run()?;
+    ).run().with_context(|| "Installing osmium dependencies failed")?;
     sh.change_dir("libosmium");
     cmd!(sh, "mkdir build").run()?;
     sh.change_dir("build");
