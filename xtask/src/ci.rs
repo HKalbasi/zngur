@@ -1,5 +1,3 @@
-use std::{fs::File, io::Write};
-
 use anyhow::{Context, Result};
 use xshell::{cmd, Shell};
 
@@ -49,8 +47,7 @@ pub fn main() -> Result<()> {
         }
     }
     if !sh.path_exists("examples/osmium/map.osm") {
-        let data = cmd!(sh, "wget https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").output()?.stdout;
-        File::create("./examples/osmium/map.osm")?.write_all(&data)?;
+        cmd!(sh, "wget -o examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
     }
     check_examples(sh).with_context(|| "Checking examples failed")?;
     Ok(())

@@ -127,6 +127,7 @@ impl Default for RustFile {
     fn default() -> Self {
         Self(
             r#"
+#[allow(dead_code)]
 mod zngur_types {
     pub struct ZngurCppOpaqueObject {
         data: *mut u8,
@@ -139,6 +140,10 @@ mod zngur_types {
             destructor: extern "C" fn(*mut u8),            
         ) -> Self {
             Self { data, destructor }
+        }
+
+        pub fn ptr(&self) -> *mut u8 {
+            self.data
         }
     }
 
@@ -294,7 +299,7 @@ pub extern "C" fn {mangled_name}(
                 w!(self, ", i{i}: {ty}");
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
-            wln!(self, "            let data = self.value.data;");
+            wln!(self, "            let data = self.value.ptr();");
             self.call_cpp_function(
                 &format!("(self.f_{})(data, ", method.name),
                 method.inputs.len(),
@@ -305,12 +310,14 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
     }}
-    let this = Wrapper {{
-        value: ZngurCppOpaqueObject::new(data, destructor),
-        {method_names}
-    }};
-    let r: Box<dyn {trait_name}> = Box::new(this);
-    unsafe {{ std::ptr::write(o as *mut _, r) }}
+    unsafe {{ 
+        let this = Wrapper {{
+            value: ZngurCppOpaqueObject::new(data, destructor),
+            {method_names}
+        }};
+        let r: Box<dyn {trait_name}> = Box::new(this);
+        std::ptr::write(o as *mut _, r)
+    }}
 }}"#
         );
         mangled_name
@@ -337,7 +344,7 @@ pub extern "C" fn {mangled_name}(
     let this = ZngurCppOpaqueObject::new(data, destructor);
     let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
         _ = &this;
-        let data = this.data;
+        let data = this.ptr();
 "#,
         );
         self.call_cpp_function("call(data, ", 1);
