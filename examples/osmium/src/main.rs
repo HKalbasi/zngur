@@ -2,7 +2,7 @@ use bitflags::bitflags;
 
 mod generated;
 
-struct Reader;
+struct Reader(generated::ZngurCppOpaqueObject);
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

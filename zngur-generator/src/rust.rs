@@ -127,16 +127,29 @@ impl Default for RustFile {
     fn default() -> Self {
         Self(
             r#"
-struct ZngurCppOpaqueObject {
-    data: *mut u8,
-    destructor: extern "C" fn(*mut u8),
-}
+mod zngur_types {
+    pub struct ZngurCppOpaqueObject {
+        data: *mut u8,
+        destructor: extern "C" fn(*mut u8),
+    }
 
-impl Drop for ZngurCppOpaqueObject {
-    fn drop(&mut self) {
-        (self.destructor)(self.data)
+    impl ZngurCppOpaqueObject {
+        pub unsafe fn new(
+            data: *mut u8,
+            destructor: extern "C" fn(*mut u8),            
+        ) -> Self {
+            Self { data, destructor }
+        }
+    }
+
+    impl Drop for ZngurCppOpaqueObject {
+        fn drop(&mut self) {
+            (self.destructor)(self.data)
+        }
     }
 }
+
+pub use zngur_types::ZngurCppOpaqueObject;
 "#
             .to_owned(),
         )
@@ -293,7 +306,7 @@ pub extern "C" fn {mangled_name}(
             r#"
     }}
     let this = Wrapper {{
-        value: ZngurCppOpaqueObject {{ data, destructor }},
+        value: ZngurCppOpaqueObject::new(data, destructor),
         {method_names}
     }};
     let r: Box<dyn {trait_name}> = Box::new(this);
@@ -321,7 +334,7 @@ pub extern "C" fn {mangled_name}(
     call: extern "C" fn(data: *mut u8, i1: *mut u8, o: *mut u8),
     o: *mut u8,
 ) {{
-    let this = ZngurCppOpaqueObject {{ data, destructor }};
+    let this = ZngurCppOpaqueObject::new(data, destructor);
     let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
         _ = &this;
         let data = this.data;

@@ -3,7 +3,7 @@ type () {
 }
 
 type crate::Reader {
-    properties(size = 0, align = 1);
+    properties(size = 16, align = 8);
 }
 
 type crate::Flags {
