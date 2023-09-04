@@ -371,8 +371,7 @@ struct rust::Ref<{ty}> {{
     }}
 private:
     ::std::array<size_t, 2> data;
-    template<typename T2>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(::rust::Ref<{ty}>& t);
 "#,
                 ty = self.ty,
             )?;
@@ -390,8 +389,7 @@ struct rust::Ref<{ty}> {{
     }}
 private:
     size_t data;
-    template<typename T2>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(::rust::Ref<{ty}>& t);
 "#,
                 ty = self.ty,
             )?;
@@ -422,6 +420,24 @@ private:
             state,
             r#"
 namespace rust {{
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr<Ref<{ty}>>(Ref<{ty}>& t) {{
+    return (uint8_t*)&t.data;
+}}
+
+template<>
+inline void __zngur_internal_assume_init<Ref<{ty}>>(Ref<{ty}>&) {{
+}}
+
+template<>
+inline void __zngur_internal_check_init<Ref<{ty}>>(Ref<{ty}>&) {{
+}}
+
+template<>
+inline void __zngur_internal_assume_deinit<Ref<{ty}>>(Ref<{ty}>&) {{
+}}
+
 template<>
 inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
     return {size};
@@ -697,7 +713,7 @@ namespace rust {{
     }}
 "#,
                 size = self.size,
-            );
+            )?;
             if self.is_copy {
                 writeln!(
                     state,
@@ -749,7 +765,7 @@ namespace rust {{
     }}
 }}
 "#,
-            );
+            )?;
         }
         self.emit_ref_specialization(state)
     }
@@ -942,18 +958,7 @@ namespace rust {
     struct Ref;
 
     template<typename T>
-    uint8_t* __zngur_internal_data_ptr(::rust::Ref<T>& t) {
-        return (uint8_t*)&t.data;
-    }
-
-    template<typename T>
-    void __zngur_internal_assume_init(::rust::Ref<T>&) {}
-
-    template<typename T>
     void zngur_pretty_print(T&) {}
-
-    template<typename T>
-    void __zngur_internal_assume_deinit(::rust::Ref<T>&) {}
 
     template<typename Type>
     class Impl;
@@ -1004,8 +1009,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<{ty}>>(::rust::Ref<{ty}>& t);
     }};
 "#
             )?;

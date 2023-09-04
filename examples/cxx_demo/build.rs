@@ -14,13 +14,10 @@ fn main() {
         .with_rs_file(crate_dir.join("./src/generated.rs"))
         .generate();
 
-    cc::Build::new()
-        .cpp(true)
-        .file("generated.cpp")
-        .compile("zngur_generated");
+    let my_build = &mut cc::Build::new();
+    let my_build = my_build.cpp(true).compiler("clang++");
+    let my_build = || my_build.clone();
 
-    cc::Build::new()
-        .cpp(true)
-        .file("blobstore.cpp")
-        .compile("blobstore");
+    my_build().file("generated.cpp").compile("zngur_generated");
+    my_build().file("blobstore.cpp").compile("blobstore");
 }

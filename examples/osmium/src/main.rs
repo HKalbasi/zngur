@@ -21,6 +21,6 @@ bitflags! {
 
 fn main() {
     let f = Flags::way | Flags::node;
-    let reader = generated::new_blob_store_client(f);
+    let _reader = generated::new_blob_store_client(f);
     println!("Hello, world! {}", f.bits());
 }

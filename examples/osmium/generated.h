@@ -48,18 +48,7 @@ namespace rust {
     struct Ref;
 
     template<typename T>
-    uint8_t* __zngur_internal_data_ptr(::rust::Ref<T>& t) {
-        return (uint8_t*)&t.data;
-    }
-
-    template<typename T>
-    void __zngur_internal_assume_init(::rust::Ref<T>&) {}
-
-    template<typename T>
     void zngur_pretty_print(T&) {}
-
-    template<typename T>
-    void __zngur_internal_assume_deinit(::rust::Ref<T>&) {}
 
     template<typename Type>
     class Impl;
@@ -103,8 +92,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<int8_t>>(::rust::Ref<int8_t>& t);
     };
 
 
@@ -147,8 +135,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<uint8_t>>(::rust::Ref<uint8_t>& t);
     };
 
 
@@ -191,8 +178,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<int16_t>>(::rust::Ref<int16_t>& t);
     };
 
 
@@ -235,8 +221,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<uint16_t>>(::rust::Ref<uint16_t>& t);
     };
 
 
@@ -279,8 +264,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<int32_t>>(::rust::Ref<int32_t>& t);
     };
 
 
@@ -323,8 +307,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<uint32_t>>(::rust::Ref<uint32_t>& t);
     };
 
 
@@ -367,8 +350,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<int64_t>>(::rust::Ref<int64_t>& t);
     };
 
 
@@ -411,8 +393,7 @@ namespace rust {
         }
         private:
             size_t data;
-        template<typename T2>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<uint64_t>>(::rust::Ref<uint64_t>& t);
     };
 
 }
@@ -500,13 +481,30 @@ struct rust::Ref<::rust::Unit> {
     }
 private:
     size_t data;
-    template<typename T2>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<::rust::Unit>>(::rust::Ref<::rust::Unit>& t);
 
 public:
 };
 
 namespace rust {
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr<Ref<::rust::Unit>>(Ref<::rust::Unit>& t) {
+    return (uint8_t*)&t.data;
+}
+
+template<>
+inline void __zngur_internal_assume_init<Ref<::rust::Unit>>(Ref<::rust::Unit>&) {
+}
+
+template<>
+inline void __zngur_internal_check_init<Ref<::rust::Unit>>(Ref<::rust::Unit>&) {
+}
+
+template<>
+inline void __zngur_internal_assume_deinit<Ref<::rust::Unit>>(Ref<::rust::Unit>&) {
+}
+
 template<>
 inline size_t __zngur_internal_size_of<Ref<::rust::Unit>>() {
     return 8;
@@ -605,13 +603,30 @@ struct rust::Ref<::rust::crate::Reader> {
     }
 private:
     size_t data;
-    template<typename T2>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<::rust::crate::Reader>>(::rust::Ref<::rust::crate::Reader>& t);
 
 public:
 };
 
 namespace rust {
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr<Ref<::rust::crate::Reader>>(Ref<::rust::crate::Reader>& t) {
+    return (uint8_t*)&t.data;
+}
+
+template<>
+inline void __zngur_internal_assume_init<Ref<::rust::crate::Reader>>(Ref<::rust::crate::Reader>&) {
+}
+
+template<>
+inline void __zngur_internal_check_init<Ref<::rust::crate::Reader>>(Ref<::rust::crate::Reader>&) {
+}
+
+template<>
+inline void __zngur_internal_assume_deinit<Ref<::rust::crate::Reader>>(Ref<::rust::crate::Reader>&) {
+}
+
 template<>
 inline size_t __zngur_internal_size_of<Ref<::rust::crate::Reader>>() {
     return 8;
@@ -712,14 +727,31 @@ struct rust::Ref<::rust::crate::Flags> {
     }
 private:
     size_t data;
-    template<typename T2>
-    friend uint8_t* ::rust::__zngur_internal_data_ptr(::rust::Ref<T2>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<::rust::crate::Flags>>(::rust::Ref<::rust::crate::Flags>& t);
 
 public:
 ::uint8_t bits();
 };
 
 namespace rust {
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr<Ref<::rust::crate::Flags>>(Ref<::rust::crate::Flags>& t) {
+    return (uint8_t*)&t.data;
+}
+
+template<>
+inline void __zngur_internal_assume_init<Ref<::rust::crate::Flags>>(Ref<::rust::crate::Flags>&) {
+}
+
+template<>
+inline void __zngur_internal_check_init<Ref<::rust::crate::Flags>>(Ref<::rust::crate::Flags>&) {
+}
+
+template<>
+inline void __zngur_internal_assume_deinit<Ref<::rust::crate::Flags>>(Ref<::rust::crate::Flags>&) {
+}
+
 template<>
 inline size_t __zngur_internal_size_of<Ref<::rust::crate::Flags>>() {
     return 8;
