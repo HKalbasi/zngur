@@ -337,6 +337,7 @@ pub struct CppTypeDefinition {
     pub align: usize,
     pub is_copy: bool,
     pub methods: Vec<CppMethod>,
+    pub constructors: Vec<CppFnSig>,
     pub from_trait: Option<CppTraitDefinition>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
 }
@@ -349,6 +350,7 @@ impl Default for CppTypeDefinition {
             align: 0,
             is_copy: false,
             methods: vec![],
+            constructors: vec![],
             wellknown_traits: vec![],
             from_trait: None,
         }
@@ -677,6 +679,19 @@ private:
                     )?;
                 }
             }
+            for constructor in &self.constructors {
+                writeln!(
+                    state,
+                    "{fn_name}({input_defs});",
+                    fn_name = &self.ty.path.0.last().unwrap(),
+                    input_defs = constructor
+                        .inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
+                )?;
+            }
             writeln!(state, "}};")
         })?;
         let ty = &self.ty;
@@ -776,6 +791,34 @@ namespace rust {{
             .contains(&ZngurWellknownTraitData::Unsized);
         let cpp_type = &self.ty.to_string();
         let my_name = cpp_type.strip_prefix("::").unwrap();
+        for c in &self.constructors {
+            let fn_name = my_name.to_owned() + "::" + &self.ty.path.0.last().unwrap();
+            let CppFnSig {
+                inputs,
+                output,
+                rust_link_name,
+            } = c;
+            writeln!(
+                state,
+                "inline {fn_name}({input_defs})
+        {{
+            ::rust::__zngur_internal_assume_init(*this);
+            {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(*this));
+            {deinits}
+        }}",
+                input_defs = inputs
+                    .iter()
+                    .enumerate()
+                    .map(|(n, ty)| format!("{ty} i{n}"))
+                    .join(", "),
+                input_args = (0..inputs.len())
+                    .map(|n| format!("::rust::__zngur_internal_data_ptr(i{n}), "))
+                    .join(""),
+                deinits = (0..inputs.len())
+                    .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
+                    .join("\n"),
+            )?;
+        }
         for method in &self.methods {
             let fn_name = my_name.to_owned() + "::" + &method.name;
             method.sig.emit_cpp_def(state, &fn_name)?;
@@ -839,6 +882,9 @@ namespace rust {{
     fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
         for method in &self.methods {
             method.sig.emit_rust_link_decl(state)?;
+        }
+        for c in &self.constructors {
+            c.emit_rust_link_decl(state)?;
         }
         for tr in &self.wellknown_traits {
             match tr {

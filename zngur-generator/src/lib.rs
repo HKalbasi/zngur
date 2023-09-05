@@ -14,7 +14,6 @@ use iter_tools::Itertools;
 use rust::IntoCpp;
 
 pub mod cpp;
-mod parser;
 mod rust;
 
 pub use rust::RustFile;
@@ -42,30 +41,45 @@ impl ZngurGenerator {
                 rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
             }
             let mut cpp_methods = vec![];
+            let mut constructors = vec![];
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
-                let rust_link_names = rust_file.add_constructor(
-                    &format!("{}::{}", ty_def.ty, constructor.name),
-                    constructor.inputs.iter().map(|x| &*x.0),
-                );
-                cpp_methods.push(CppMethod {
-                    name: cpp_handle_keyword(&constructor.name).to_owned(),
-                    kind: CppMethodKind::StaticOnly,
-                    sig: CppFnSig {
-                        rust_link_name: rust_link_names.constructor,
-                        inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
-                        output: ty_def.ty.into_cpp(),
-                    },
-                });
-                cpp_methods.push(CppMethod {
-                    name: format!("matches_{}", cpp_handle_keyword(&constructor.name)),
-                    kind: CppMethodKind::Lvalue,
-                    sig: CppFnSig {
-                        rust_link_name: rust_link_names.match_check,
-                        inputs: vec![ty_def.ty.into_cpp().into_ref()],
-                        output: CppType::from("uint8_t"),
-                    },
-                });
+                match constructor.name {
+                    Some(name) => {
+                        let rust_link_names = rust_file.add_constructor(
+                            &format!("{}::{}", ty_def.ty, name),
+                            &constructor.inputs,
+                        );
+                        cpp_methods.push(CppMethod {
+                            name: cpp_handle_keyword(&name).to_owned(),
+                            kind: CppMethodKind::StaticOnly,
+                            sig: CppFnSig {
+                                rust_link_name: rust_link_names.constructor,
+                                inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
+                                output: ty_def.ty.into_cpp(),
+                            },
+                        });
+                        cpp_methods.push(CppMethod {
+                            name: format!("matches_{}", cpp_handle_keyword(&name)),
+                            kind: CppMethodKind::Lvalue,
+                            sig: CppFnSig {
+                                rust_link_name: rust_link_names.match_check,
+                                inputs: vec![ty_def.ty.into_cpp().into_ref()],
+                                output: CppType::from("uint8_t"),
+                            },
+                        });
+                    }
+                    None => {
+                        let rust_link_name = rust_file
+                            .add_constructor(&format!("{}", ty_def.ty), &constructor.inputs)
+                            .constructor;
+                        constructors.push(CppFnSig {
+                            rust_link_name,
+                            inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
+                            output: ty_def.ty.into_cpp(),
+                        });
+                    }
+                }
             }
             for wellknown_trait in ty_def.wellknown_traits {
                 let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
@@ -114,6 +128,7 @@ impl ZngurGenerator {
                 size: ty_def.size,
                 align: ty_def.align,
                 is_copy: ty_def.is_copy,
+                constructors,
                 methods: cpp_methods,
                 wellknown_traits,
                 from_trait: if let RustType::Boxed(b) = &ty_def.ty {

@@ -4,6 +4,8 @@ type () {
 
 type crate::Reader {
     properties(size = 16, align = 8);
+
+    constructor(ZngurCppOpaqueObject);
 }
 
 type crate::Flags {

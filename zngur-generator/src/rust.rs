@@ -129,6 +129,7 @@ impl Default for RustFile {
             r#"
 #[allow(dead_code)]
 mod zngur_types {
+    #[repr(C)]
     pub struct ZngurCppOpaqueObject {
         data: *mut u8,
         destructor: extern "C" fn(*mut u8),
@@ -358,10 +359,10 @@ pub extern "C" fn {mangled_name}(
         mangled_name
     }
 
-    pub fn add_constructor<'a>(
+    pub fn add_constructor(
         &mut self,
         rust_name: &str,
-        args: impl Iterator<Item = &'a str> + Clone,
+        args: &[(String, RustType)],
     ) -> ConstructorMangledNames {
         let constructor = mangle_name(rust_name);
         let match_check = format!("{constructor}_check");
@@ -371,7 +372,7 @@ pub extern "C" fn {mangled_name}(
 #[no_mangle]
 pub extern "C" fn {constructor}("#
         );
-        for name in args.clone() {
+        for (name, _) in args {
             w!(self, "f_{name}: *mut u8, ");
         }
         w!(
@@ -379,8 +380,8 @@ pub extern "C" fn {constructor}("#
             r#"o: *mut u8) {{ unsafe {{
     ::std::ptr::write(o as *mut _, {rust_name} {{ "#
         );
-        for name in args {
-            w!(self, "{name}: ::std::ptr::read(f_{name} as *mut _), ");
+        for (name, ty) in args {
+            w!(self, "{name}: ::std::ptr::read(f_{name} as *mut {ty}), ");
         }
         wln!(self, "}}) }} }}");
         w!(

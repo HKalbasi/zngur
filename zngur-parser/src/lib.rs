@@ -79,7 +79,7 @@ enum ParsedTypeItem<'a> {
     Properties(Vec<(&'a str, usize)>),
     Traits(Vec<ZngurWellknownTrait>),
     Constructor {
-        name: &'a str,
+        name: Option<&'a str>,
         args: ParsedConstructorArgs<'a>,
     },
     Method(ParsedMethod<'a>, Option<ParsedPath<'a>>),
@@ -149,7 +149,7 @@ impl ParsedItem<'_> {
                         }
                         ParsedTypeItem::Constructor { name, args } => {
                             constructors.push(ZngurConstructor {
-                                name: name.to_owned(),
+                                name: name.map(|x| x.to_owned()),
                                 inputs: match args {
                                     ParsedConstructorArgs::Unit => vec![],
                                     ParsedConstructorArgs::Tuple(t) => t
@@ -737,8 +737,9 @@ fn type_item<'a>(
             .or(empty().to(ParsedConstructorArgs::Unit));
         let constructor = just(Token::Ident("constructor")).ignore_then(
             (select! {
-                Token::Ident(c) => c,
+                Token::Ident(c) => Some(c),
             })
+            .or(empty().to(None))
             .then(constructor_args)
             .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
         );

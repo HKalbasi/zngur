@@ -39,7 +39,7 @@ pub struct ZngurExternCppFn {
 }
 
 pub struct ZngurConstructor {
-    pub name: String,
+    pub name: Option<String>,
     pub inputs: Vec<(String, RustType)>,
 }
 
@@ -111,6 +111,7 @@ pub enum ScalarRustType {
     Int(u32),
     Usize,
     Bool,
+    ZngurCppOpaqueObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
