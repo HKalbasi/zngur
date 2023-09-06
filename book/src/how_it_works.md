@@ -137,12 +137,12 @@ C++ types can't exist in Rust by value, since it might need a nontrivial move co
 them in Rust, Zngur uses the following struct:
 
 ```Rust
-struct ZngurCppOpaqueObject {
+struct ZngurCppOpaqueOwnedObject {
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
 }
 
-impl Drop for ZngurCppOpaqueObject {
+impl Drop for ZngurCppOpaqueOwnedObject {
     fn drop(&mut self) {
         (self.destructor)(self.data)
     }
@@ -165,7 +165,7 @@ pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
     o: *mut u8,
 ) {
     struct Wrapper {
-        value: ZngurCppOpaqueObject,
+        value: ZngurCppOpaqueOwnedObject,
         f_put: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
         f_tag: extern "C" fn(data: *mut u8, i0: *mut u8, i1: *mut u8, o: *mut u8),
         f_metadata: extern "C" fn(data: *mut u8, i0: *mut u8, o: *mut u8),
@@ -206,7 +206,7 @@ pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
         }
     }
     let this = Wrapper {
-        value: ZngurCppOpaqueObject { data, destructor },
+        value: ZngurCppOpaqueOwnedObject { data, destructor },
         f_put,
         f_tag,
         f_metadata,
@@ -216,7 +216,7 @@ pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
 }
 ```
 
-Which constructs a `Wrapper` around `ZngurCppOpaqueObject` which also contains the function pointers to the method implementation, and
+Which constructs a `Wrapper` around `ZngurCppOpaqueOwnedObject` which also contains the function pointers to the method implementation, and
 implements the trait for it. Inside of each trait function is very similar to a normal `C++` function used in Rust and contains the
 similar `MaybeUninit`s.
 

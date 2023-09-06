@@ -67,8 +67,8 @@ impl IntoCpp for RustType {
                     PrimitiveRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
                     PrimitiveRustType::Usize => Some(CppType::from("size_t")),
                     PrimitiveRustType::Bool => None,
-                    PrimitiveRustType::ZngurCppOpaqueObject => {
-                        Some(CppType::from("rust::ZngurCppOpaqueObject"))
+                    PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
+                        Some(CppType::from("rust::ZngurCppOpaqueOwnedObject"))
                     }
                 },
                 RustType::Raw(_, t) => Some(CppType::from(&*format!(
@@ -132,13 +132,15 @@ impl Default for RustFile {
             r#"
 #[allow(dead_code)]
 mod zngur_types {
+    pub struct ZngurCpp
+
     #[repr(C)]
-    pub struct ZngurCppOpaqueObject {
+    pub struct ZngurCppOpaqueOwnedObject {
         data: *mut u8,
         destructor: extern "C" fn(*mut u8),
     }
 
-    impl ZngurCppOpaqueObject {
+    impl ZngurCppOpaqueOwnedObject {
         pub unsafe fn new(
             data: *mut u8,
             destructor: extern "C" fn(*mut u8),            
@@ -151,14 +153,14 @@ mod zngur_types {
         }
     }
 
-    impl Drop for ZngurCppOpaqueObject {
+    impl Drop for ZngurCppOpaqueOwnedObject {
         fn drop(&mut self) {
             (self.destructor)(self.data)
         }
     }
 }
 
-pub use zngur_types::ZngurCppOpaqueObject;
+pub use zngur_types::ZngurCppOpaqueOwnedObject;
 "#
             .to_owned(),
         )
@@ -280,7 +282,7 @@ pub extern "C" fn {mangled_name}(
     o: *mut u8,
 ) {{
     struct Wrapper {{ 
-        value: ZngurCppOpaqueObject,
+        value: ZngurCppOpaqueOwnedObject,
         {method_and_types}
     }}
     impl {trait_without_assocs} for Wrapper {{
@@ -316,7 +318,7 @@ pub extern "C" fn {mangled_name}(
     }}
     unsafe {{ 
         let this = Wrapper {{
-            value: ZngurCppOpaqueObject::new(data, destructor),
+            value: ZngurCppOpaqueOwnedObject::new(data, destructor),
             {method_names}
         }};
         let r: Box<dyn {trait_name}> = Box::new(this);
@@ -345,7 +347,7 @@ pub extern "C" fn {mangled_name}(
     call: extern "C" fn(data: *mut u8, i1: *mut u8, o: *mut u8),
     o: *mut u8,
 ) {{
-    let this = ZngurCppOpaqueObject::new(data, destructor);
+    let this = ZngurCppOpaqueOwnedObject::new(data, destructor);
     let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
         _ = &this;
         let data = this.ptr();
@@ -437,7 +439,7 @@ pub(crate) fn {rust_name}("#
             self,
             r#"
 #[no_mangle]
-pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueObject {{
+pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {{
     unsafe {{ &mut (*(d as *mut {ty})).{field} }}
 }}"#
         );

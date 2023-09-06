@@ -5,7 +5,7 @@ type () {
 type crate::Reader {
     properties(size = 16, align = 8);
 
-    constructor(ZngurCppOpaqueObject);
+    constructor(ZngurCppOpaqueOwnedObject);
 
     #cpp_value "0" "::osmium::io::Reader";
 }
@@ -13,7 +13,7 @@ type crate::Reader {
 type crate::Way {
     properties(size = 16, align = 8);
 
-    constructor(ZngurCppOpaqueObject);
+    constructor(ZngurCppOpaqueOwnedObject);
 }
 
 type crate::BendHandler {

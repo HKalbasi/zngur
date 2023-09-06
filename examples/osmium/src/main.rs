@@ -2,8 +2,8 @@ use bitflags::bitflags;
 
 mod generated;
 
-struct Reader(generated::ZngurCppOpaqueObject);
-struct Way(generated::ZngurCppOpaqueObject);
+struct Reader(generated::ZngurCppOpaqueOwnedObject);
+struct Way(generated::ZngurCppOpaqueOwnedObject);
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]

@@ -12,7 +12,7 @@ using namespace rust::crate;
 using namespace std;
 
 Reader rust::exported_functions::new_blob_store_client(Flags f) {
-  Reader o(rust::ZngurCppOpaqueObject::build<osmium::io::Reader>(
+  Reader o(rust::ZngurCppOpaqueOwnedObject::build<osmium::io::Reader>(
       "map.osm", static_cast<osmium::osm_entity_bits::type>(f.bits())));
   return o;
 }
@@ -23,7 +23,7 @@ class RustHandler : public osmium::handler::Handler {
 public:
   void way(const osmium::Way &way) {
     rust::crate::Way rusty_way;
-    // rust::ZngurCppOpaqueObject::build<osmium::Way>(way));
+    // rust::ZngurCppOpaqueOwnedObject::build<osmium::Way>(way));
     inner.way(rusty_way);
   }
 

@@ -515,7 +515,7 @@ fn rust_type<'a>(
 
     let scalar = select! {
         Token::Ident("bool") => PrimitiveRustType::Bool,
-        Token::Ident("ZngurCppOpaqueObject") => PrimitiveRustType::ZngurCppOpaqueObject,
+        Token::Ident("ZngurCppOpaqueOwnedObject") => PrimitiveRustType::ZngurCppOpaqueOwnedObject,
         Token::Ident("usize") => PrimitiveRustType::Usize,
         Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
         Token::Ident(c) if as_scalar(c, 'i').is_some() => PrimitiveRustType::Int(as_scalar(c, 'i').unwrap()),

@@ -909,7 +909,7 @@ namespace rust {{
         if let Some(cpp_value) = &self.cpp_value {
             writeln!(
                 state,
-                "::rust::ZngurCppOpaqueObject* {}(uint8_t*);",
+                "::rust::ZngurCppOpaqueOwnedObject* {}(uint8_t*);",
                 cpp_value.0
             )?;
         }
@@ -1029,14 +1029,14 @@ namespace rust {
     inline void __zngur_internal_check_init(T& t) {
     }
 
-    class ZngurCppOpaqueObject {
+    class ZngurCppOpaqueOwnedObject {
         uint8_t* data;
         void (*destructor)(uint8_t*);
 
     public:
         template<typename T, typename... Args>
-        inline static ZngurCppOpaqueObject build(Args&&... args) {
-            ZngurCppOpaqueObject o;
+        inline static ZngurCppOpaqueOwnedObject build(Args&&... args) {
+            ZngurCppOpaqueOwnedObject o;
             o.data = (uint8_t*) new T(::std::forward<Args>(args)...);
             o.destructor = [](uint8_t* d) {
                 delete (T*)d;
@@ -1062,7 +1062,7 @@ namespace rust {
         for ty in [8, 16, 32, 64]
             .into_iter()
             .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
-            .chain(Some(format!("::rust::ZngurCppOpaqueObject")))
+            .chain(Some(format!("::rust::ZngurCppOpaqueOwnedObject")))
         {
             writeln!(
                 state,
