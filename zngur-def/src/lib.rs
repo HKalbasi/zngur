@@ -106,7 +106,7 @@ impl RustTrait {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum ScalarRustType {
+pub enum PrimitiveRustType {
     Uint(u32),
     Int(u32),
     Usize,
@@ -123,7 +123,7 @@ pub struct RustPathAndGenerics {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustType {
-    Scalar(ScalarRustType),
+    Primitive(PrimitiveRustType),
     Ref(Mutability, Box<RustType>),
     Raw(Mutability, Box<RustType>),
     Boxed(Box<RustType>),
@@ -187,11 +187,12 @@ impl Display for RustTrait {
 impl Display for RustType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RustType::Scalar(s) => match s {
-                ScalarRustType::Uint(s) => write!(f, "u{s}"),
-                ScalarRustType::Int(s) => write!(f, "i{s}"),
-                ScalarRustType::Usize => write!(f, "usize"),
-                ScalarRustType::Bool => write!(f, "bool"),
+            RustType::Primitive(s) => match s {
+                PrimitiveRustType::Uint(s) => write!(f, "u{s}"),
+                PrimitiveRustType::Int(s) => write!(f, "i{s}"),
+                PrimitiveRustType::Usize => write!(f, "usize"),
+                PrimitiveRustType::Bool => write!(f, "bool"),
+                PrimitiveRustType::ZngurCppOpaqueObject => write!(f, "ZngurCppOpaqueObject"),
             },
             RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
             RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),

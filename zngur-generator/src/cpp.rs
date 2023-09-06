@@ -983,22 +983,38 @@ namespace rust {
     inline size_t __zngur_internal_size_of();
 
     template<typename T>
-    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) {{
+    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) {
         memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
         ::rust::__zngur_internal_assume_deinit(t);
-    }}
+    }
 
     template<typename T>
-    inline T __zngur_internal_move_from_rust(uint8_t* src) {{
+    inline T __zngur_internal_move_from_rust(uint8_t* src) {
         T t;
         ::rust::__zngur_internal_assume_init(t);
         memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
         return t;
-    }}
+    }
 
     template<typename T>
-    inline void __zngur_internal_check_init(T& t) {{
-    }}
+    inline void __zngur_internal_check_init(T& t) {
+    }
+
+    class ZngurCppOpaqueObject {
+        uint8_t* data;
+        void (*destructor)(uint8_t*);
+
+    public:
+        template<typename T, typename... Args>
+        inline static ZngurCppOpaqueObject build(Args&&... args) {
+            ZngurCppOpaqueObject o;
+            o.data = (uint8_t*) new T(::std::forward<Args>(args)...);
+            o.destructor = [](uint8_t* d) {
+                delete (T*)d;
+            };
+            return o;
+        }
+    };
 
     template<typename T>
     struct Ref;
@@ -1012,6 +1028,7 @@ namespace rust {
         for ty in [8, 16, 32, 64]
             .into_iter()
             .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
+            .chain(Some(format!("::rust::ZngurCppOpaqueObject")))
         {
             writeln!(
                 state,

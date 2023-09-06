@@ -3,6 +3,7 @@ use bitflags::bitflags;
 mod generated;
 
 struct Reader(generated::ZngurCppOpaqueObject);
+struct Way(generated::ZngurCppOpaqueObject);
 
 bitflags! {
     #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -19,8 +20,24 @@ bitflags! {
     }
 }
 
+trait Handler {
+    fn way(&mut self, way: &Way);
+}
+
+struct BendHandler {
+    count: usize,
+}
+
+impl Handler for BendHandler {
+    fn way(&mut self, way: &Way) {
+        self.count += 1;
+        print!("Node {}: ", self.count);
+    }
+}
+
 fn main() {
     let f = Flags::way | Flags::node;
-    let _reader = generated::new_blob_store_client(f);
+    let reader = generated::new_blob_store_client(f);
+    generated::apply(&reader, BendHandler { count: 0 });
     println!("Hello, world! {}", f.bits());
 }

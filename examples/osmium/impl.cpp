@@ -5,15 +5,32 @@
 #include <osmium/io/gzip_compression.hpp>
 #include <osmium/io/xml_input.hpp>
 #include <osmium/osm/entity_bits.hpp>
+#include <osmium/osm/way.hpp>
 #include <osmium/visitor.hpp>
 
 using namespace rust::crate;
 using namespace std;
 
 Reader rust::exported_functions::new_blob_store_client(Flags f) {
-  osmium::io::Reader reader{
-      "map.osm", static_cast<osmium::osm_entity_bits::type>(f.bits())};
-  cout << "hello world " << reader.file_size() << endl;
-  Reader o(6);
+  Reader o(rust::ZngurCppOpaqueObject::build<osmium::io::Reader>(
+      "map.osm", static_cast<osmium::osm_entity_bits::type>(f.bits())));
   return o;
+}
+
+class RustHandler : public osmium::handler::Handler {
+  ::rust::crate::BendHandler inner;
+
+  void way(const osmium::Way &way) {
+    rust::crate::Way rusty_way;
+    // rust::ZngurCppOpaqueObject::build<osmium::Way>(way));
+    inner.way(rusty_way);
+  }
+};
+
+::rust::Unit
+rust::exported_functions::apply(::rust::Ref<::rust::crate::Reader> reader,
+                                ::rust::crate::BendHandler handler) {
+  std::cout << "hello" << std::endl;
+  //   osmium::apply(reader, handler);
+  return {};
 }

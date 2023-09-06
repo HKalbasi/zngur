@@ -5,7 +5,7 @@ use chumsky::prelude::*;
 use iter_tools::{Either, Itertools};
 
 use zngur_def::{
-    Mutability, RustPathAndGenerics, RustTrait, RustType, ScalarRustType, ZngurConstructor,
+    Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType, ZngurConstructor,
     ZngurExternCppFn, ZngurFile, ZngurFn, ZngurMethod, ZngurMethodReceiver, ZngurTrait, ZngurType,
     ZngurWellknownTrait,
 };
@@ -217,7 +217,7 @@ impl ParsedItem<'_> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedRustType<'a> {
-    Scalar(ScalarRustType),
+    Primitive(PrimitiveRustType),
     Ref(Mutability, Box<ParsedRustType<'a>>),
     Raw(Mutability, Box<ParsedRustType<'a>>),
     Boxed(Box<ParsedRustType<'a>>),
@@ -230,7 +230,7 @@ enum ParsedRustType<'a> {
 impl ParsedRustType<'_> {
     fn to_zngur(self, base: &[String]) -> RustType {
         match self {
-            ParsedRustType::Scalar(s) => RustType::Scalar(s),
+            ParsedRustType::Primitive(s) => RustType::Primitive(s),
             ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(base))),
@@ -502,11 +502,12 @@ fn rust_type<'a>(
     };
 
     let scalar = select! {
-        Token::Ident("bool") => ScalarRustType::Bool,
-        Token::Ident("usize") => ScalarRustType::Usize,
-        Token::Ident(c) if as_scalar(c, 'u').is_some() => ScalarRustType::Uint(as_scalar(c, 'u').unwrap()),
-        Token::Ident(c) if as_scalar(c, 'i').is_some() => ScalarRustType::Int(as_scalar(c, 'i').unwrap()),
-    }.map(ParsedRustType::Scalar);
+        Token::Ident("bool") => PrimitiveRustType::Bool,
+        Token::Ident("ZngurCppOpaqueObject") => PrimitiveRustType::ZngurCppOpaqueObject,
+        Token::Ident("usize") => PrimitiveRustType::Usize,
+        Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
+        Token::Ident(c) if as_scalar(c, 'i').is_some() => PrimitiveRustType::Int(as_scalar(c, 'i').unwrap()),
+    }.map(ParsedRustType::Primitive);
 
     recursive(|parser| {
         let pg = rust_path_and_generics(parser.clone());

@@ -8,6 +8,18 @@ type crate::Reader {
     constructor(ZngurCppOpaqueObject);
 }
 
+type crate::Way {
+    properties(size = 16, align = 8);
+
+    constructor(ZngurCppOpaqueObject);
+}
+
+type crate::BendHandler {
+    properties(size = 8, align = 8);
+
+    fn way(&mut self, &crate::Way) use crate::Handler;
+}
+
 type crate::Flags {
     properties(size = 1, align = 1);
 
@@ -16,4 +28,5 @@ type crate::Flags {
 
 extern "C++" {
     fn new_blob_store_client(crate::Flags) -> crate::Reader;
+    fn apply(&crate::Reader, crate::BendHandler);
 }

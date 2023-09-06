@@ -62,11 +62,14 @@ impl IntoCpp for RustType {
     fn into_cpp(&self) -> CppType {
         fn for_builtin(this: &RustType) -> Option<CppType> {
             match this {
-                RustType::Scalar(s) => match s {
-                    ScalarRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
-                    ScalarRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
-                    ScalarRustType::Usize => Some(CppType::from("size_t")),
-                    ScalarRustType::Bool => None,
+                RustType::Primitive(s) => match s {
+                    PrimitiveRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
+                    PrimitiveRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
+                    PrimitiveRustType::Usize => Some(CppType::from("size_t")),
+                    PrimitiveRustType::Bool => None,
+                    PrimitiveRustType::ZngurCppOpaqueObject => {
+                        Some(CppType::from("rust::ZngurCppOpaqueObject"))
+                    }
                 },
                 RustType::Raw(_, t) => Some(CppType::from(&*format!(
                     "{}*",
@@ -79,8 +82,8 @@ impl IntoCpp for RustType {
             return builtin;
         }
         match self {
-            RustType::Scalar(s) => match s {
-                ScalarRustType::Bool => CppType::from("rust::Bool"),
+            RustType::Primitive(s) => match s {
+                PrimitiveRustType::Bool => CppType::from("rust::Bool"),
                 _ => unreachable!(),
             },
             RustType::Boxed(t) => CppType {
@@ -447,7 +450,11 @@ pub extern "C" fn {mangled_name}("#
         }
         wln!(self, "o: *mut u8) {{ unsafe {{");
         if let Some(use_path) = use_path {
-            wln!(self, "    use ::{};", use_path.iter().join("::"));
+            if use_path.first().is_some_and(|x| x == "crate") {
+                wln!(self, "    use {};", use_path.iter().join("::"));
+            } else {
+                wln!(self, "    use ::{};", use_path.iter().join("::"));
+            }
         }
         w!(
             self,
