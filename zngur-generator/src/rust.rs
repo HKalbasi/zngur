@@ -132,7 +132,7 @@ impl Default for RustFile {
             r#"
 #[allow(dead_code)]
 mod zngur_types {
-    pub struct ZngurCpp
+    pub struct ZngurCppOpaqueBorrowedObject(());
 
     #[repr(C)]
     pub struct ZngurCppOpaqueOwnedObject {

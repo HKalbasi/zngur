@@ -145,6 +145,7 @@ impl ZngurGenerator {
                     let rust_link_name = rust_file.add_cpp_value_bridge(&ty_def.ty, &field);
                     (rust_link_name, cpp_type)
                 }),
+                cpp_ref: ty_def.cpp_ref,
                 from_trait: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
                         match tr {

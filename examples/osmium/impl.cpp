@@ -21,9 +21,8 @@ class RustHandler : public osmium::handler::Handler {
   ::rust::crate::BendHandler inner;
 
 public:
-  void way(const osmium::Way &way) {
-    rust::crate::Way rusty_way;
-    // rust::ZngurCppOpaqueOwnedObject::build<osmium::Way>(way));
+  void way(osmium::Way &way) {
+    auto rusty_way = rust::Ref<rust::crate::Way>::build(way);
     inner.way(rusty_way);
   }
 

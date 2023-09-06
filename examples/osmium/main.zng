@@ -13,7 +13,7 @@ type crate::Reader {
 type crate::Way {
     properties(size = 16, align = 8);
 
-    constructor(ZngurCppOpaqueOwnedObject);
+    #cpp_ref "::osmium::Way";
 }
 
 type crate::BendHandler {

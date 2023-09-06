@@ -71,6 +71,7 @@ pub struct ZngurType {
     pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
     pub constructors: Vec<ZngurConstructor>,
     pub cpp_value: Option<(String, String)>,
+    pub cpp_ref: Option<String>,
 }
 
 pub struct ZngurTrait {

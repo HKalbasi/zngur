@@ -87,6 +87,9 @@ enum ParsedTypeItem<'a> {
         field: &'a str,
         cpp_type: &'a str,
     },
+    CppRef {
+        cpp_type: &'a str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -131,6 +134,7 @@ impl ParsedItem<'_> {
                 let mut align = 0;
                 let mut is_copy = false;
                 let mut cpp_value = None;
+                let mut cpp_ref = None;
                 for item in items {
                     match item {
                         ParsedTypeItem::Properties(p) => {
@@ -166,10 +170,13 @@ impl ParsedItem<'_> {
                             })
                         }
                         ParsedTypeItem::Method(m, u) => {
-                            methods.push((m.to_zngur(base), u.map(|x| x.to_zngur(base))))
+                            methods.push((m.to_zngur(base), u.map(|x| x.to_zngur(base))));
                         }
                         ParsedTypeItem::CppValue { field, cpp_type } => {
-                            cpp_value = Some((field.to_owned(), cpp_type.to_owned()))
+                            cpp_value = Some((field.to_owned(), cpp_type.to_owned()));
+                        }
+                        ParsedTypeItem::CppRef { cpp_type } => {
+                            cpp_ref = Some(cpp_type.to_owned());
                         }
                     }
                 }
@@ -186,6 +193,7 @@ impl ParsedItem<'_> {
                     wellknown_traits,
                     constructors,
                     cpp_value,
+                    cpp_ref,
                 });
             }
             ParsedItem::Trait { tr, methods } => {
@@ -768,10 +776,17 @@ fn type_item<'a>(
                 field: x.0,
                 cpp_type: x.1,
             });
+        let cpp_ref = just(Token::Sharp)
+            .then(just(Token::Ident("cpp_ref")))
+            .ignore_then(select! {
+                Token::Str(c) => c,
+            })
+            .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
         properties
             .or(traits)
             .or(constructor)
             .or(cpp_value)
+            .or(cpp_ref)
             .or(method()
                 .then(
                     just(Token::KwUse)

@@ -341,6 +341,7 @@ pub struct CppTypeDefinition {
     pub from_trait: Option<CppTraitDefinition>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
     pub cpp_value: Option<(String, String)>,
+    pub cpp_ref: Option<String>,
 }
 
 impl Default for CppTypeDefinition {
@@ -355,6 +356,7 @@ impl Default for CppTypeDefinition {
             wellknown_traits: vec![],
             from_trait: None,
             cpp_value: None,
+            cpp_ref: None,
         }
     }
 }
@@ -405,6 +407,24 @@ private:
                 r#"
                 inline {cpp_ty}& cpp() {{
                     return (*{rust_link_name}((uint8_t*)data)).as_cpp<{cpp_ty}>();
+                }}"#
+            )?;
+        }
+        if let Some(cpp_ty) = &self.cpp_ref {
+            writeln!(
+                state,
+                r#"
+                inline {cpp_ty}& cpp() {{
+                    return *({cpp_ty}*)data;
+                }}"#
+            )?;
+            writeln!(
+                state,
+                r#"
+                inline static Ref build({cpp_ty}& t) {{
+                    Ref o;
+                    o.data = (size_t)&t;
+                    return o;
                 }}"#
             )?;
         }
