@@ -20,17 +20,20 @@ Reader rust::exported_functions::new_blob_store_client(Flags f) {
 class RustHandler : public osmium::handler::Handler {
   ::rust::crate::BendHandler inner;
 
+public:
   void way(const osmium::Way &way) {
     rust::crate::Way rusty_way;
     // rust::ZngurCppOpaqueObject::build<osmium::Way>(way));
     inner.way(rusty_way);
   }
+
+  RustHandler(BendHandler &&inner) : inner(std::move(inner)) {}
 };
 
 ::rust::Unit
 rust::exported_functions::apply(::rust::Ref<::rust::crate::Reader> reader,
                                 ::rust::crate::BendHandler handler) {
   std::cout << "hello" << std::endl;
-  //   osmium::apply(reader, handler);
+  osmium::apply(reader.cpp(), RustHandler(std::move(handler)));
   return {};
 }

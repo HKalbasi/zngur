@@ -31,6 +31,16 @@ impl ZngurGenerator {
     pub fn render(self) -> (String, String, Option<String>) {
         let zng = self.0;
         let mut cpp_file = CppFile::default();
+        cpp_file.additional_includes = r#"
+#include <osmium/handler/node_locations_for_ways.hpp>
+#include <osmium/index/map/sparse_mem_array.hpp>
+#include <osmium/io/gzip_compression.hpp>
+#include <osmium/io/xml_input.hpp>
+#include <osmium/osm/entity_bits.hpp>
+#include <osmium/osm/way.hpp>
+#include <osmium/visitor.hpp>
+        "#
+        .to_owned();
         let mut rust_file = RustFile::default();
         for ty_def in zng.types {
             let is_unsized = ty_def
@@ -131,6 +141,10 @@ impl ZngurGenerator {
                 constructors,
                 methods: cpp_methods,
                 wellknown_traits,
+                cpp_value: ty_def.cpp_value.map(|(field, cpp_type)| {
+                    let rust_link_name = rust_file.add_cpp_value_bridge(&ty_def.ty, &field);
+                    (rust_link_name, cpp_type)
+                }),
                 from_trait: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
                         match tr {

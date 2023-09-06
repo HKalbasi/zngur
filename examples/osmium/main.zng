@@ -6,6 +6,8 @@ type crate::Reader {
     properties(size = 16, align = 8);
 
     constructor(ZngurCppOpaqueObject);
+
+    #cpp_value "0" "::osmium::io::Reader";
 }
 
 type crate::Way {

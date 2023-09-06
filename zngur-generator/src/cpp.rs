@@ -340,6 +340,7 @@ pub struct CppTypeDefinition {
     pub constructors: Vec<CppFnSig>,
     pub from_trait: Option<CppTraitDefinition>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
+    pub cpp_value: Option<(String, String)>,
 }
 
 impl Default for CppTypeDefinition {
@@ -353,6 +354,7 @@ impl Default for CppTypeDefinition {
             constructors: vec![],
             wellknown_traits: vec![],
             from_trait: None,
+            cpp_value: None,
         }
     }
 }
@@ -397,6 +399,15 @@ private:
             )?;
         }
         writeln!(state, "public:")?;
+        if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
+            writeln!(
+                state,
+                r#"
+                inline {cpp_ty}& cpp() {{
+                    return (*{rust_link_name}((uint8_t*)data)).as_cpp<{cpp_ty}>();
+                }}"#
+            )?;
+        }
         for method in &self.methods {
             if method.kind == CppMethodKind::Lvalue {
                 let CppFnSig {
@@ -657,6 +668,15 @@ private:
                     )?;
                 }
             }
+            if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
+                writeln!(
+                    state,
+                    r#"
+                    inline {cpp_ty}& cpp() {{
+                        return (*{rust_link_name}(::rust::__zngur_internal_data_ptr(*this))).as_cpp<{cpp_ty}>();
+                    }}"#
+                )?;
+            }
             for method in &self.methods {
                 write!(state, "static ")?;
                 method.sig.emit_cpp_header(state, &method.name)?;
@@ -886,6 +906,13 @@ namespace rust {{
         for c in &self.constructors {
             c.emit_rust_link_decl(state)?;
         }
+        if let Some(cpp_value) = &self.cpp_value {
+            writeln!(
+                state,
+                "::rust::ZngurCppOpaqueObject* {}(uint8_t*);",
+                cpp_value.0
+            )?;
+        }
         for tr in &self.wellknown_traits {
             match tr {
                 ZngurWellknownTraitData::Debug {
@@ -950,10 +977,12 @@ pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
+    pub additional_includes: String,
 }
 
 impl CppFile {
     fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
+        state.text += &self.additional_includes;
         state.text += r#"
 #include <cstddef>
 #include <cstdint>
@@ -1013,6 +1042,11 @@ namespace rust {
                 delete (T*)d;
             };
             return o;
+        }
+
+        template<typename T>
+        inline T& as_cpp() {
+            return *(T *)data;
         }
     };
 

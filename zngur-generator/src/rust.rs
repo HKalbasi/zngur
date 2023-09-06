@@ -431,6 +431,19 @@ pub(crate) fn {rust_name}("#
         mangled_name
     }
 
+    pub fn add_cpp_value_bridge(&mut self, ty: &RustType, field: &str) -> String {
+        let mangled_name = mangle_name(&format!("{ty}_cpp_value_{field}"));
+        w!(
+            self,
+            r#"
+#[no_mangle]
+pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueObject {{
+    unsafe {{ &mut (*(d as *mut {ty})).{field} }}
+}}"#
+        );
+        mangled_name
+    }
+
     pub fn add_function(
         &mut self,
         rust_name: &str,

@@ -83,6 +83,10 @@ enum ParsedTypeItem<'a> {
         args: ParsedConstructorArgs<'a>,
     },
     Method(ParsedMethod<'a>, Option<ParsedPath<'a>>),
+    CppValue {
+        field: &'a str,
+        cpp_type: &'a str,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,6 +130,7 @@ impl ParsedItem<'_> {
                 let mut size = 0;
                 let mut align = 0;
                 let mut is_copy = false;
+                let mut cpp_value = None;
                 for item in items {
                     match item {
                         ParsedTypeItem::Properties(p) => {
@@ -163,6 +168,9 @@ impl ParsedItem<'_> {
                         ParsedTypeItem::Method(m, u) => {
                             methods.push((m.to_zngur(base), u.map(|x| x.to_zngur(base))))
                         }
+                        ParsedTypeItem::CppValue { field, cpp_type } => {
+                            cpp_value = Some((field.to_owned(), cpp_type.to_owned()))
+                        }
                     }
                 }
                 let is_unsized = wellknown_traits.contains(&ZngurWellknownTrait::Unsized);
@@ -177,6 +185,7 @@ impl ParsedItem<'_> {
                     methods,
                     wellknown_traits,
                     constructors,
+                    cpp_value,
                 });
             }
             ParsedItem::Trait { tr, methods } => {
@@ -373,6 +382,7 @@ enum Token<'a> {
     BraceClose,
     And,
     Star,
+    Sharp,
     Plus,
     Eq,
     Question,
@@ -426,6 +436,7 @@ impl Display for Token<'_> {
             Token::BraceClose => write!(f, "}}"),
             Token::And => write!(f, "&"),
             Token::Star => write!(f, "*"),
+            Token::Sharp => write!(f, "#"),
             Token::Plus => write!(f, "+"),
             Token::Eq => write!(f, "="),
             Token::Question => write!(f, "?"),
@@ -463,6 +474,7 @@ fn lexer<'src>(
         just("}").to(Token::BraceClose),
         just("&").to(Token::And),
         just("*").to(Token::Star),
+        just("#").to(Token::Sharp),
         just("+").to(Token::Plus),
         just("=").to(Token::Eq),
         just("?").to(Token::Question),
@@ -744,9 +756,22 @@ fn type_item<'a>(
             .then(constructor_args)
             .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
         );
+        let cpp_value = just(Token::Sharp)
+            .then(just(Token::Ident("cpp_value")))
+            .ignore_then(select! {
+                Token::Str(c) => c,
+            })
+            .then(select! {
+                Token::Str(c) => c,
+            })
+            .map(|x| ParsedTypeItem::CppValue {
+                field: x.0,
+                cpp_type: x.1,
+            });
         properties
             .or(traits)
             .or(constructor)
+            .or(cpp_value)
             .or(method()
                 .then(
                     just(Token::KwUse)
