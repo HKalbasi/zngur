@@ -38,6 +38,12 @@ pub struct ZngurExternCppFn {
     pub output: RustType,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ZngurExternCppImpl {
+    pub ty: RustType,
+    pub methods: Vec<ZngurMethod>,
+}
+
 pub struct ZngurConstructor {
     pub name: Option<String>,
     pub inputs: Vec<(String, RustType)>,
@@ -85,6 +91,8 @@ pub struct ZngurFile {
     pub traits: HashMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
+    pub extern_cpp_impls: Vec<ZngurExternCppImpl>,
+    pub additional_includes: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -111,8 +119,10 @@ impl RustTrait {
 pub enum PrimitiveRustType {
     Uint(u32),
     Int(u32),
+    Float(u32),
     Usize,
     Bool,
+    Str,
     ZngurCppOpaqueOwnedObject,
 }
 
@@ -192,8 +202,10 @@ impl Display for RustType {
             RustType::Primitive(s) => match s {
                 PrimitiveRustType::Uint(s) => write!(f, "u{s}"),
                 PrimitiveRustType::Int(s) => write!(f, "i{s}"),
+                PrimitiveRustType::Float(s) => write!(f, "f{s}"),
                 PrimitiveRustType::Usize => write!(f, "usize"),
                 PrimitiveRustType::Bool => write!(f, "bool"),
+                PrimitiveRustType::Str => write!(f, "str"),
                 PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
                     write!(f, "ZngurCppOpaqueOwnedObject")
                 }

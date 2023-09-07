@@ -1,5 +1,36 @@
+#cpp_additional_includes "
+#include <osmium/handler/node_locations_for_ways.hpp>
+#include <osmium/index/map/sparse_mem_array.hpp>
+#include <osmium/io/gzip_compression.hpp>
+#include <osmium/io/xml_input.hpp>
+#include <osmium/osm/entity_bits.hpp>
+#include <osmium/osm/way.hpp>
+#include <osmium/visitor.hpp>"
+
 type () {
     properties(size = 0, align = 1, is_copy = 1);
+}
+
+type str {
+    properties(size = 0, align = 1, is_copy = 1);
+    wellknown_traits(?Sized);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
+}
+
+type ::std::option::Option<&str> {
+    properties(size = 16, align = 8);
+
+    constructor None;
+    constructor Some(&str);
+}
+
+type ::std::string::String {
+    properties(size = 24, align = 8);
+
+    fn new() -> ::std::string::String;
+    fn push_str(&mut self, &str);
 }
 
 type crate::Reader {
@@ -11,9 +42,27 @@ type crate::Reader {
 }
 
 type crate::Way {
-    properties(size = 16, align = 8);
+    properties(size = 0, align = 1);
 
     #cpp_ref "::osmium::Way";
+}
+
+type crate::WayNodeList {
+    properties(size = 0, align = 1);
+
+    #cpp_ref "::osmium::WayNodeList";
+}
+
+type crate::TagList {
+    properties(size = 0, align = 1);
+
+    #cpp_ref "::osmium::TagList";
+}
+
+type crate::Node {
+    properties(size = 0, align = 1);
+
+    #cpp_ref "::osmium::NodeRef";
 }
 
 type crate::BendHandler {
@@ -31,4 +80,23 @@ type crate::Flags {
 extern "C++" {
     fn new_blob_store_client(crate::Flags) -> crate::Reader;
     fn apply(&crate::Reader, crate::BendHandler);
+
+    impl crate::Way {
+        fn nodes(&self) -> &crate::WayNodeList;
+        fn tags(&self) -> &crate::TagList;
+    }
+
+    impl crate::TagList {
+        fn get_value_by_key(&self, &str) -> ::std::option::Option<&str>;
+    }
+
+    impl crate::WayNodeList {
+        fn len(&self) -> usize;
+        fn get(&self, usize) -> &crate::Node;
+    }
+
+    impl crate::Node {
+        fn distance(&self, &crate::Node) -> f64;
+        fn href(&self) -> ::std::string::String;
+    }
 }

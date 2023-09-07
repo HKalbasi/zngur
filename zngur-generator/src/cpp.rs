@@ -247,6 +247,11 @@ pub struct CppExportedFnDefinition {
     pub sig: CppFnSig,
 }
 
+pub struct CppExportedImplDefinition {
+    pub ty: CppType,
+    pub methods: Vec<(String, CppFnSig)>,
+}
+
 impl CppFnDefinition {
     fn emit_cpp_def(&self, state: &mut State) -> std::fmt::Result {
         self.name.emit_in_namespace(state, |state| {
@@ -421,7 +426,7 @@ private:
             writeln!(
                 state,
                 r#"
-                inline static Ref build({cpp_ty}& t) {{
+                inline static Ref build(const {cpp_ty}& t) {{
                     Ref o;
                     o.data = (size_t)&t;
                     return o;
@@ -448,7 +453,23 @@ private:
                 )?;
             }
         }
-        writeln!(state, "}};")?;
+        if self.ty.path.to_string() == "::rust::Str" {
+            writeln!(
+                state,
+                r#"
+    friend rust::Str;
+}};
+inline ::rust::Ref<::rust::Str> rust::Str::from_char_star(const char* s) {{
+    ::rust::Ref<::rust::Str> o;
+    o.data[0] = (size_t)s;
+    o.data[1] = strlen(s);
+    return o;
+}}
+"#,
+            )?;
+        } else {
+            writeln!(state, "}};")?;
+        }
         writeln!(
             state,
             r#"
@@ -527,6 +548,14 @@ public:
     "#,
                     ty = self.ty.path.name(),
                 )?;
+                if self.ty.path.to_string() == "::rust::Str" {
+                    writeln!(
+                        state,
+                        r#"
+    static inline ::rust::Ref<::rust::Str> from_char_star(const char* s);
+    "#,
+                    )?;
+                }
             } else {
                 writeln!(
                     state,
@@ -835,7 +864,7 @@ namespace rust {{
             let fn_name = my_name.to_owned() + "::" + &self.ty.path.0.last().unwrap();
             let CppFnSig {
                 inputs,
-                output,
+                output: _,
                 rust_link_name,
             } = c;
             writeln!(
@@ -997,6 +1026,7 @@ pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
+    pub exported_impls: Vec<CppExportedImplDefinition>,
     pub additional_includes: String,
 }
 
@@ -1011,6 +1041,7 @@ impl CppFile {
 #include <array>
 #include <iostream>
 #include <functional>
+#include <math.h>
 
 #define zngur_dbg(x)                                                           \
   {                                                                            \
@@ -1082,7 +1113,11 @@ namespace rust {
         for ty in [8, 16, 32, 64]
             .into_iter()
             .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
-            .chain(Some(format!("::rust::ZngurCppOpaqueOwnedObject")))
+            .chain([
+                format!("::rust::ZngurCppOpaqueOwnedObject"),
+                format!("::double_t"),
+                format!("::float_t"),
+            ])
         {
             writeln!(
                 state,
@@ -1167,9 +1202,24 @@ namespace rust {
             writeln!(state, ");")?;
             writeln!(state, "}} }}")?;
         }
-        // for fd in &self.trait_defs {
-        //     fd.emit(state)?;
-        // }
+        for imp in &self.exported_impls {
+            writeln!(
+                state,
+                "namespace rust {{ template<> class Impl<{}> {{ public:",
+                imp.ty
+            )?;
+            for (name, sig) in &imp.methods {
+                write!(state, "   static {} {}(", sig.output, name)?;
+                for (n, ty) in sig.inputs.iter().enumerate() {
+                    if n != 0 {
+                        write!(state, ", ")?;
+                    }
+                    write!(state, "{ty} i{n}")?;
+                }
+                writeln!(state, ");")?;
+            }
+            writeln!(state, "}}; }}")?;
+        }
         Ok(())
     }
 
@@ -1196,6 +1246,31 @@ namespace rust {
             )?;
             writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
             writeln!(state, "}}")?;
+            writeln!(state, "}}")?;
+        }
+        for imp in &self.exported_impls {
+            *is_really_needed = true;
+            writeln!(state, "extern \"C\" {{")?;
+            for (name, sig) in &imp.methods {
+                sig.emit_rust_link(state)?;
+                writeln!(state, "{{")?;
+                writeln!(
+                    state,
+                    "   {} oo = ::rust::Impl<{}>::{}({});",
+                    sig.output,
+                    imp.ty,
+                    name,
+                    sig.inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, ty)| {
+                            format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                        })
+                        .join(", "),
+                )?;
+                writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
+                writeln!(state, "}}")?;
+            }
             writeln!(state, "}}")?;
         }
         Ok(())

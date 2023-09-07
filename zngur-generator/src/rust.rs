@@ -65,8 +65,11 @@ impl IntoCpp for RustType {
                 RustType::Primitive(s) => match s {
                     PrimitiveRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
                     PrimitiveRustType::Int(s) => Some(CppType::from(&*format!("int{s}_t"))),
+                    PrimitiveRustType::Float(32) => Some(CppType::from("float_t")),
+                    PrimitiveRustType::Float(64) => Some(CppType::from("double_t")),
+                    PrimitiveRustType::Float(_) => unreachable!(),
                     PrimitiveRustType::Usize => Some(CppType::from("size_t")),
-                    PrimitiveRustType::Bool => None,
+                    PrimitiveRustType::Bool | PrimitiveRustType::Str => None,
                     PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
                         Some(CppType::from("rust::ZngurCppOpaqueOwnedObject"))
                     }
@@ -84,6 +87,7 @@ impl IntoCpp for RustType {
         match self {
             RustType::Primitive(s) => match s {
                 PrimitiveRustType::Bool => CppType::from("rust::Bool"),
+                PrimitiveRustType::Str => CppType::from("rust::Str"),
                 _ => unreachable!(),
             },
             RustType::Boxed(t) => CppType {
@@ -161,6 +165,7 @@ mod zngur_types {
 }
 
 pub use zngur_types::ZngurCppOpaqueOwnedObject;
+pub use zngur_types::ZngurCppOpaqueBorrowedObject;
 "#
             .to_owned(),
         )
@@ -401,6 +406,60 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             constructor,
             match_check,
         }
+    }
+
+    pub fn add_extern_cpp_impl(
+        &mut self,
+        owner: &RustType,
+        methods: &[ZngurMethod],
+    ) -> Vec<String> {
+        let mut mangled_names = vec![];
+        w!(self, r#"extern "C" {{"#);
+        for method in methods {
+            let mn = mangle_name(&format!("{}_extern_method_{}", owner, method.name));
+            w!(
+                self,
+                r#"
+    fn {mn}("#
+            );
+            let input_offset = if method.receiver == ZngurMethodReceiver::Static {
+                0
+            } else {
+                1
+            };
+            for n in 0..method.inputs.len() + input_offset {
+                w!(self, "i{n}: *mut u8, ");
+            }
+            wln!(self, r#"o: *mut u8);"#);
+            mangled_names.push(mn);
+        }
+        w!(self, r#"}}"#);
+        w!(self, r#"impl {owner} {{"#);
+        for (mn, method) in mangled_names.iter().zip(methods) {
+            w!(self, r#"pub fn {}("#, method.name);
+            match method.receiver {
+                ZngurMethodReceiver::Static => (),
+                ZngurMethodReceiver::Ref(Mutability::Mut) => w!(self, "&mut self, "),
+                ZngurMethodReceiver::Ref(Mutability::Not) => w!(self, "&self, "),
+                ZngurMethodReceiver::Move => w!(self, "self, "),
+            }
+            let input_offset = if method.receiver == ZngurMethodReceiver::Static {
+                0
+            } else {
+                1
+            };
+            for (ty, n) in method.inputs.iter().zip(input_offset..) {
+                w!(self, "i{n}: {ty}, ");
+            }
+            wln!(self, ") -> {} {{ unsafe {{", method.output);
+            if method.receiver != ZngurMethodReceiver::Static {
+                wln!(self, "let i0 = self;");
+            }
+            self.call_cpp_function(&format!("{mn}("), method.inputs.len() + input_offset);
+            wln!(self, "}} }}");
+        }
+        w!(self, r#"}}"#);
+        mangled_names
     }
 
     pub fn add_extern_cpp_function(

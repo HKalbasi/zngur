@@ -6,8 +6,8 @@ use iter_tools::{Either, Itertools};
 
 use zngur_def::{
     Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType, ZngurConstructor,
-    ZngurExternCppFn, ZngurFile, ZngurFn, ZngurMethod, ZngurMethodReceiver, ZngurTrait, ZngurType,
-    ZngurWellknownTrait,
+    ZngurExternCppFn, ZngurExternCppImpl, ZngurFile, ZngurFn, ZngurMethod, ZngurMethodReceiver,
+    ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -52,6 +52,7 @@ impl ParsedPath<'_> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedItem<'a> {
+    CppAdditionalInclude(&'a str),
     Mod {
         path: ParsedPath<'a>,
         items: Vec<ParsedItem<'a>>,
@@ -65,7 +66,16 @@ enum ParsedItem<'a> {
         methods: Vec<ParsedMethod<'a>>,
     },
     Fn(ParsedMethod<'a>),
-    ExternCpp(Vec<ParsedMethod<'a>>),
+    ExternCpp(Vec<ParsedExternCppItem<'a>>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ParsedExternCppItem<'a> {
+    Function(ParsedMethod<'a>),
+    Impl {
+        ty: ParsedRustType<'a>,
+        methods: Vec<ParsedMethod<'a>>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -218,15 +228,28 @@ impl ParsedItem<'_> {
                     output: method.output,
                 })
             }
-            ParsedItem::ExternCpp(methods) => {
-                for method in methods {
-                    let method = method.to_zngur(base);
-                    r.extern_cpp_funcs.push(ZngurExternCppFn {
-                        name: method.name.to_string(),
-                        inputs: method.inputs,
-                        output: method.output,
-                    });
+            ParsedItem::ExternCpp(items) => {
+                for item in items {
+                    match item {
+                        ParsedExternCppItem::Function(method) => {
+                            let method = method.to_zngur(base);
+                            r.extern_cpp_funcs.push(ZngurExternCppFn {
+                                name: method.name.to_string(),
+                                inputs: method.inputs,
+                                output: method.output,
+                            });
+                        }
+                        ParsedExternCppItem::Impl { ty, methods } => {
+                            r.extern_cpp_impls.push(ZngurExternCppImpl {
+                                ty: ty.to_zngur(base),
+                                methods: methods.into_iter().map(|x| x.to_zngur(base)).collect(),
+                            });
+                        }
+                    }
                 }
+            }
+            ParsedItem::CppAdditionalInclude(s) => {
+                r.additional_includes += s;
             }
         }
     }
@@ -406,6 +429,7 @@ enum Token<'a> {
     KwMut,
     KwConst,
     KwExtern,
+    KwImpl,
     Ident(&'a str),
     Str(&'a str),
     Number(usize),
@@ -424,6 +448,7 @@ impl<'a> Token<'a> {
             "const" => Token::KwConst,
             "use" => Token::KwUse,
             "extern" => Token::KwExtern,
+            "impl" => Token::KwImpl,
             x => Token::Ident(x),
         }
     }
@@ -460,6 +485,7 @@ impl Display for Token<'_> {
             Token::KwMut => write!(f, "mut"),
             Token::KwConst => write!(f, "const"),
             Token::KwExtern => write!(f, "extern"),
+            Token::KwImpl => write!(f, "impl"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -523,10 +549,12 @@ fn rust_type<'a>(
 
     let scalar = select! {
         Token::Ident("bool") => PrimitiveRustType::Bool,
+        Token::Ident("str") => PrimitiveRustType::Str,
         Token::Ident("ZngurCppOpaqueOwnedObject") => PrimitiveRustType::ZngurCppOpaqueOwnedObject,
         Token::Ident("usize") => PrimitiveRustType::Usize,
         Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
         Token::Ident(c) if as_scalar(c, 'i').is_some() => PrimitiveRustType::Int(as_scalar(c, 'i').unwrap()),
+        Token::Ident(c) if as_scalar(c, 'f').is_some() => PrimitiveRustType::Float(as_scalar(c, 'f').unwrap()),
     }.map(ParsedRustType::Primitive);
 
     recursive(|parser| {
@@ -831,14 +859,37 @@ fn fn_item<'a>(
         .map(ParsedItem::Fn)
 }
 
+fn additional_include_item<'a>(
+) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+    just(Token::Sharp)
+        .then(just(Token::Ident("cpp_additional_includes")))
+        .ignore_then(select! {
+            Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+        })
+}
+
 fn extern_cpp_item<'a>(
 ) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
+    let function = method()
+        .then_ignore(just(Token::Semicolon))
+        .map(ParsedExternCppItem::Function);
+    let impl_block = just(Token::KwImpl)
+        .ignore_then(rust_type())
+        .then(
+            method()
+                .then_ignore(just(Token::Semicolon))
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+        )
+        .map(|(ty, methods)| ParsedExternCppItem::Impl { ty, methods });
     just(Token::KwExtern)
         .then(just(Token::Str("C++")))
         .ignore_then(
-            method()
-                .then_ignore(just(Token::Semicolon))
+            function
+                .or(impl_block)
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
@@ -862,6 +913,7 @@ fn item<'a>(
             .or(trait_item())
             .or(extern_cpp_item())
             .or(fn_item())
+            .or(additional_include_item())
     })
 }
 

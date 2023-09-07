@@ -1,5 +1,6 @@
 use cpp::cpp_handle_keyword;
 use cpp::CppExportedFnDefinition;
+use cpp::CppExportedImplDefinition;
 use cpp::CppFile;
 use cpp::CppFnDefinition;
 use cpp::CppFnSig;
@@ -31,16 +32,7 @@ impl ZngurGenerator {
     pub fn render(self) -> (String, String, Option<String>) {
         let zng = self.0;
         let mut cpp_file = CppFile::default();
-        cpp_file.additional_includes = r#"
-#include <osmium/handler/node_locations_for_ways.hpp>
-#include <osmium/index/map/sparse_mem_array.hpp>
-#include <osmium/io/gzip_compression.hpp>
-#include <osmium/io/xml_input.hpp>
-#include <osmium/osm/entity_bits.hpp>
-#include <osmium/osm/way.hpp>
-#include <osmium/visitor.hpp>
-        "#
-        .to_owned();
+        cpp_file.additional_includes = zng.additional_includes;
         let mut rust_file = RustFile::default();
         for ty_def in zng.types {
             let is_unsized = ty_def
@@ -96,18 +88,7 @@ impl ZngurGenerator {
                 wellknown_traits.push(data);
             }
             for (method, use_path) in ty_def.methods {
-                let receiver_type = match method.receiver {
-                    ZngurMethodReceiver::Static => None,
-                    ZngurMethodReceiver::Ref(m) => {
-                        Some(RustType::Ref(m, Box::new(ty_def.ty.clone())))
-                    }
-                    ZngurMethodReceiver::Move => Some(ty_def.ty.clone()),
-                };
-                let rusty_inputs = receiver_type
-                    .into_iter()
-                    .chain(method.inputs)
-                    .collect::<Vec<_>>();
-                let inputs = rusty_inputs.iter().map(|x| x.into_cpp()).collect_vec();
+                let (rusty_inputs, inputs) = real_inputs_of_method(&method, &ty_def.ty);
                 let rust_link_name = rust_file.add_function(
                     &format!(
                         "<{}>::{}::<{}>",
@@ -222,7 +203,44 @@ impl ZngurGenerator {
                 },
             });
         }
+        for impl_block in zng.extern_cpp_impls {
+            let rust_link_names =
+                rust_file.add_extern_cpp_impl(&impl_block.ty, &impl_block.methods);
+            cpp_file.exported_impls.push(CppExportedImplDefinition {
+                ty: impl_block.ty.into_cpp(),
+                methods: impl_block
+                    .methods
+                    .iter()
+                    .zip(&rust_link_names)
+                    .map(|(method, link_name)| {
+                        let (_, inputs) = real_inputs_of_method(method, &impl_block.ty);
+                        (
+                            method.name.clone(),
+                            CppFnSig {
+                                rust_link_name: link_name.clone(),
+                                inputs,
+                                output: method.output.into_cpp(),
+                            },
+                        )
+                    })
+                    .collect(),
+            });
+        }
         let (h, cpp) = cpp_file.render();
         (rust_file.0, h, cpp)
     }
+}
+
+fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> (Vec<RustType>, Vec<CppType>) {
+    let receiver_type = match method.receiver {
+        ZngurMethodReceiver::Static => None,
+        ZngurMethodReceiver::Ref(m) => Some(RustType::Ref(m, Box::new(ty.clone()))),
+        ZngurMethodReceiver::Move => Some(ty.clone()),
+    };
+    let rusty_inputs = receiver_type
+        .into_iter()
+        .chain(method.inputs.clone())
+        .collect::<Vec<_>>();
+    let inputs = rusty_inputs.iter().map(|x| x.into_cpp()).collect_vec();
+    (rusty_inputs, inputs)
 }
