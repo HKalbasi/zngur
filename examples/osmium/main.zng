@@ -1,18 +1,20 @@
 #cpp_additional_includes "
-#include <osmium/handler/node_locations_for_ways.hpp>
-#include <osmium/index/map/sparse_mem_array.hpp>
-#include <osmium/io/gzip_compression.hpp>
-#include <osmium/io/xml_input.hpp>
-#include <osmium/osm/entity_bits.hpp>
-#include <osmium/osm/way.hpp>
-#include <osmium/visitor.hpp>"
+    #include <osmium/handler/node_locations_for_ways.hpp>
+    #include <osmium/index/map/sparse_mem_array.hpp>
+    #include <osmium/io/gzip_compression.hpp>
+    #include <osmium/io/xml_input.hpp>
+    #include <osmium/osm/entity_bits.hpp>
+    #include <osmium/osm/way.hpp>
+    #include <osmium/visitor.hpp>
+"
 
 type () {
-    properties(size = 0, align = 1, is_copy = 1);
+    properties(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type str {
-    properties(size = 0, align = 1, is_copy = 1);
+    properties(size = 0, align = 1);
     wellknown_traits(?Sized);
 
     fn as_ptr(&self) -> *const u8;

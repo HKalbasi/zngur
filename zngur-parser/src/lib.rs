@@ -1,4 +1,4 @@
-use std::{fmt::Display, process::exit};
+use std::{fmt::Display, process::exit, sync::Mutex};
 
 use ariadne::{sources, Color, Label, Report, ReportKind};
 use chumsky::prelude::*;
@@ -11,6 +11,12 @@ use zngur_def::{
 };
 
 pub type Span = SimpleSpan<usize>;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Spanned<T> {
+    inner: T,
+    span: Span,
+}
 
 type ParserInput<'a> = chumsky::input::SpannedInput<Token<'a>, Span, &'a [(Token<'a>, Span)]>;
 
@@ -58,7 +64,7 @@ enum ParsedItem<'a> {
         items: Vec<ParsedItem<'a>>,
     },
     Type {
-        ty: ParsedRustType<'a>,
+        ty: Spanned<ParsedRustType<'a>>,
         items: Vec<ParsedTypeItem<'a>>,
     },
     Trait {
@@ -87,7 +93,7 @@ enum ParsedConstructorArgs<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedTypeItem<'a> {
-    Properties(Vec<(&'a str, usize)>),
+    Properties(Vec<(Spanned<&'a str>, usize)>),
     Traits(Vec<ZngurWellknownTrait>),
     Constructor {
         name: Option<&'a str>,
@@ -141,26 +147,18 @@ impl ParsedItem<'_> {
                 let mut methods = vec![];
                 let mut constructors = vec![];
                 let mut wellknown_traits = vec![];
-                let mut size = 0;
-                let mut align = 0;
-                let mut is_copy = false;
+                let mut size = None;
+                let mut align = None;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
                 for item in items {
                     match item {
                         ParsedTypeItem::Properties(p) => {
                             for (key, value) in p {
-                                match key {
-                                    "size" => size = value,
-                                    "align" => align = value,
-                                    "is_copy" => {
-                                        is_copy = match value {
-                                            0 => false,
-                                            1 => true,
-                                            _ => todo!(),
-                                        };
-                                    }
-                                    _ => todo!(),
+                                match key.inner {
+                                    "size" => size = Some(value),
+                                    "align" => align = Some(value),
+                                    _ => create_and_emit_error("Unknown property", key.span),
                                 }
                             }
                         }
@@ -192,14 +190,20 @@ impl ParsedItem<'_> {
                     }
                 }
                 let is_unsized = wellknown_traits.contains(&ZngurWellknownTrait::Unsized);
+                let is_copy = wellknown_traits.contains(&ZngurWellknownTrait::Copy);
                 if !is_copy && !is_unsized {
                     wellknown_traits.push(ZngurWellknownTrait::Drop);
                 }
+                let Some(size) = size else {
+                    create_and_emit_error("Size is not declared for this type", ty.span)
+                };
+                let Some(align) = align else {
+                    create_and_emit_error("Align is not declared for this type", ty.span)
+                };
                 r.types.push(ZngurType {
-                    ty: ty.to_zngur(base),
+                    ty: ty.inner.to_zngur(base),
                     size,
                     align,
-                    is_copy,
                     methods,
                     wellknown_traits,
                     constructors,
@@ -341,6 +345,9 @@ impl ParsedRustPathAndGenerics<'_> {
     }
 }
 
+static LATEST_FILENAME: Mutex<String> = Mutex::new(String::new());
+static LATEST_TEXT: Mutex<String> = Mutex::new(String::new());
+
 impl ParsedZngFile<'_> {
     pub fn parse<T>(
         filename: &str,
@@ -348,26 +355,20 @@ impl ParsedZngFile<'_> {
         then: impl for<'a> Fn(ParsedZngFile<'a>) -> T,
     ) -> T {
         let (tokens, errs) = lexer().parse(text).into_output_errors();
-        let tokens = match tokens {
-            Some(tokens) => tokens,
-            None => {
-                let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-                handle_error(errs, filename, text);
-                exit(0);
-            }
+        let Some(tokens) = tokens else {
+            let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
+            emit_error(errs);
         };
         let (ast, errs) = file_parser()
             .map_with_span(|ast, span| (ast, span))
             .parse(tokens.as_slice().spanned((text.len()..text.len()).into()))
             .into_output_errors();
-        let ast = match ast {
-            Some(x) => x,
-            None => {
-                let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-                handle_error(errs, filename, text);
-                exit(0);
-            }
+        let Some(ast) = ast else {
+            let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
+            emit_error(errs);
         };
+        *LATEST_FILENAME.lock().unwrap() = filename.to_string();
+        *LATEST_TEXT.lock().unwrap() = text.to_string();
         then(ast.0)
     }
 
@@ -380,7 +381,13 @@ impl ParsedZngFile<'_> {
     }
 }
 
-fn handle_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>, filename: &str, text: &str) {
+fn create_and_emit_error<'a>(error: &str, span: Span) -> ! {
+    emit_error([Rich::custom(span, error)].into_iter())
+}
+
+fn emit_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
+    let filename = &**LATEST_FILENAME.lock().unwrap();
+    let text = &**LATEST_TEXT.lock().unwrap();
     for e in errs {
         Report::build(ReportKind::Error, filename, e.span().start)
             .with_message(e.to_string())
@@ -687,6 +694,12 @@ fn fn_args<'a>(
         )
 }
 
+fn spanned<'a, T>(
+    parser: impl Parser<'a, ParserInput<'a>, T, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone,
+) -> impl Parser<'a, ParserInput<'a>, Spanned<T>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+    parser.map_with_span(|inner, span| Spanned { inner, span })
+}
+
 fn rust_trait<'a>(
     rust_type: impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
         + Clone,
@@ -754,9 +767,9 @@ fn type_item<'a>(
     fn inner_item<'a>(
     ) -> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
            + Clone {
-        let property_item = (select! {
+        let property_item = (spanned(select! {
             Token::Ident(c) => c,
-        })
+        }))
         .then_ignore(just(Token::Eq))
         .then(select! {
             Token::Number(c) => c,
@@ -771,6 +784,7 @@ fn type_item<'a>(
             .map(ParsedTypeItem::Properties);
         let trait_item = select! {
             Token::Ident("Debug") => ZngurWellknownTrait::Debug,
+            Token::Ident("Copy") => ZngurWellknownTrait::Copy,
         }
         .or(just(Token::Question)
             .then(just(Token::Ident("Sized")))
@@ -831,7 +845,7 @@ fn type_item<'a>(
             .then_ignore(just(Token::Semicolon))
     }
     just(Token::KwType)
-        .ignore_then(rust_type())
+        .ignore_then(spanned(rust_type()))
         .then(
             inner_item()
                 .repeated()

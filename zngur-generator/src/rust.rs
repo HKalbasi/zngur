@@ -238,17 +238,27 @@ impl RustFile {
         wln!(self, "r.assume_init()");
     }
 
+    pub fn add_static_is_copy_assert(&mut self, ty: &RustType) {
+        wln!(
+            self,
+            r#"const _: () = {{
+                const fn static_assert_is_copy<T: Copy>() {{}}
+                static_assert_is_copy::<{ty}>();
+            }};"#
+        );
+    }
+
     pub fn add_static_size_assert(&mut self, ty: &RustType, size: usize) {
         wln!(
             self,
-            r#"const _: () = assert!(::std::mem::size_of::<{ty}>() == {size});"#
+            r#"const _: [(); {size}] = [(); ::std::mem::size_of::<{ty}>()];"#
         );
     }
 
     pub fn add_static_align_assert(&mut self, ty: &RustType, align: usize) {
         wln!(
             self,
-            r#"const _: () = assert!(::std::mem::align_of::<{ty}>() == {align});"#
+            r#"const _: [(); {align}] = [(); ::std::mem::align_of::<{ty}>()];"#
         );
     }
 
@@ -561,6 +571,7 @@ pub extern "C" fn {mangled_name}("#
     ) -> ZngurWellknownTraitData {
         match wellknown_trait {
             ZngurWellknownTrait::Unsized => ZngurWellknownTraitData::Unsized,
+            ZngurWellknownTrait::Copy => ZngurWellknownTraitData::Copy,
             ZngurWellknownTrait::Drop => {
                 let drop_in_place = mangle_name(&format!("{ty}=drop_in_place"));
                 wln!(

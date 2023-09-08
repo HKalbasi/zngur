@@ -341,7 +341,6 @@ pub struct CppTypeDefinition {
     pub ty: CppType,
     pub size: usize,
     pub align: usize,
-    pub is_copy: bool,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
     pub from_trait: Option<CppTraitDefinition>,
@@ -356,7 +355,6 @@ impl Default for CppTypeDefinition {
             ty: CppType::from("fill::me::you::forgot::it"),
             size: 0,
             align: 0,
-            is_copy: false,
             methods: vec![],
             constructors: vec![],
             wellknown_traits: vec![],
@@ -508,6 +506,9 @@ inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
         let is_unsized = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Unsized);
+        let is_copy = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Copy);
         writeln!(
             state,
             r#"
@@ -588,11 +589,11 @@ private:
     "#,
                     )?;
                 }
-                if !self.is_copy {
+                if !is_copy {
                     writeln!(state, "   bool drop_flag;")?;
                 }
                 writeln!(state, "public:")?;
-                if !self.is_copy {
+                if !is_copy {
                     let drop_in_place = self
                         .wellknown_traits
                         .iter()
@@ -783,8 +784,9 @@ private:
             }}"#,
                     )?;
                 }
-                ZngurWellknownTraitData::Unsized => {}
-                ZngurWellknownTraitData::Drop { .. } => {}
+                ZngurWellknownTraitData::Unsized
+                | ZngurWellknownTraitData::Copy
+                | ZngurWellknownTraitData::Drop { .. } => {}
             }
         }
         if !is_unsized {
@@ -799,7 +801,7 @@ namespace rust {{
 "#,
                 size = self.size,
             )?;
-            if self.is_copy {
+            if is_copy {
                 writeln!(
                     state,
                     r#"
@@ -972,7 +974,7 @@ namespace rust {{
                     writeln!(state, "void {pretty_print}(uint8_t *data);")?;
                     writeln!(state, "void {debug_print}(uint8_t *data);")?;
                 }
-                ZngurWellknownTraitData::Unsized => (),
+                ZngurWellknownTraitData::Unsized | ZngurWellknownTraitData::Copy => (),
                 ZngurWellknownTraitData::Drop { drop_in_place } => {
                     writeln!(state, "void {drop_in_place}(uint8_t *data);")?;
                 }

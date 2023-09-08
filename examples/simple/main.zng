@@ -1,5 +1,6 @@
 type () {
-    properties(size = 0, align = 1, is_copy = 1);
+    properties(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type Box<dyn Fn(i32) -> i32> {
@@ -8,7 +9,8 @@ type Box<dyn Fn(i32) -> i32> {
 
 mod ::std {
     type option::Option<i32> {
-        properties(size = 8, align = 4, is_copy = 1);
+        properties(size = 8, align = 4);
+        wellknown_traits(Copy);
 
         constructor None;
         constructor Some(i32);

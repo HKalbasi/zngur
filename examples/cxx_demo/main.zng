@@ -1,5 +1,6 @@
 type () {
-    properties(size = 0, align = 1, is_copy = 1);
+    properties(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type [u8] {

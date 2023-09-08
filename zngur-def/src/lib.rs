@@ -55,6 +55,7 @@ pub enum ZngurWellknownTrait {
     Debug,
     Drop,
     Unsized,
+    Copy,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -67,13 +68,13 @@ pub enum ZngurWellknownTraitData {
         drop_in_place: String,
     },
     Unsized,
+    Copy,
 }
 
 pub struct ZngurType {
     pub ty: RustType,
     pub size: usize,
     pub align: usize,
-    pub is_copy: bool,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
     pub constructors: Vec<ZngurConstructor>,

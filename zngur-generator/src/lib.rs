@@ -38,9 +38,13 @@ impl ZngurGenerator {
             let is_unsized = ty_def
                 .wellknown_traits
                 .contains(&ZngurWellknownTrait::Unsized);
+            let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
             if !is_unsized {
                 rust_file.add_static_size_assert(&ty_def.ty, ty_def.size);
                 rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
+            }
+            if is_copy {
+                rust_file.add_static_is_copy_assert(&ty_def.ty);
             }
             let mut cpp_methods = vec![];
             let mut constructors = vec![];
@@ -118,7 +122,6 @@ impl ZngurGenerator {
                 ty: ty_def.ty.into_cpp(),
                 size: ty_def.size,
                 align: ty_def.align,
-                is_copy: ty_def.is_copy,
                 constructors,
                 methods: cpp_methods,
                 wellknown_traits,

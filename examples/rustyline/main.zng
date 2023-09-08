@@ -1,5 +1,6 @@
 type () {
-    properties(size = 0, align = 1, is_copy = 1);
+    properties(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type ::core::primitive::str {
@@ -11,7 +12,8 @@ type ::core::primitive::str {
 }
 
 type bool {
-    properties(size = 1, align = 1, is_copy = 1);
+    properties(size = 1, align = 1);
+    wellknown_traits(Copy);
 }
 
 mod ::std {
