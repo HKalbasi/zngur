@@ -352,7 +352,7 @@ pub extern "C" fn {mangled_name}(
     call: extern "C" fn(data: *mut u8, i1: *mut u8, o: *mut u8),
     o: *mut u8,
 ) {{
-    let this = ZngurCppOpaqueOwnedObject::new(data, destructor);
+    let this = unsafe {{ ZngurCppOpaqueOwnedObject::new(data, destructor) }};
     let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
         _ = &this;
         let data = this.ptr();
