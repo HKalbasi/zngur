@@ -92,7 +92,10 @@ extern "C++" {
 
     impl crate::WayNodeList {
         fn len(&self) -> usize;
-        fn get(&self, usize) -> &crate::Node;
+    }
+
+    impl ::std::ops::Index<usize, Output = crate::Node> for crate::WayNodeList {
+        fn index(&self, usize) -> &crate::Node;
     }
 
     impl crate::Node {

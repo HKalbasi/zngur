@@ -73,6 +73,7 @@ enum ParsedItem<'a> {
 enum ParsedExternCppItem<'a> {
     Function(ParsedMethod<'a>),
     Impl {
+        tr: Option<ParsedRustTrait<'a>>,
         ty: ParsedRustType<'a>,
         methods: Vec<ParsedMethod<'a>>,
     },
@@ -239,8 +240,9 @@ impl ParsedItem<'_> {
                                 output: method.output,
                             });
                         }
-                        ParsedExternCppItem::Impl { ty, methods } => {
+                        ParsedExternCppItem::Impl { tr, ty, methods } => {
                             r.extern_cpp_impls.push(ZngurExternCppImpl {
+                                tr: tr.map(|x| x.to_zngur(base)),
                                 ty: ty.to_zngur(base),
                                 methods: methods.into_iter().map(|x| x.to_zngur(base)).collect(),
                             });
@@ -421,6 +423,7 @@ enum Token<'a> {
     Semicolon,
     KwDyn,
     KwUse,
+    KwFor,
     KwMod,
     KwCrate,
     KwType,
@@ -447,6 +450,7 @@ impl<'a> Token<'a> {
             "mut" => Token::KwMut,
             "const" => Token::KwConst,
             "use" => Token::KwUse,
+            "for" => Token::KwFor,
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
             x => Token::Ident(x),
@@ -477,6 +481,7 @@ impl Display for Token<'_> {
             Token::Semicolon => write!(f, ";"),
             Token::KwDyn => write!(f, "dyn"),
             Token::KwUse => write!(f, "use"),
+            Token::KwFor => write!(f, "for"),
             Token::KwMod => write!(f, "mod"),
             Token::KwCrate => write!(f, "crate"),
             Token::KwType => write!(f, "type"),
@@ -876,7 +881,13 @@ fn extern_cpp_item<'a>(
         .then_ignore(just(Token::Semicolon))
         .map(ParsedExternCppItem::Function);
     let impl_block = just(Token::KwImpl)
-        .ignore_then(rust_type())
+        .ignore_then(
+            rust_trait(rust_type())
+                .then_ignore(just(Token::KwFor))
+                .map(Some)
+                .or(empty().to(None))
+                .then(rust_type()),
+        )
         .then(
             method()
                 .then_ignore(just(Token::Semicolon))
@@ -884,7 +895,7 @@ fn extern_cpp_item<'a>(
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
-        .map(|(ty, methods)| ParsedExternCppItem::Impl { ty, methods });
+        .map(|((tr, ty), methods)| ParsedExternCppItem::Impl { tr, ty, methods });
     just(Token::KwExtern)
         .then(just(Token::Str("C++")))
         .ignore_then(

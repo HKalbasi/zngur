@@ -204,9 +204,13 @@ impl ZngurGenerator {
             });
         }
         for impl_block in zng.extern_cpp_impls {
-            let rust_link_names =
-                rust_file.add_extern_cpp_impl(&impl_block.ty, &impl_block.methods);
+            let rust_link_names = rust_file.add_extern_cpp_impl(
+                &impl_block.ty,
+                impl_block.tr.as_ref(),
+                &impl_block.methods,
+            );
             cpp_file.exported_impls.push(CppExportedImplDefinition {
+                tr: impl_block.tr.map(|x| x.into_cpp()),
                 ty: impl_block.ty.into_cpp(),
                 methods: impl_block
                     .methods

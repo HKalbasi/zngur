@@ -411,6 +411,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
     pub fn add_extern_cpp_impl(
         &mut self,
         owner: &RustType,
+        tr: Option<&RustTrait>,
         methods: &[ZngurMethod],
     ) -> Vec<String> {
         let mut mangled_names = vec![];
@@ -434,9 +435,21 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             mangled_names.push(mn);
         }
         w!(self, r#"}}"#);
-        w!(self, r#"impl {owner} {{"#);
+        match tr {
+            Some(tr) => {
+                let (tr, assocs) = tr.clone().take_assocs();
+                w!(self, r#"impl {tr} for {owner} {{"#);
+                for (name, ty) in assocs {
+                    w!(self, r#"type {name} = {ty};"#);
+                }
+            }
+            None => w!(self, r#"impl {owner} {{"#),
+        }
         for (mn, method) in mangled_names.iter().zip(methods) {
-            w!(self, r#"pub fn {}("#, method.name);
+            if tr.is_none() {
+                w!(self, "pub ");
+            }
+            w!(self, r#"fn {}("#, method.name);
             match method.receiver {
                 ZngurMethodReceiver::Static => (),
                 ZngurMethodReceiver::Ref(Mutability::Mut) => w!(self, "&mut self, "),

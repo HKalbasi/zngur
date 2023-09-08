@@ -248,6 +248,7 @@ pub struct CppExportedFnDefinition {
 }
 
 pub struct CppExportedImplDefinition {
+    pub tr: Option<CppType>,
     pub ty: CppType,
     pub methods: Vec<(String, CppFnSig)>,
 }
@@ -1107,7 +1108,9 @@ namespace rust {
     template<typename T>
     void zngur_pretty_print(T&) {}
 
-    template<typename Type>
+    class Inherent;
+
+    template<typename Type, typename Trait = Inherent>
     class Impl;
 "#;
         for ty in [8, 16, 32, 64]
@@ -1178,9 +1181,12 @@ namespace rust {
         for td in &self.type_defs {
             td.ty.emit_header(state)?;
         }
-        // for fd in &self.trait_defs {
-        //     fd.as_ty.emit_header(state)?;
-        // }
+        for imp in &self.exported_impls {
+            imp.ty.emit_header(state)?;
+            if let Some(tr) = &imp.tr {
+                tr.emit_header(state)?;
+            }
+        }
         for td in &self.type_defs {
             td.emit(state)?;
         }
@@ -1205,8 +1211,12 @@ namespace rust {
         for imp in &self.exported_impls {
             writeln!(
                 state,
-                "namespace rust {{ template<> class Impl<{}> {{ public:",
-                imp.ty
+                "namespace rust {{ template<> class Impl<{}, {}> {{ public:",
+                imp.ty,
+                match &imp.tr {
+                    Some(x) => format!("{x}"),
+                    None => format!("::rust::Inherent"),
+                }
             )?;
             for (name, sig) in &imp.methods {
                 write!(state, "   static {} {}(", sig.output, name)?;
@@ -1256,9 +1266,13 @@ namespace rust {
                 writeln!(state, "{{")?;
                 writeln!(
                     state,
-                    "   {} oo = ::rust::Impl<{}>::{}({});",
+                    "   {} oo = ::rust::Impl<{}, {}>::{}({});",
                     sig.output,
                     imp.ty,
+                    match &imp.tr {
+                        Some(x) => format!("{x}"),
+                        None => format!("::rust::Inherent"),
+                    },
                     name,
                     sig.inputs
                         .iter()

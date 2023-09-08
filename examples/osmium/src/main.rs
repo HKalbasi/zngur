@@ -46,20 +46,20 @@ impl Handler for BendHandler {
         println!("node {}", self.count);
         let nodes = way.nodes();
         for middle_id in 0..nodes.len() {
-            let middle_node = nodes.get(middle_id);
+            let middle_node = &nodes[middle_id];
             let left_bound = (0..middle_id)
                 .rev()
-                .find(|x| nodes.get(*x).distance(middle_node) > 50.)
+                .find(|x| nodes[*x].distance(middle_node) > 50.)
                 .map(|x| x + 1)
                 .unwrap_or(0);
             let right_bound = (middle_id..nodes.len())
-                .find(|x| nodes.get(*x).distance(middle_node) > 50.)
+                .find(|x| nodes[*x].distance(middle_node) > 50.)
                 .unwrap_or(nodes.len());
             let min_angle = iproduct!(left_bound..middle_id, middle_id + 1..right_bound)
                 .map(|(left_id, right_id)| {
-                    let dist_right = nodes.get(left_id).distance(middle_node);
-                    let dist_left = nodes.get(right_id).distance(middle_node);
-                    let dist_middle = nodes.get(right_id).distance(nodes.get(left_id));
+                    let dist_right = nodes[left_id].distance(middle_node);
+                    let dist_left = nodes[right_id].distance(middle_node);
+                    let dist_middle = nodes[right_id].distance(&nodes[left_id]);
                     let cos_angle = (dist_right * dist_right + dist_left * dist_left
                         - dist_middle * dist_middle)
                         / (2. * dist_right * dist_left);

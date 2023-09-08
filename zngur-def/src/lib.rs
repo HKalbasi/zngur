@@ -40,6 +40,7 @@ pub struct ZngurExternCppFn {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ZngurExternCppImpl {
+    pub tr: Option<RustTrait>,
     pub ty: RustType,
     pub methods: Vec<ZngurMethod>,
 }
