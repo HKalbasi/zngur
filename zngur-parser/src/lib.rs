@@ -1,6 +1,6 @@
 use std::{fmt::Display, process::exit, sync::Mutex};
 
-use ariadne::{sources, Color, Label, Report, ReportKind};
+use ariadne::{sources, Color, Label, Report, ReportKind, Source};
 use chumsky::prelude::*;
 use iter_tools::{Either, Itertools};
 
@@ -93,8 +93,8 @@ enum ParsedConstructorArgs<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedTypeItem<'a> {
-    Properties(Vec<(Spanned<&'a str>, usize)>),
-    Traits(Vec<ZngurWellknownTrait>),
+    Layout(Span, Vec<(Spanned<&'a str>, usize)>),
+    Traits(Vec<Spanned<ZngurWellknownTrait>>),
     Constructor {
         name: Option<&'a str>,
         args: ParsedConstructorArgs<'a>,
@@ -147,19 +147,40 @@ impl ParsedItem<'_> {
                 let mut methods = vec![];
                 let mut constructors = vec![];
                 let mut wellknown_traits = vec![];
-                let mut size = None;
-                let mut align = None;
+                let mut layout = None;
+                let mut layout_span = None;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
                 for item in items {
                     match item {
-                        ParsedTypeItem::Properties(p) => {
+                        ParsedTypeItem::Layout(span, p) => {
+                            let mut size = None;
+                            let mut align = None;
                             for (key, value) in p {
                                 match key.inner {
                                     "size" => size = Some(value),
                                     "align" => align = Some(value),
                                     _ => create_and_emit_error("Unknown property", key.span),
                                 }
+                            }
+                            let Some(size) = size else {
+                                create_and_emit_error(
+                                    "Size is not declared for this type",
+                                    ty.span,
+                                );
+                            };
+                            let Some(align) = align else {
+                                create_and_emit_error(
+                                    "Align is not declared for this type",
+                                    ty.span,
+                                );
+                            };
+                            layout = Some(LayoutPolicy::StackAllocated { size, align });
+                            match layout_span {
+                                Some(_) => {
+                                    create_and_emit_error("Duplicate layout policy found", span);
+                                }
+                                None => layout_span = Some(span),
                             }
                         }
                         ParsedTypeItem::Traits(tr) => {
@@ -189,26 +210,51 @@ impl ParsedItem<'_> {
                         }
                     }
                 }
-                let is_unsized = wellknown_traits.contains(&ZngurWellknownTrait::Unsized);
-                let is_copy = wellknown_traits.contains(&ZngurWellknownTrait::Copy);
-                if !is_copy && !is_unsized {
-                    wellknown_traits.push(ZngurWellknownTrait::Drop);
+                let is_unsized = wellknown_traits
+                    .iter()
+                    .find(|x| x.inner == ZngurWellknownTrait::Unsized)
+                    .cloned();
+                let is_copy = wellknown_traits
+                    .iter()
+                    .find(|x| x.inner == ZngurWellknownTrait::Copy)
+                    .cloned();
+                let mut wt = wellknown_traits
+                    .into_iter()
+                    .map(|x| x.inner)
+                    .collect::<Vec<_>>();
+                if is_copy.is_none() && is_unsized.is_none() {
+                    wt.push(ZngurWellknownTrait::Drop);
                 }
-                let Some(size) = size else {
-                    create_and_emit_error("Size is not declared for this type", ty.span)
-                };
-                let Some(align) = align else {
-                    create_and_emit_error("Align is not declared for this type", ty.span)
-                };
-                let mut layout = LayoutPolicy::StackAllocated { size, align };
-                if is_unsized {
-                    layout = LayoutPolicy::OnlyByRef;
+                if let Some(is_unsized) = is_unsized {
+                    if let Some(span) = layout_span {
+                        emit_ariadne_error(
+                            Report::build(ReportKind::Error, (), span.start)
+                                .with_message("Duplicate layout policy found for unsized type.")
+                                .with_label(Label::new(span.start..span.end).with_message(
+                                    "Unsized types have implicit layout policy, remove this.",
+                                ).with_color(Color::Red))
+                                .with_label(
+                                    Label::new(is_unsized.span.start..is_unsized.span.end)
+                                        .with_message("Type declared as unsized here.")
+                                        .with_color(Color::Blue),
+                                )
+                                .finish(),
+                        )
+                    }
+                    layout = Some(LayoutPolicy::OnlyByRef);
                 }
+                let Some(layout) = layout else {
+                    create_and_emit_error(
+                        "No layout policy found for this type. \
+Use one of `layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
+                        ty.span,
+                    );
+                };
                 r.types.push(ZngurType {
                     ty: ty.inner.to_zngur(base),
                     layout,
                     methods,
-                    wellknown_traits,
+                    wellknown_traits: wt,
                     constructors,
                     cpp_value,
                     cpp_ref,
@@ -386,6 +432,12 @@ impl ParsedZngFile<'_> {
 
 fn create_and_emit_error<'a>(error: &str, span: Span) -> ! {
     emit_error([Rich::custom(span, error)].into_iter())
+}
+
+fn emit_ariadne_error<'a>(err: Report<'_>) -> ! {
+    err.eprint(Source::from(&**LATEST_TEXT.lock().unwrap()))
+        .unwrap();
+    exit(101);
 }
 
 fn emit_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
@@ -777,14 +829,14 @@ fn type_item<'a>(
         .then(select! {
             Token::Number(c) => c,
         });
-        let properties = just(Token::Ident("properties"))
+        let layout = just(Token::Ident("layout"))
             .ignore_then(
                 property_item
                     .separated_by(just(Token::Comma))
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
             )
-            .map(ParsedTypeItem::Properties);
+            .map_with_span(|x, span| ParsedTypeItem::Layout(span, x));
         let trait_item = select! {
             Token::Ident("Debug") => ZngurWellknownTrait::Debug,
             Token::Ident("Copy") => ZngurWellknownTrait::Copy,
@@ -794,7 +846,7 @@ fn type_item<'a>(
             .to(ZngurWellknownTrait::Unsized));
         let traits = just(Token::Ident("wellknown_traits"))
             .ignore_then(
-                trait_item
+                spanned(trait_item)
                     .separated_by(just(Token::Comma))
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
@@ -832,7 +884,7 @@ fn type_item<'a>(
                 Token::Str(c) => c,
             })
             .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-        properties
+        layout
             .or(traits)
             .or(constructor)
             .or(cpp_value)

@@ -9,12 +9,11 @@
 "
 
 type () {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
 type str {
-    properties(size = 0, align = 1);
     wellknown_traits(?Sized);
 
     fn as_ptr(&self) -> *const u8;
@@ -22,21 +21,21 @@ type str {
 }
 
 type ::std::option::Option<&str> {
-    properties(size = 16, align = 8);
+    layout(size = 16, align = 8);
 
     constructor None;
     constructor Some(&str);
 }
 
 type ::std::string::String {
-    properties(size = 24, align = 8);
+    layout(size = 24, align = 8);
 
     fn new() -> ::std::string::String;
     fn push_str(&mut self, &str);
 }
 
 type crate::Reader {
-    properties(size = 16, align = 8);
+    layout(size = 16, align = 8);
 
     constructor(ZngurCppOpaqueOwnedObject);
 
@@ -44,37 +43,37 @@ type crate::Reader {
 }
 
 type crate::Way {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
 
     #cpp_ref "::osmium::Way";
 }
 
 type crate::WayNodeList {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
 
     #cpp_ref "::osmium::WayNodeList";
 }
 
 type crate::TagList {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
 
     #cpp_ref "::osmium::TagList";
 }
 
 type crate::Node {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
 
     #cpp_ref "::osmium::NodeRef";
 }
 
 type crate::BendHandler {
-    properties(size = 8, align = 8);
+    layout(size = 8, align = 8);
 
     fn way(&mut self, &crate::Way) use crate::Handler;
 }
 
 type crate::Flags {
-    properties(size = 1, align = 1);
+    layout(size = 1, align = 1);
 
     fn bits(&self) -> u8;
 }

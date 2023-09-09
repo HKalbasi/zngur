@@ -58,7 +58,7 @@ Copy it into `src/lib.rs`. Now we need to declare things that we need to access 
 
 ```
 type crate::Inventory {
-    properties(size = 32, align = 8);
+    layout(size = 32, align = 8);
 
     fn new_empty(u32) -> crate::Inventory;
 }
@@ -92,7 +92,7 @@ To ensure that everything works, let's add a `#[derive(Debug)]` to `Inventory` a
 
 ```
 type crate::Inventory {
-    properties(size = 32, align = 8);
+    layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
@@ -140,11 +140,11 @@ impl Inventory {
 
 ```
 type () {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
 }
 
 type crate::Inventory {
-    properties(size = 32, align = 8);
+    layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
@@ -202,7 +202,7 @@ impl Inventory {
 
 ```
 type ::std::vec::Vec<crate::Item> {
-    properties(size = 24, align = 8);
+    layout(size = 24, align = 8);
     wellknown_traits(Debug);
 }
 

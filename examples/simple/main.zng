@@ -1,15 +1,15 @@
 type () {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
 type Box<dyn Fn(i32) -> i32> {
-    properties(size = 16, align = 8);
+    layout(size = 16, align = 8);
 }
 
 mod ::std {
     type option::Option<i32> {
-        properties(size = 8, align = 4);
+        layout(size = 8, align = 4);
         wellknown_traits(Copy);
 
         constructor None;
@@ -19,14 +19,14 @@ mod ::std {
     }
 
     type iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>> {
-        properties(size = 48, align = 8);
+        layout(size = 48, align = 8);
 
         fn sum<i32>(self) -> i32;
     }
     
     mod vec {
         type IntoIter<i32> {
-            properties(size = 32, align = 8);
+            layout(size = 32, align = 8);
 
             fn sum<i32>(self) -> i32;
             fn map<i32, Box<dyn Fn(i32) -> i32>>(self, Box<dyn Fn(i32) -> i32>)
@@ -34,7 +34,7 @@ mod ::std {
         }
 
         type Vec<i32> {
-            properties(size = 24, align = 8);
+            layout(size = 24, align = 8);
             wellknown_traits(Debug);
 
             fn new() -> Vec<i32>;
@@ -50,7 +50,7 @@ mod ::std {
 }
 
 type Box<dyn ::std::iter::Iterator<Item = i32>> {
-    properties(size = 16, align = 8);
+    layout(size = 16, align = 8);
 
     fn collect<::std::vec::Vec<i32>>(self) -> ::std::vec::Vec<i32>;
 }

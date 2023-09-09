@@ -1,10 +1,9 @@
 type () {
-    properties(size = 0, align = 1);
+    layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
 type ::core::primitive::str {
-    properties(size = 0, align = 1);
     wellknown_traits(?Sized);
 
     fn as_ptr(&self) -> *const u8;
@@ -12,33 +11,33 @@ type ::core::primitive::str {
 }
 
 type bool {
-    properties(size = 1, align = 1);
+    layout(size = 1, align = 1);
     wellknown_traits(Copy);
 }
 
 mod ::std {
     type string::String {
-        properties(size = 24, align = 8);
+        layout(size = 24, align = 8);
         fn as_str(&self) -> &::core::primitive::str;
     }
 }
 
 mod ::rustyline {
     type error::ReadlineError {
-        properties(size = 16, align = 8);
+        layout(size = 16, align = 8);
 
         constructor Interrupted;
         constructor Eof;
     }
 
     type Result<DefaultEditor> {
-        properties(size = 688, align = 8);
+        layout(size = 688, align = 8);
 
         fn unwrap(self) -> DefaultEditor;
     }
 
     type Result<::std::string::String> {
-        properties(size = 24, align = 8);
+        layout(size = 24, align = 8);
     
         fn is_err(&self) -> bool;
         fn unwrap(self) -> ::std::string::String;
@@ -46,19 +45,19 @@ mod ::rustyline {
     }
 
     type Result<()> {
-        properties(size = 16, align = 8);
+        layout(size = 16, align = 8);
     
         fn is_err(&self) -> bool;
     }
 
     type Result<bool> {
-        properties(size = 16, align = 8);
+        layout(size = 16, align = 8);
     
         fn is_err(&self) -> bool;
     }
 
     type DefaultEditor {
-        properties(size = 688, align = 8);
+        layout(size = 688, align = 8);
     
         fn new() -> Result<DefaultEditor>;
         fn readline(&mut self, &::core::primitive::str) -> Result<::std::string::String>;
