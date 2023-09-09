@@ -23,8 +23,7 @@ int main() {
       }
       break;
     } else {
-      auto owned_s = r.unwrap();
-      auto s = owned_s.as_str();
+      auto s = r.as_ref().unwrap().as_str();
       std::string cpp_s((char *)s.as_ptr(), s.len());
       std::cout << "Line: " << cpp_s << std::endl;
       editor.add_history_entry(::crate::rust_str((signed char *)cpp_s.c_str()));

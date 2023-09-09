@@ -92,8 +92,15 @@ enum ParsedConstructorArgs<'a> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+enum ParsedLayoutPolicy<'a> {
+    StackAllocated(Vec<(Spanned<&'a str>, usize)>),
+    HeapAllocated,
+    OnlyByRef,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedTypeItem<'a> {
-    Layout(Span, Vec<(Spanned<&'a str>, usize)>),
+    Layout(Span, ParsedLayoutPolicy<'a>),
     Traits(Vec<Spanned<ZngurWellknownTrait>>),
     Constructor {
         name: Option<&'a str>,
@@ -154,28 +161,36 @@ impl ParsedItem<'_> {
                 for item in items {
                     match item {
                         ParsedTypeItem::Layout(span, p) => {
-                            let mut size = None;
-                            let mut align = None;
-                            for (key, value) in p {
-                                match key.inner {
-                                    "size" => size = Some(value),
-                                    "align" => align = Some(value),
-                                    _ => create_and_emit_error("Unknown property", key.span),
+                            layout = Some(match p {
+                                ParsedLayoutPolicy::StackAllocated(p) => {
+                                    let mut size = None;
+                                    let mut align = None;
+                                    for (key, value) in p {
+                                        match key.inner {
+                                            "size" => size = Some(value),
+                                            "align" => align = Some(value),
+                                            _ => {
+                                                create_and_emit_error("Unknown property", key.span)
+                                            }
+                                        }
+                                    }
+                                    let Some(size) = size else {
+                                        create_and_emit_error(
+                                            "Size is not declared for this type",
+                                            ty.span,
+                                        );
+                                    };
+                                    let Some(align) = align else {
+                                        create_and_emit_error(
+                                            "Align is not declared for this type",
+                                            ty.span,
+                                        );
+                                    };
+                                    LayoutPolicy::StackAllocated { size, align }
                                 }
-                            }
-                            let Some(size) = size else {
-                                create_and_emit_error(
-                                    "Size is not declared for this type",
-                                    ty.span,
-                                );
-                            };
-                            let Some(align) = align else {
-                                create_and_emit_error(
-                                    "Align is not declared for this type",
-                                    ty.span,
-                                );
-                            };
-                            layout = Some(LayoutPolicy::StackAllocated { size, align });
+                                ParsedLayoutPolicy::HeapAllocated => LayoutPolicy::HeapAllocated,
+                                ParsedLayoutPolicy::OnlyByRef => LayoutPolicy::OnlyByRef,
+                            });
                             match layout_span {
                                 Some(_) => {
                                     create_and_emit_error("Duplicate layout policy found", span);
@@ -836,6 +851,10 @@ fn type_item<'a>(
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
             )
+            .map(ParsedLayoutPolicy::StackAllocated)
+            .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
+            .or(just([Token::Sharp, Token::Ident("heap_allocated")])
+                .to(ParsedLayoutPolicy::HeapAllocated))
             .map_with_span(|x, span| ParsedTypeItem::Layout(span, x));
         let trait_item = select! {
             Token::Ident("Debug") => ZngurWellknownTrait::Debug,

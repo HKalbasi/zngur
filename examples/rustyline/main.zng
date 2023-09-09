@@ -17,7 +17,7 @@ type bool {
 
 mod ::std {
     type string::String {
-        layout(size = 24, align = 8);
+        #only_by_ref;
         fn as_str(&self) -> &::core::primitive::str;
     }
 }
@@ -36,11 +36,17 @@ mod ::rustyline {
         fn unwrap(self) -> DefaultEditor;
     }
 
+    type ::std::result::Result<&::std::string::String, &error::ReadlineError> {
+        layout(size = 16, align = 8);
+
+        fn unwrap(self) -> &::std::string::String;
+    }
+
     type Result<::std::string::String> {
         layout(size = 24, align = 8);
     
         fn is_err(&self) -> bool;
-        fn unwrap(self) -> ::std::string::String;
+        fn as_ref(&self) -> ::std::result::Result<&::std::string::String, &error::ReadlineError>;
         fn unwrap_err(self) -> error::ReadlineError;
     }
 
