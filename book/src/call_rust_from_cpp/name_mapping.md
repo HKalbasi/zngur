@@ -16,7 +16,7 @@ Not all Rust types have the equivalent syntax in C++, so Zngur uses a name mappi
 | `[T]`                                    | `rust::Slice<T>`                               |
 | `dyn T`                                  | `rust::Dyn<T>`                                 |
 | `dyn T + Marker1 + Marker2`              | `rust::Dyn<T, rust::Marker1, rust::Marker2>`   |
-| `()`                                     | `rust::Unit`                                   |
+| `()`                                     | `rust::Unit` or `rust::Tuple<>`                |
 | `(A, B, C)`                              | `rust::Tuple<A, B, C>`                         |
 
 ## Why `rust::Ref<T>` instead of C++ references?

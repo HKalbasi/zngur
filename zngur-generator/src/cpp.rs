@@ -31,8 +31,8 @@ impl CppPath {
         self.0.split_last().unwrap().0
     }
 
-    fn is_rust(&self) -> bool {
-        self.0.first().map(|x| x.as_str()) == Some("rust")
+    fn need_header(&self) -> bool {
+        self.0.first().map(|x| x.as_str()) == Some("rust") && self.0 != ["rust", "Unit"]
     }
 }
 
@@ -72,7 +72,7 @@ impl CppType {
         for x in &self.generic_args {
             x.emit_header(state)?;
         }
-        if !self.path.is_rust() {
+        if !self.path.need_header() {
             return Ok(());
         }
         self.path.emit_in_namespace(state, |state| {
@@ -526,7 +526,10 @@ namespace rust {{
             from_trait.emit(state)?;
         }
         self.ty.path.emit_in_namespace(state, |state| {
-            if self.ty.generic_args.is_empty() {
+            if self.ty.path.0 == ["rust", "Unit"] {
+                write!(state, "template<> struct Tuple<>")?;
+            }
+            else if self.ty.generic_args.is_empty() {
                 write!(state, "struct {}", self.ty.path.name())?;
             } else {
                 write!(
@@ -1102,6 +1105,11 @@ namespace rust {
 
     template<typename T>
     struct Ref;
+
+    template<typename... T>
+    struct Tuple;
+
+    using Unit = Tuple<>;
 
     template<typename T>
     void zngur_pretty_print(T&) {}

@@ -31,8 +31,8 @@ public:
   RustHandler(BendHandler &&inner) : inner(std::move(inner)) {}
 };
 
-::rust::Unit rust::exported_functions::apply(::rust::Ref<Reader> reader,
-                                             BendHandler handler) {
+::rust::Tuple<> rust::exported_functions::apply(::rust::Ref<Reader> reader,
+                                                BendHandler handler) {
   using IndexType =
       osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type,
                                          osmium::Location>;
