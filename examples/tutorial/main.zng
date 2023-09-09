@@ -1,5 +1,6 @@
 type () {
     layout(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type ::std::vec::Vec<crate::Item> {
