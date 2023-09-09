@@ -5,9 +5,9 @@ use chumsky::prelude::*;
 use iter_tools::{Either, Itertools};
 
 use zngur_def::{
-    Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType, ZngurConstructor,
-    ZngurExternCppFn, ZngurExternCppImpl, ZngurFile, ZngurFn, ZngurMethod, ZngurMethodReceiver,
-    ZngurTrait, ZngurType, ZngurWellknownTrait,
+    LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
+    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurFile, ZngurFn, ZngurMethod,
+    ZngurMethodReceiver, ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -200,10 +200,13 @@ impl ParsedItem<'_> {
                 let Some(align) = align else {
                     create_and_emit_error("Align is not declared for this type", ty.span)
                 };
+                let mut layout = LayoutPolicy::StackAllocated { size, align };
+                if is_unsized {
+                    layout = LayoutPolicy::OnlyByRef;
+                }
                 r.types.push(ZngurType {
                     ty: ty.inner.to_zngur(base),
-                    size,
-                    align,
+                    layout,
                     methods,
                     wellknown_traits,
                     constructors,

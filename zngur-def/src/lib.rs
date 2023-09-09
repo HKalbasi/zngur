@@ -71,10 +71,15 @@ pub enum ZngurWellknownTraitData {
     Copy,
 }
 
+pub enum LayoutPolicy {
+    StackAllocated { size: usize, align: usize },
+    HeapAllocated,
+    OnlyByRef,
+}
+
 pub struct ZngurType {
     pub ty: RustType,
-    pub size: usize,
-    pub align: usize,
+    pub layout: LayoutPolicy,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
     pub constructors: Vec<ZngurConstructor>,

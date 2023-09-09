@@ -1,6 +1,7 @@
 use std::fmt::{Display, Write};
 
 use iter_tools::Itertools;
+use zngur_def::LayoutPolicy;
 
 use crate::ZngurWellknownTraitData;
 
@@ -339,8 +340,7 @@ public:
 
 pub struct CppTypeDefinition {
     pub ty: CppType,
-    pub size: usize,
-    pub align: usize,
+    pub layout: LayoutPolicy,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
     pub from_trait: Option<CppTraitDefinition>,
@@ -353,8 +353,7 @@ impl Default for CppTypeDefinition {
     fn default() -> Self {
         Self {
             ty: CppType::from("fill::me::you::forgot::it"),
-            size: 0,
-            align: 0,
+            layout: LayoutPolicy::OnlyByRef,
             methods: vec![],
             constructors: vec![],
             wellknown_traits: vec![],
@@ -540,28 +539,30 @@ namespace rust {{
                     self.ty.generic_args.iter().join(", ")
                 )?;
             }
-            if is_unsized {
-                writeln!(
-                    state,
-                    r#"
+            match self.layout {
+                LayoutPolicy::HeapAllocated | LayoutPolicy::OnlyByRef => {
+                    writeln!(
+                        state,
+                        r#"
 {{
 public:
     {ty}() = delete;
     "#,
-                    ty = self.ty.path.name(),
-                )?;
-                if self.ty.path.to_string() == "::rust::Str" {
-                    writeln!(
-                        state,
-                        r#"
+                        ty = self.ty.path.name(),
+                    )?;
+                    if self.ty.path.to_string() == "::rust::Str" {
+                        writeln!(
+                            state,
+                            r#"
     static inline ::rust::Ref<::rust::Str> from_char_star(const char* s);
     "#,
-                    )?;
+                        )?;
+                    }
                 }
-            } else {
-                writeln!(
-                    state,
-                    r#"
+                LayoutPolicy::StackAllocated { size, align } => {
+                            writeln!(
+                                state,
+                                r#"
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
@@ -571,40 +572,38 @@ private:
     friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
     friend void ::rust::zngur_pretty_print<{ty}>({ty}& t);
 "#,
-                    ty = self.ty,
-                    align = self.align,
-                    size = self.size,
-                )?;
-                if self.ty.path.to_string() == "::rust::Bool" {
-                    assert_eq!(self.size, 1);
-                    assert_eq!(self.align, 1);
-                    writeln!(
-                        state,
-                        r#"
+                                ty = self.ty,
+                            )?;
+                            if self.ty.path.to_string() == "::rust::Bool" {
+                                assert_eq!(size, 1);
+                                assert_eq!(align, 1);
+                                writeln!(
+                                    state,
+                                    r#"
 public:
     operator bool() {{
         return data[0];
     }}
 private:
     "#,
-                    )?;
-                }
-                if !is_copy {
-                    writeln!(state, "   bool drop_flag;")?;
-                }
-                writeln!(state, "public:")?;
-                if !is_copy {
-                    let drop_in_place = self
-                        .wellknown_traits
-                        .iter()
-                        .find_map(|x| match x {
-                            ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
-                            _ => None,
-                        })
-                        .unwrap();
-                    writeln!(
-                        state,
-                        r#"
+                                )?;
+                            }
+                            if !is_copy {
+                                writeln!(state, "   bool drop_flag;")?;
+                            }
+                            writeln!(state, "public:")?;
+                            if !is_copy {
+                                let drop_in_place = self
+                                    .wellknown_traits
+                                    .iter()
+                                    .find_map(|x| match x {
+                                        ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
+                                        _ => None,
+                                    })
+                                    .unwrap();
+                                writeln!(
+                                    state,
+                                    r#"
     {ty}() : drop_flag(false) {{}}
     ~{ty}() {{
         if (drop_flag) {{
@@ -622,25 +621,25 @@ private:
         return *this;
     }}
     "#,
-                        ty = self.ty.path.name(),
-                    )?;
-                }
-                if let Some(CppTraitDefinition::Fn { sig }) = &self.from_trait {
-                    // TODO: too special
-                    let as_std_function = format!(
-                        "::std::function<{}({})>",
-                        sig.output,
-                        sig.inputs.iter().join(", ")
-                    );
-                    let ii_args = sig
-                        .inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
-                        .join("\n");
-                    writeln!(
-                        state,
-                        r#"
+                                    ty = self.ty.path.name(),
+                                )?;
+                            }
+                            if let Some(CppTraitDefinition::Fn { sig }) = &self.from_trait {
+                                // TODO: too special
+                                let as_std_function = format!(
+                                    "::std::function<{}({})>",
+                                    sig.output,
+                                    sig.inputs.iter().join(", ")
+                                );
+                                let ii_args = sig
+                                    .inputs
+                                    .iter()
+                                    .enumerate()
+                                    .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
+                                    .join("\n");
+                                writeln!(
+                                    state,
+                                    r#"
     static {ty} build({as_std_function} f) {{
         auto data = new {as_std_function}(f);
         {ty} o;
@@ -658,20 +657,20 @@ private:
         return o;
     }}
     "#,
-                        ty = self.ty.path.name(),
-                        link_name = sig.rust_link_name,
-                    )?;
-                }
-                if let Some(CppTraitDefinition::Normal {
-                    as_ty: _,
-                    methods,
-                    link_name,
-                }) = &self.from_trait
-                {
-                    // TODO: too special
-                    writeln!(
-                        state,
-                        r#"
+                                    ty = self.ty.path.name(),
+                                    link_name = sig.rust_link_name,
+                                )?;
+                            }
+                            if let Some(CppTraitDefinition::Normal {
+                                as_ty: _,
+                                methods,
+                                link_name,
+                            }) = &self.from_trait
+                            {
+                                // TODO: too special
+                                writeln!(
+                                    state,
+                                    r#"
     template<typename T, typename... Args>
     static {ty} make_box(Args&&... args) {{
         auto data = new T(::std::forward<Args>(args)...);
@@ -681,43 +680,44 @@ private:
             (uint8_t *)data,
             [](uint8_t *d) {{ delete (T *)d; }},
     "#,
-                        ty = self.ty.path.name(),
-                        link_name = link_name,
-                    )?;
-                    for method in methods {
-                        writeln!(
-                            state,
-                            r#"
+                                    ty = self.ty.path.name(),
+                                    link_name = link_name,
+                                )?;
+                                for method in methods {
+                                    writeln!(
+                                        state,
+                                        r#"
                 [](uint8_t *d, {input_args} uint8_t *o) {{
                     T* dd = (T *)d;
                     {output} oo = dd->{name}({input_values});
                     ::rust::__zngur_internal_move_to_rust(o, oo);
                 }},
         "#,
-                            name = method.name,
-                            input_args = (0..method.inputs.len())
-                                .map(|n| format!("uint8_t* i{n},"))
-                                .join(" "),
-                            input_values = method
-                                .inputs
-                                .iter()
-                                .enumerate()
-                                .map(|(n, ty)| {
-                                    format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
-                                })
-                                .join(", "),
-                            output = method.output,
-                        )?;
-                    }
-                    writeln!(
-                        state,
-                        r#"
+                                        name = method.name,
+                                        input_args = (0..method.inputs.len())
+                                            .map(|n| format!("uint8_t* i{n},"))
+                                            .join(" "),
+                                        input_values = method
+                                            .inputs
+                                            .iter()
+                                            .enumerate()
+                                            .map(|(n, ty)| {
+                                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                                            })
+                                            .join(", "),
+                                        output = method.output,
+                                    )?;
+                                }
+                                writeln!(
+                                    state,
+                                    r#"
             ::rust::__zngur_internal_data_ptr(o));
         return o;
     }}
     "#,
-                    )?;
-                }
+                                )?;
+                            }
+                        }
             }
             if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
                 writeln!(
@@ -789,7 +789,7 @@ private:
                 | ZngurWellknownTraitData::Drop { .. } => {}
             }
         }
-        if !is_unsized {
+        if let LayoutPolicy::StackAllocated { size, .. } = self.layout {
             writeln!(
                 state,
                 r#"
@@ -799,7 +799,6 @@ namespace rust {{
         return {size};
     }}
 "#,
-                size = self.size,
             )?;
             if is_copy {
                 writeln!(

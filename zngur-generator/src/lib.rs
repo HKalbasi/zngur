@@ -39,9 +39,13 @@ impl ZngurGenerator {
                 .wellknown_traits
                 .contains(&ZngurWellknownTrait::Unsized);
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
-            if !is_unsized {
-                rust_file.add_static_size_assert(&ty_def.ty, ty_def.size);
-                rust_file.add_static_align_assert(&ty_def.ty, ty_def.align);
+            match ty_def.layout {
+                LayoutPolicy::StackAllocated { size, align } => {
+                    rust_file.add_static_size_assert(&ty_def.ty, size);
+                    rust_file.add_static_align_assert(&ty_def.ty, align);
+                }
+                LayoutPolicy::HeapAllocated => (),
+                LayoutPolicy::OnlyByRef => (),
             }
             if is_copy {
                 rust_file.add_static_is_copy_assert(&ty_def.ty);
@@ -120,8 +124,7 @@ impl ZngurGenerator {
             }
             cpp_file.type_defs.push(CppTypeDefinition {
                 ty: ty_def.ty.into_cpp(),
-                size: ty_def.size,
-                align: ty_def.align,
+                layout: ty_def.layout,
                 constructors,
                 methods: cpp_methods,
                 wellknown_traits,
