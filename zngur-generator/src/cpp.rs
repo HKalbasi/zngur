@@ -502,9 +502,6 @@ inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
     }
 
     fn emit(&self, state: &mut State) -> std::fmt::Result {
-        let is_unsized = self
-            .wellknown_traits
-            .contains(&ZngurWellknownTraitData::Unsized);
         let is_copy = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);

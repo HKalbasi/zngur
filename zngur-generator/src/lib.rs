@@ -35,9 +35,6 @@ impl ZngurGenerator {
         cpp_file.additional_includes = zng.additional_includes;
         let mut rust_file = RustFile::default();
         for ty_def in zng.types {
-            let is_unsized = ty_def
-                .wellknown_traits
-                .contains(&ZngurWellknownTrait::Unsized);
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
             match ty_def.layout {
                 LayoutPolicy::StackAllocated { size, align } => {
