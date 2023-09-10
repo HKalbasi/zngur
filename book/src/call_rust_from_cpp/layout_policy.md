@@ -34,4 +34,4 @@ to prevent accidental invisible heap allocations. If you don't care, use `#heap_
 
 ## `?Sized`
 
-Adding `?Sized` in wellknown traits will implicitly mark the type as `#only_by_ref`.
+Adding `?Sized` in [wellknown traits](./wellknown_traits.html) will implicitly mark the type as `#only_by_ref`.

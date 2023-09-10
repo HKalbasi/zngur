@@ -7,6 +7,7 @@
   - [Name mapping](./call_rust_from_cpp/name_mapping.md)
   - [Wellknown traits](./call_rust_from_cpp/wellknown_traits.md)
   - [Layout policy](./call_rust_from_cpp/layout_policy.md)
+  - [Types with special support](./call_rust_from_cpp/special_types.md)
 - [Calling C++ from Rust]()
   - [`Box<dyn Fn>`]()
   - [Converting C++ objects to `Box<dyn Trait>`]()
