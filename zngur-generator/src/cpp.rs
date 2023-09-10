@@ -577,12 +577,16 @@ private:
                             if self.ty.path.to_string() == "::rust::Bool" {
                                 assert_eq!(size, 1);
                                 assert_eq!(align, 1);
+                                assert!(is_copy);
                                 writeln!(
                                     state,
                                     r#"
 public:
     operator bool() {{
         return data[0];
+    }}
+    Bool(bool b) {{
+        data[0] = b;
     }}
 private:
     "#,

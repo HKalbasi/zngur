@@ -3,6 +3,11 @@ type () {
     wellknown_traits(Copy);
 }
 
+type bool {
+    layout(size = 1, align = 1);
+    wellknown_traits(Copy);
+}
+
 type ::std::option::Option<&u64> {
     layout(size = 8, align = 8);
     wellknown_traits(Debug, Copy);
@@ -10,22 +15,28 @@ type ::std::option::Option<&u64> {
     fn unwrap(self) -> &u64;
 }
 
-type Box<dyn Fn(&u64) -> i32 + Sync + Send> {
+type Box<dyn Fn(&u64) -> bool + Sync + Send> {
     layout(size = 16, align = 8);
 }
 
-type ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32 + Sync + Send>> {
+type ::rayon::iter::Filter<::rayon::iter::Copied<::rayon::slice::Iter<u64>>, Box<dyn Fn(&u64) -> bool + Sync + Send>> {
     layout(size = 32, align = 8);
 
-    fn sum<i32>(self) -> i32 use ::rayon::iter::ParallelIterator;
+    fn count(self) -> usize use ::rayon::iter::ParallelIterator;
 }
 
 type ::rayon::slice::Iter<u64> {
     layout(size = 16, align = 8);
 
     fn sum<u64>(self) -> u64 use ::rayon::iter::ParallelIterator;
-    fn map<Box<dyn Fn(&u64) -> i32 + Sync + Send>, i32>(self, Box<dyn Fn(&u64) -> i32 + Sync + Send>)
-                -> ::rayon::iter::Map<::rayon::slice::Iter<u64>, Box<dyn Fn(&u64) -> i32 + Sync + Send>>
+    fn copied<u64>(self) -> ::rayon::iter::Copied<::rayon::slice::Iter<u64>> use ::rayon::iter::ParallelIterator;
+}
+
+type ::rayon::iter::Copied<::rayon::slice::Iter<u64>> {
+    layout(size = 16, align = 8);
+
+    fn filter<Box<dyn Fn(&u64) -> bool + Sync + Send>>(self, Box<dyn Fn(&u64) -> bool + Sync + Send>)
+                -> ::rayon::iter::Filter<::rayon::iter::Copied<::rayon::slice::Iter<u64>>, Box<dyn Fn(&u64) -> bool + Sync + Send>>
                 use ::rayon::iter::ParallelIterator;
 }
 
