@@ -106,7 +106,7 @@ int main() {
 }
 ```
 
-There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.html) has the
+There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.md) has the
 complete list of them.
 
 Assuming that everything works correctly, you should see something like this after executing the program:
