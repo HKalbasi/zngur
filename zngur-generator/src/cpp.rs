@@ -527,7 +527,8 @@ namespace rust {{
         }
         self.ty.path.emit_in_namespace(state, |state| {
             if self.ty.path.0 == ["rust", "Unit"] {
-                write!(state, "template<> struct Tuple<>")?;
+                write!(state, "template<> struct Tuple<> {{ uint8_t data; }};")?;
+                return Ok(());
             }
             else if self.ty.generic_args.is_empty() {
                 write!(state, "struct {}", self.ty.path.name())?;
@@ -596,7 +597,26 @@ private:
                                 writeln!(state, "   bool drop_flag;")?;
                             }
                             writeln!(state, "public:")?;
-                            if !is_copy {
+                            if is_copy {
+                                writeln!(
+                                    state,
+                                    r#"
+    {ty}() {{}}
+    ~{ty}() {{}}
+    {ty}(const {ty}& other) : data(other.data) {{}}
+    {ty}& operator=(const {ty}& other) {{
+        this->data = other.data;
+        return *this;
+    }}
+    {ty}({ty}&& other) : data(other.data) {{}}
+    {ty}& operator=({ty}&& other) {{
+        this->data = other.data;
+        return *this;
+    }}
+    "#,
+                                    ty = self.ty.path.name(),
+                                )?;
+                            } else {
                                 let drop_in_place = self
                                     .wellknown_traits
                                     .iter()
