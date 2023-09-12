@@ -15,7 +15,7 @@ Then, some class like this will be generated in the `generated.h` file:
 
 ```C++
 namespace rust {
-template <> class Impl<::rust::crate::TagList, ::rust::Inherent> {
+template <> class Impl<::rust::crate::TagList> {
 public:
   static ::rust::std::option::Option<::rust::Ref<::rust::Str>>
   get_value_by_key(::rust::Ref<::rust::crate::TagList> self,

@@ -29,6 +29,12 @@ Because they are very different:
 - Not all Rust references are one word, for example `&str`, `&[T]` or `&dyn Trait` are two words, incompatible with C++ references.
 - C++ representation of a Rust type may have additional fields, such as a drop flag (see [how it works](../how_it_works.html)), so a Rust reference coming from Rust code
   is not necessarily a valid C++ reference for the C++ representation.
+- You can't have a reference to reference, pointer to reference, vector of references and similar things with C++ references, but
+  with `Ref<T>` those would be possible.
+
+But Zngur tries to keep convenience of C++ references when using Rust `Ref<T>`. For example, `Ref<T>` is constructible from `T` so
+you can pass `T` to a function that expect a `Ref<T>`, similar to a `T&`. Or Zngur tries to emulate Rust's auto dereference rules
+on methods so you can call a method directly on the `Ref<T>` without needing to use `->` or `*` operator.
 
 ## Why `rust::Bool` instead of C++ `bool`?
 
