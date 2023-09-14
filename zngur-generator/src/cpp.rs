@@ -636,110 +636,63 @@ private:
     }}
     {ty}(const {ty}& other) = delete;
     {ty}& operator=(const {ty}& other) = delete;
-    {ty}({ty}&& other) : data(other.data), drop_flag(true) {{
-        ::rust::__zngur_internal_check_init<{ty}>(other);
-        other.drop_flag = false;
+    {ty}({ty}&& other) : drop_flag(false) {{
+        *this = ::std::move(other);
     }}
     {ty}& operator=({ty}&& other) {{
-        *this = {ty}(::std::move(other));
+        if (this != &other)
+        {{
+            if (drop_flag) {{
+                {drop_in_place}(&data[0]);
+            }}
+            this->drop_flag = other.drop_flag;
+            this->data = other.data;
+            other.drop_flag = false;
+        }}
         return *this;
     }}
     "#,
                                     ty = self.ty.path.name(),
                                 )?;
                             }
-                            if let Some(CppTraitDefinition::Fn { sig }) = &self.from_trait {
-                                // TODO: too special
-                                let as_std_function = format!(
-                                    "::std::function<{}({})>",
-                                    sig.output,
-                                    sig.inputs.iter().join(", ")
-                                );
-                                let ii_args = sig
-                                    .inputs
-                                    .iter()
-                                    .enumerate()
-                                    .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
-                                    .join("\n");
-                                writeln!(
-                                    state,
-                                    r#"
-    static {ty} build({as_std_function} f) {{
-        auto data = new {as_std_function}(f);
-        {ty} o;
-        ::rust::__zngur_internal_assume_init(o);
-        {link_name}(
-            (uint8_t *)data,
-            [](uint8_t *d) {{ delete ({as_std_function} *)d; }},
-            [](uint8_t *d, uint8_t *i0, uint8_t *o) {{
-                int32_t *oo = (int32_t *)o;
-                {ii_args}
-                auto dd = ({as_std_function} *)d;
-                *oo = (*dd)(ii0);
-            }},
-            ::rust::__zngur_internal_data_ptr(o));
-        return o;
-    }}
-    "#,
-                                    ty = self.ty.path.name(),
-                                    link_name = sig.rust_link_name,
-                                )?;
-                            }
-                            if let Some(CppTraitDefinition::Normal {
-                                as_ty: _,
-                                methods,
-                                link_name,
-                            }) = &self.from_trait
-                            {
-                                // TODO: too special
-                                writeln!(
-                                    state,
-                                    r#"
-    template<typename T, typename... Args>
-    static {ty} make_box(Args&&... args) {{
-        auto data = new T(::std::forward<Args>(args)...);
-        {ty} o;
-        ::rust::__zngur_internal_assume_init(o);
-        {link_name}(
-            (uint8_t *)data,
-            [](uint8_t *d) {{ delete (T *)d; }},
-    "#,
-                                    ty = self.ty.path.name(),
-                                    link_name = link_name,
-                                )?;
-                                for method in methods {
+                            match &self.from_trait {
+                                Some(CppTraitDefinition::Fn { sig }) => {
+                                    // TODO: too special
+                                    let as_std_function = format!(
+                                        "::std::function<{}({})>",
+                                        sig.output,
+                                        sig.inputs.iter().join(", ")
+                                    );
+                                    let ii_args = sig
+                                        .inputs
+                                        .iter()
+                                        .enumerate()
+                                        .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
+                                        .join("\n");
                                     writeln!(
                                         state,
                                         r#"
-                [](uint8_t *d, {input_args} uint8_t *o) {{
-                    T* dd = (T *)d;
-                    {output} oo = dd->{name}({input_values});
-                    ::rust::__zngur_internal_move_to_rust(o, oo);
-                }},
-        "#,
-                                        name = method.name,
-                                        input_args = (0..method.inputs.len())
-                                            .map(|n| format!("uint8_t* i{n},"))
-                                            .join(" "),
-                                        input_values = method
-                                            .inputs
-                                            .iter()
-                                            .enumerate()
-                                            .map(|(n, ty)| {
-                                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
-                                            })
-                                            .join(", "),
-                                        output = method.output,
+    static {ty} build({as_std_function} f);
+    "#,
+                                        ty = self.ty.path.name(),
                                     )?;
                                 }
-                                writeln!(
-                                    state,
-                                    r#"
-            ::rust::__zngur_internal_data_ptr(o));
-        return o;
-    }}
-    "#,
-                                )?;
+                                Some(CppTraitDefinition::Normal {
+                                    as_ty: _,
+                                    methods,
+                                    link_name,
+                                }) => {
+                                    // TODO: too special
+                                    writeln!(
+                                        state,
+                                        r#"
+                        template<typename T, typename... Args>
+                        static {ty} make_box(Args&&... args);
+                        "#,
+                                        ty = self.ty.path.name(),
+                                    )?;
+                                }
+                                None => (),
                             }
                         }
             }
@@ -790,29 +743,6 @@ private:
             writeln!(state, "}};")
         })?;
         let ty = &self.ty;
-        for tr in &self.wellknown_traits {
-            match tr {
-                ZngurWellknownTraitData::Debug {
-                    pretty_print,
-                    debug_print: _, // TODO: use it
-                } => {
-                    writeln!(
-                        state,
-                        r#"
-            namespace rust {{
-                template<>
-                inline void zngur_pretty_print<{ty}>({ty}& t) {{
-                    ::rust::__zngur_internal_check_init<{ty}>(t);
-                    {pretty_print}((uint8_t*)&t.data);
-                }}
-            }}"#,
-                    )?;
-                }
-                ZngurWellknownTraitData::Unsized
-                | ZngurWellknownTraitData::Copy
-                | ZngurWellknownTraitData::Drop { .. } => {}
-            }
-        }
         if let LayoutPolicy::StackAllocated { size, .. } = self.layout {
             writeln!(
                 state,
@@ -914,6 +844,98 @@ namespace rust {{
                     .join("\n"),
             )?;
         }
+        match &self.from_trait {
+            Some(CppTraitDefinition::Fn { sig }) => {
+                // TODO: too special
+                let as_std_function = format!(
+                    "::std::function<{}({})>",
+                    sig.output,
+                    sig.inputs.iter().join(", ")
+                );
+                let ii_args = sig
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
+                    .join("\n");
+                writeln!(
+                    state,
+                    r#"
+{my_name} {my_name}::build({as_std_function} f) {{
+auto data = new {as_std_function}(f);
+{my_name} o;
+::rust::__zngur_internal_assume_init(o);
+{link_name}(
+(uint8_t *)data,
+[](uint8_t *d) {{ delete ({as_std_function} *)d; }},
+[](uint8_t *d, uint8_t *i0, uint8_t *o) {{
+int32_t *oo = (int32_t *)o;
+{ii_args}
+auto dd = ({as_std_function} *)d;
+*oo = (*dd)(ii0);
+}},
+::rust::__zngur_internal_data_ptr(o));
+return o;
+}}
+"#,
+                    link_name = sig.rust_link_name,
+                )?;
+            }
+            Some(CppTraitDefinition::Normal {
+                as_ty: _,
+                methods,
+                link_name,
+            }) => {
+                // TODO: too special
+                writeln!(
+                    state,
+                    r#"
+template<typename T, typename... Args>
+{my_name} {my_name}::make_box(Args&&... args) {{
+auto data = new T(::std::forward<Args>(args)...);
+{my_name} o;
+::rust::__zngur_internal_assume_init(o);
+{link_name}(
+(uint8_t *)data,
+[](uint8_t *d) {{ delete (T *)d; }},
+"#,
+                )?;
+                for method in methods {
+                    writeln!(
+                        state,
+                        r#"
+[](uint8_t *d, {input_args} uint8_t *o) {{
+T* dd = (T *)d;
+{output} oo = dd->{name}({input_values});
+::rust::__zngur_internal_move_to_rust(o, oo);
+}},
+"#,
+                        name = method.name,
+                        input_args = (0..method.inputs.len())
+                            .map(|n| format!("uint8_t* i{n},"))
+                            .join(" "),
+                        input_values = method
+                            .inputs
+                            .iter()
+                            .enumerate()
+                            .map(|(n, ty)| {
+                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                            })
+                            .join(", "),
+                        output = method.output,
+                    )?;
+                }
+                writeln!(
+                    state,
+                    r#"
+::rust::__zngur_internal_data_ptr(o));
+return o;
+}}
+"#,
+                )?;
+            }
+            None => (),
+        }
         for method in &self.methods {
             let fn_name = my_name.to_owned() + "::" + &method.name;
             method.sig.emit_cpp_def(state, &fn_name)?;
@@ -969,6 +991,30 @@ namespace rust {{
                         .map(|n| format!(", ::std::move(i{n})"))
                         .join("")
                 )?;
+            }
+        }
+        for tr in &self.wellknown_traits {
+            match tr {
+                ZngurWellknownTraitData::Debug {
+                    pretty_print,
+                    debug_print: _, // TODO: use it
+                } => {
+                    writeln!(
+                        state,
+                        r#"
+            namespace rust {{
+                template<>
+                inline void zngur_pretty_print<{ty}>({ty}& t) {{
+                    ::rust::__zngur_internal_check_init<{ty}>(t);
+                    {pretty_print}((uint8_t*)&t.data);
+                }}
+            }}"#,
+                        ty = self.ty,
+                    )?;
+                }
+                ZngurWellknownTraitData::Unsized
+                | ZngurWellknownTraitData::Copy
+                | ZngurWellknownTraitData::Drop { .. } => {}
             }
         }
         Ok(())
