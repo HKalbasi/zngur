@@ -663,12 +663,6 @@ private:
                                         sig.output,
                                         sig.inputs.iter().join(", ")
                                     );
-                                    let ii_args = sig
-                                        .inputs
-                                        .iter()
-                                        .enumerate()
-                                        .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
-                                        .join("\n");
                                     writeln!(
                                         state,
                                         r#"
@@ -679,8 +673,8 @@ private:
                                 }
                                 Some(CppTraitDefinition::Normal {
                                     as_ty: _,
-                                    methods,
-                                    link_name,
+                                    methods: _,
+                                    link_name: _,
                                 }) => {
                                     // TODO: too special
                                     writeln!(
