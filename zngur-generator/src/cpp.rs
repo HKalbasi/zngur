@@ -529,8 +529,7 @@ namespace rust {{
             if self.ty.path.0 == ["rust", "Unit"] {
                 write!(state, "template<> struct Tuple<> {{ uint8_t data; }};")?;
                 return Ok(());
-            }
-            else if self.ty.generic_args.is_empty() {
+            } else if self.ty.generic_args.is_empty() {
                 write!(state, "struct {}", self.ty.path.name())?;
             } else {
                 write!(
@@ -561,9 +560,9 @@ public:
                     }
                 }
                 LayoutPolicy::StackAllocated { size, align } => {
-                            writeln!(
-                                state,
-                                r#"
+                    writeln!(
+                        state,
+                        r#"
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
@@ -573,15 +572,15 @@ private:
     friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
     friend void ::rust::zngur_pretty_print<{ty}>({ty}& t);
 "#,
-                                ty = self.ty,
-                            )?;
-                            if self.ty.path.to_string() == "::rust::Bool" {
-                                assert_eq!(size, 1);
-                                assert_eq!(align, 1);
-                                assert!(is_copy);
-                                writeln!(
-                                    state,
-                                    r#"
+                        ty = self.ty,
+                    )?;
+                    if self.ty.path.to_string() == "::rust::Bool" {
+                        assert_eq!(size, 1);
+                        assert_eq!(align, 1);
+                        assert!(is_copy);
+                        writeln!(
+                            state,
+                            r#"
 public:
     operator bool() {{
         return data[0];
@@ -591,16 +590,16 @@ public:
     }}
 private:
     "#,
-                                )?;
-                            }
-                            if !is_copy {
-                                writeln!(state, "   bool drop_flag;")?;
-                            }
-                            writeln!(state, "public:")?;
-                            if is_copy {
-                                writeln!(
-                                    state,
-                                    r#"
+                        )?;
+                    }
+                    if !is_copy {
+                        writeln!(state, "   bool drop_flag;")?;
+                    }
+                    writeln!(state, "public:")?;
+                    if is_copy {
+                        writeln!(
+                            state,
+                            r#"
     {ty}() {{}}
     ~{ty}() {{}}
     {ty}(const {ty}& other) : data(other.data) {{}}
@@ -614,20 +613,22 @@ private:
         return *this;
     }}
     "#,
-                                    ty = self.ty.path.name(),
-                                )?;
-                            } else {
-                                let drop_in_place = self
-                                    .wellknown_traits
-                                    .iter()
-                                    .find_map(|x| match x {
-                                        ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
-                                        _ => None,
-                                    })
-                                    .unwrap();
-                                writeln!(
-                                    state,
-                                    r#"
+                            ty = self.ty.path.name(),
+                        )?;
+                    } else {
+                        let drop_in_place = self
+                            .wellknown_traits
+                            .iter()
+                            .find_map(|x| match x {
+                                ZngurWellknownTraitData::Drop { drop_in_place } => {
+                                    Some(drop_in_place)
+                                }
+                                _ => None,
+                            })
+                            .unwrap();
+                        writeln!(
+                            state,
+                            r#"
     {ty}() : drop_flag(false) {{}}
     ~{ty}() {{
         if (drop_flag) {{
@@ -652,50 +653,50 @@ private:
         return *this;
     }}
     "#,
-                                    ty = self.ty.path.name(),
-                                )?;
-                            }
-                            match &self.from_trait {
-                                Some(CppTraitDefinition::Fn { sig }) => {
-                                    // TODO: too special
-                                    let as_std_function = format!(
-                                        "::std::function<{}({})>",
-                                        sig.output,
-                                        sig.inputs.iter().join(", ")
-                                    );
-                                    writeln!(
-                                        state,
-                                        r#"
+                            ty = self.ty.path.name(),
+                        )?;
+                    }
+                    match &self.from_trait {
+                        Some(CppTraitDefinition::Fn { sig }) => {
+                            // TODO: too special
+                            let as_std_function = format!(
+                                "::std::function<{}({})>",
+                                sig.output,
+                                sig.inputs.iter().join(", ")
+                            );
+                            writeln!(
+                                state,
+                                r#"
     static {ty} build({as_std_function} f);
     "#,
-                                        ty = self.ty.path.name(),
-                                    )?;
-                                }
-                                Some(CppTraitDefinition::Normal {
-                                    as_ty: _,
-                                    methods: _,
-                                    link_name: _,
-                                }) => {
-                                    // TODO: too special
-                                    writeln!(
-                                        state,
-                                        r#"
+                                ty = self.ty.path.name(),
+                            )?;
+                        }
+                        Some(CppTraitDefinition::Normal {
+                            as_ty: _,
+                            methods: _,
+                            link_name: _,
+                        }) => {
+                            // TODO: too special
+                            writeln!(
+                                state,
+                                r#"
                         template<typename T, typename... Args>
                         static {ty} make_box(Args&&... args);
                         "#,
-                                        ty = self.ty.path.name(),
-                                    )?;
-                                }
-                                None => (),
-                            }
+                                ty = self.ty.path.name(),
+                            )?;
                         }
+                        None => (),
+                    }
+                }
             }
             if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
                 writeln!(
                     state,
                     r#"
                     inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}(::rust::__zngur_internal_data_ptr(*this))).as_cpp<{cpp_ty}>();
+                        return (*{rust_link_name}((uint8_t*)&data[0])).as_cpp<{cpp_ty}>();
                     }}"#
                 )?;
             }
