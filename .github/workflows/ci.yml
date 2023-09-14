@@ -12,7 +12,13 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-
+    strategy:
+      matrix:
+        cpp_compiler:
+          - clang++
+          - g++
+    env:
+      CXX: ${{ matrix.cpp_compiler }}
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust nightly

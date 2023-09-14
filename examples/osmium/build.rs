@@ -5,6 +5,9 @@ use zngur::Zngur;
 fn main() {
     build::rerun_if_changed("main.zng");
     build::rerun_if_changed("impl.cpp");
+    build::rerun_if_env_changed("CXX");
+
+    let cxx = env::var("CXX").unwrap_or("c++".to_owned());
 
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
 
@@ -15,7 +18,7 @@ fn main() {
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).compiler("clang++");
+    let my_build = my_build.cpp(true).compiler(&cxx);
     let my_build = || my_build.clone();
     my_build().file("generated.cpp").compile("zngur_generated");
     my_build().file("impl.cpp").compile("impl");
