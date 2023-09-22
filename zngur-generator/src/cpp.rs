@@ -400,8 +400,8 @@ impl CppTraitDefinition {
             CppTraitDefinition::Normal {
                 as_ty,
                 methods,
-                link_name,
-                link_name_ref,
+                link_name: _,
+                link_name_ref: _,
             } => {
                 for method in dbg!(methods) {
                     write!(state, "void {}(uint8_t* data", method.rust_link_name)?;
@@ -992,7 +992,7 @@ return o;
             }
             Some(CppTraitDefinition::Normal {
                 as_ty,
-                methods,
+                methods: _,
                 link_name,
                 link_name_ref: _,
             }) => {
@@ -1027,7 +1027,7 @@ return o;
             }
             Some(CppTraitDefinition::Normal {
                 as_ty,
-                methods,
+                methods: _,
                 link_name: _,
                 link_name_ref,
             }) => {
