@@ -4,7 +4,7 @@ use iter_tools::Itertools;
 
 use crate::{
     cpp::{cpp_handle_keyword, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
-    ZngurWellknownTrait, ZngurWellknownTraitData,
+    ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
 use zngur_def::*;
@@ -262,10 +262,8 @@ impl RustFile {
         );
     }
 
-    pub(crate) fn add_builder_for_dyn_trait(
-        &mut self,
-        tr: &crate::ZngurTrait,
-    ) -> CppTraitDefinition {
+    pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &ZngurTrait) -> CppTraitDefinition {
+        assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
         wln!(self, r#"extern "C" {{"#);
         for method in &tr.methods {

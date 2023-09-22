@@ -1,3 +1,5 @@
+use std::collections::hash_map::Entry;
+
 use cpp::cpp_handle_keyword;
 use cpp::CppExportedFnDefinition;
 use cpp::CppExportedImplDefinition;
@@ -7,6 +9,7 @@ use cpp::CppFnSig;
 use cpp::CppMethod;
 use cpp::CppMethodKind;
 use cpp::CppPath;
+use cpp::CppTraitDefinition;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
@@ -135,6 +138,24 @@ impl ZngurGenerator {
                 cpp_ref: ty_def.cpp_ref,
                 from_trait: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
+                        if let RustTrait::Fn {
+                            name,
+                            inputs,
+                            output,
+                        } = tr
+                        {
+                            if let Entry::Vacant(e) = cpp_file.trait_defs.entry(tr.clone()) {
+                                let rust_link_name =
+                                    rust_file.add_builder_for_dyn_fn(name, inputs, output);
+                                e.insert(CppTraitDefinition::Fn {
+                                    sig: CppFnSig {
+                                        rust_link_name,
+                                        inputs: inputs.iter().map(|x| x.into_cpp()).collect(),
+                                        output: output.into_cpp(),
+                                    },
+                                });
+                            }
+                        }
                         Some(tr.clone())
                     } else {
                         None
