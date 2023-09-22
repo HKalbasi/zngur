@@ -1022,7 +1022,7 @@ return o;
             None => (),
         }
         match self.from_trait_ref.as_ref().and_then(|k| traits.get(&k)) {
-            Some(CppTraitDefinition::Fn { sig }) => {
+            Some(CppTraitDefinition::Fn { .. }) => {
                 todo!()
             }
             Some(CppTraitDefinition::Normal {
