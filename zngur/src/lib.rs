@@ -56,8 +56,8 @@ impl Zngur {
             .write_all(h.as_bytes())
             .unwrap();
         if let Some(cpp) = cpp {
-            let cpp_file_path = self.cpp_file_path.expect("No h file path provided");
-            File::create(path.join(cpp_file_path))
+            let cpp_file_path = self.cpp_file_path.expect("No cpp file path provided");
+            File::create(cpp_file_path)
                 .unwrap()
                 .write_all(cpp.as_bytes())
                 .unwrap();

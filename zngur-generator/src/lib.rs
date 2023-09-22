@@ -7,8 +7,6 @@ use cpp::CppFnSig;
 use cpp::CppMethod;
 use cpp::CppMethodKind;
 use cpp::CppPath;
-use cpp::CppTraitDefinition;
-use cpp::CppTraitMethod;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
 use iter_tools::Itertools;
@@ -34,6 +32,11 @@ impl ZngurGenerator {
         let mut cpp_file = CppFile::default();
         cpp_file.additional_includes = zng.additional_includes;
         let mut rust_file = RustFile::default();
+        cpp_file.trait_defs = zng
+            .traits
+            .iter()
+            .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(&value)))
+            .collect();
         for ty_def in zng.types {
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
             match ty_def.layout {
@@ -132,51 +135,15 @@ impl ZngurGenerator {
                 cpp_ref: ty_def.cpp_ref,
                 from_trait: if let RustType::Boxed(b) = &ty_def.ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
-                        match tr {
-                            RustTrait::Normal(_) => {
-                                if let Some(ztr) = zng.traits.get(tr) {
-                                    let link_name = rust_file.add_builder_for_dyn_trait(ztr);
-                                    Some(CppTraitDefinition::Normal {
-                                        as_ty: ztr.tr.into_cpp(),
-                                        methods: ztr
-                                            .methods
-                                            .clone()
-                                            .into_iter()
-                                            .map(|x| CppTraitMethod {
-                                                name: x.name,
-                                                inputs: x
-                                                    .inputs
-                                                    .into_iter()
-                                                    .map(|x| x.into_cpp())
-                                                    .collect(),
-                                                output: x.output.into_cpp(),
-                                            })
-                                            .collect(),
-                                        link_name: link_name.clone(),
-                                    })
-                                } else {
-                                    None
-                                }
-                            }
-                            RustTrait::Fn {
-                                name,
-                                inputs,
-                                output,
-                            } => {
-                                let rust_link_name =
-                                    rust_file.add_builder_for_dyn_fn(name, inputs, output);
-                                Some(CppTraitDefinition::Fn {
-                                    sig: CppFnSig {
-                                        rust_link_name,
-                                        inputs: inputs.iter().map(|x| x.into_cpp()).collect(),
-                                        output: output.into_cpp(),
-                                    },
-                                })
-                            }
-                        }
+                        Some(tr.clone())
                     } else {
                         None
                     }
+                } else {
+                    None
+                },
+                from_trait_ref: if let RustType::Dyn(tr, _) = &ty_def.ty {
+                    Some(tr.clone())
                 } else {
                     None
                 },

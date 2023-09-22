@@ -1,10 +1,14 @@
-use std::fmt::{Display, Write};
+use std::{
+    collections::HashMap,
+    fmt::{Display, Write},
+};
 
 use iter_tools::Itertools;
-use zngur_def::LayoutPolicy;
+use zngur_def::{LayoutPolicy, RustTrait};
 
-use crate::ZngurWellknownTraitData;
+use crate::{rust::IntoCpp, ZngurWellknownTraitData};
 
+#[derive(Debug)]
 pub struct CppPath(pub Vec<String>);
 
 impl CppPath {
@@ -55,6 +59,7 @@ impl Display for CppPath {
     }
 }
 
+#[derive(Debug)]
 pub struct CppType {
     pub path: CppPath,
     pub generic_args: Vec<CppType>,
@@ -66,6 +71,20 @@ impl CppType {
             path: CppPath::from("rust::Ref"),
             generic_args: vec![self],
         }
+    }
+
+    fn emit_specialization_decl(&self, state: &mut State) -> std::fmt::Result {
+        if self.generic_args.is_empty() {
+            write!(state, "struct {}", self.path.name())?;
+        } else {
+            write!(
+                state,
+                "template<> struct {}<{}>",
+                self.path.name(),
+                self.generic_args.iter().join(", ")
+            )?;
+        }
+        Ok(())
     }
 
     fn emit_header(&self, state: &mut State) -> std::fmt::Result {
@@ -162,12 +181,15 @@ impl Write for State {
     }
 }
 
+#[derive(Debug)]
 pub struct CppTraitMethod {
     pub name: String,
+    pub rust_link_name: String,
     pub inputs: Vec<CppType>,
     pub output: CppType,
 }
 
+#[derive(Debug)]
 pub struct CppFnSig {
     pub rust_link_name: String,
     pub inputs: Vec<CppType>,
@@ -275,10 +297,12 @@ pub struct CppMethod {
     pub sig: CppFnSig,
 }
 
+#[derive(Debug)]
 pub struct BuildFromFunction {
     pub sig: CppFnSig,
 }
 
+#[derive(Debug)]
 pub enum CppTraitDefinition {
     Fn {
         sig: CppFnSig,
@@ -287,53 +311,127 @@ pub enum CppTraitDefinition {
         as_ty: CppType,
         methods: Vec<CppTraitMethod>,
         link_name: String,
+        link_name_ref: String,
     },
 }
 
 impl CppTraitDefinition {
+    fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
+        match self {
+            CppTraitDefinition::Fn {
+                sig:
+                    CppFnSig {
+                        rust_link_name,
+                        inputs: _,
+                        output: _,
+                    },
+            } => {
+                // TODO: too special
+                writeln!(
+                    state,
+                    "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
+                void call(uint8_t *, uint8_t *, uint8_t *),
+                uint8_t *o);"
+                )?;
+            }
+            CppTraitDefinition::Normal {
+                link_name,
+                link_name_ref,
+                ..
+            } => {
+                writeln!(
+                    state,
+                    "void {link_name}(uint8_t *data, void destructor(uint8_t *), uint8_t *o);"
+                )?;
+                writeln!(state, "void {link_name_ref}(uint8_t *data, uint8_t *o);")?;
+            }
+        }
+        Ok(())
+    }
+
     fn emit(&self, state: &mut State) -> std::fmt::Result {
         let CppTraitDefinition::Normal {
             as_ty,
             methods,
             link_name: _,
+            link_name_ref: _,
         } = self
         else {
             return Ok(());
         };
-        write!(
-            state,
-            r#"
-namespace rust {{
-template<>
-class Impl<{}> {{
-public:
-    virtual ~Impl() {{}}
-"#,
-            as_ty,
-        )?;
-        for method in methods {
+        as_ty.path.emit_in_namespace(state, |state| {
+            as_ty.emit_specialization_decl(state)?;
+            write!(
+                state,
+                r#"{{
+    public:
+        virtual ~{}() {{}}
+    "#,
+                as_ty.path.name(),
+            )?;
+            for method in methods {
+                write!(
+                    state,
+                    r#"
+            virtual {output} {name}({input}) = 0;
+    "#,
+                    output = method.output,
+                    name = method.name,
+                    input = method
+                        .inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, x)| format!("{x} i{n}"))
+                        .join(", "),
+                )?;
+            }
             write!(
                 state,
                 r#"
-        virtual {output} {name}({input}) = 0;
-"#,
-                output = method.output,
-                name = method.name,
-                input = method
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, x)| format!("{x} i{n}"))
-                    .join(", "),
-            )?;
+    }};
+    "#,
+            )
+        })
+    }
+
+    fn emit_cpp(&self, state: &mut State) -> std::fmt::Result {
+        match self {
+            CppTraitDefinition::Fn { .. } => (),
+            CppTraitDefinition::Normal {
+                as_ty,
+                methods,
+                link_name,
+                link_name_ref,
+            } => {
+                for method in dbg!(methods) {
+                    write!(state, "void {}(uint8_t* data", method.rust_link_name)?;
+                    for arg in 0..method.inputs.len() {
+                        write!(state, ", uint8_t* i{arg}")?;
+                    }
+                    writeln!(state, ", uint8_t* o) {{")?;
+                    writeln!(
+                        state,
+                        "   {as_ty}* data_typed = reinterpret_cast<{as_ty}*>(data);"
+                    )?;
+                    write!(
+                        state,
+                        "   {} oo = data_typed->{}({});",
+                        method.output,
+                        method.name,
+                        method
+                            .inputs
+                            .iter()
+                            .enumerate()
+                            .map(|(n, ty)| {
+                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                            })
+                            .join(", ")
+                    )?;
+                    writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
+                    writeln!(state, "}}")?;
+                }
+            }
         }
-        write!(
-            state,
-            r#"
-}};
-}};
-"#,
-        )?;
         Ok(())
     }
 }
@@ -343,7 +441,8 @@ pub struct CppTypeDefinition {
     pub layout: LayoutPolicy,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
-    pub from_trait: Option<CppTraitDefinition>,
+    pub from_trait: Option<RustTrait>,
+    pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
     pub cpp_value: Option<(String, String)>,
     pub cpp_ref: Option<String>,
@@ -358,6 +457,7 @@ impl Default for CppTypeDefinition {
             constructors: vec![],
             wellknown_traits: vec![],
             from_trait: None,
+            from_trait_ref: None,
             cpp_value: None,
             cpp_ref: None,
         }
@@ -404,6 +504,32 @@ private:
             )?;
         }
         writeln!(state, "public:")?;
+        match &self.from_trait_ref {
+            Some(RustTrait::Fn { inputs, output, .. }) => {
+                let as_std_function = format!(
+                    "::std::function<{}({})>",
+                    output.into_cpp(),
+                    inputs.iter().map(|x| x.into_cpp()).join(", ")
+                );
+                writeln!(
+                    state,
+                    r#"
+static inline {ty} build({as_std_function} f);
+"#,
+                    ty = self.ty.path.name(),
+                )?;
+            }
+            Some(tr @ RustTrait::Normal { .. }) => {
+                let tr = tr.into_cpp();
+                writeln!(
+                    state,
+                    r#"
+            static inline Ref build({tr}& arg);
+            "#,
+                )?;
+            }
+            None => (),
+        }
         if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
             writeln!(
                 state,
@@ -522,22 +648,12 @@ namespace rust {{
 }}"#,
             ty = self.ty,
         )?;
-        if let Some(from_trait) = &self.from_trait {
-            from_trait.emit(state)?;
-        }
         self.ty.path.emit_in_namespace(state, |state| {
             if self.ty.path.0 == ["rust", "Unit"] {
                 write!(state, "template<> struct Tuple<> {{ uint8_t data; }};")?;
                 return Ok(());
-            } else if self.ty.generic_args.is_empty() {
-                write!(state, "struct {}", self.ty.path.name())?;
             } else {
-                write!(
-                    state,
-                    "template<> struct {}<{}>",
-                    self.ty.path.name(),
-                    self.ty.generic_args.iter().join(", ")
-                )?;
+                self.ty.emit_specialization_decl(state)?;
             }
             match self.layout {
                 LayoutPolicy::HeapAllocated | LayoutPolicy::OnlyByRef => {
@@ -657,27 +773,21 @@ private:
                         )?;
                     }
                     match &self.from_trait {
-                        Some(CppTraitDefinition::Fn { sig }) => {
-                            // TODO: too special
+                        Some(RustTrait::Fn { inputs, output, .. }) => {
                             let as_std_function = format!(
                                 "::std::function<{}({})>",
-                                sig.output,
-                                sig.inputs.iter().join(", ")
+                                output.into_cpp(),
+                                inputs.iter().map(|x| x.into_cpp()).join(", ")
                             );
                             writeln!(
                                 state,
                                 r#"
-    static {ty} build({as_std_function} f);
+    static inline {ty} build({as_std_function} f);
     "#,
                                 ty = self.ty.path.name(),
                             )?;
                         }
-                        Some(CppTraitDefinition::Normal {
-                            as_ty: _,
-                            methods: _,
-                            link_name: _,
-                        }) => {
-                            // TODO: too special
+                        Some(RustTrait::Normal { .. }) => {
                             writeln!(
                                 state,
                                 r#"
@@ -805,7 +915,11 @@ namespace rust {{
         self.emit_ref_specialization(state)
     }
 
-    fn emit_cpp_fn_defs(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_cpp_fn_defs(
+        &self,
+        state: &mut State,
+        traits: &HashMap<RustTrait, CppTraitDefinition>,
+    ) -> std::fmt::Result {
         let is_unsized = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Unsized);
@@ -839,7 +953,7 @@ namespace rust {{
                     .join("\n"),
             )?;
         }
-        match &self.from_trait {
+        match self.from_trait.as_ref().and_then(|k| traits.get(&k)) {
             Some(CppTraitDefinition::Fn { sig }) => {
                 // TODO: too special
                 let as_std_function = format!(
@@ -877,49 +991,57 @@ return o;
                 )?;
             }
             Some(CppTraitDefinition::Normal {
-                as_ty: _,
+                as_ty,
                 methods,
                 link_name,
+                link_name_ref: _,
             }) => {
-                // TODO: too special
                 writeln!(
                     state,
                     r#"
 template<typename T, typename... Args>
 {my_name} {my_name}::make_box(Args&&... args) {{
 auto data = new T(::std::forward<Args>(args)...);
+auto data_as_impl = dynamic_cast<{as_ty}*>(data);
 {my_name} o;
 ::rust::__zngur_internal_assume_init(o);
 {link_name}(
-(uint8_t *)data,
-[](uint8_t *d) {{ delete (T *)d; }},
+(uint8_t *)data_as_impl,
+[](uint8_t *d) {{ delete ({as_ty} *)d; }},
 "#,
                 )?;
-                for method in methods {
-                    writeln!(
-                        state,
-                        r#"
-[](uint8_t *d, {input_args} uint8_t *o) {{
-T* dd = (T *)d;
-{output} oo = dd->{name}({input_values});
-::rust::__zngur_internal_move_to_rust(o, oo);
-}},
+                writeln!(
+                    state,
+                    r#"
+::rust::__zngur_internal_data_ptr(o));
+return o;
+}}
 "#,
-                        name = method.name,
-                        input_args = (0..method.inputs.len())
-                            .map(|n| format!("uint8_t* i{n},"))
-                            .join(" "),
-                        input_values = method
-                            .inputs
-                            .iter()
-                            .enumerate()
-                            .map(|(n, ty)| {
-                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
-                            })
-                            .join(", "),
-                        output = method.output,
-                    )?;
-                }
+                )?;
+            }
+            None => (),
+        }
+        match self.from_trait_ref.as_ref().and_then(|k| traits.get(&k)) {
+            Some(CppTraitDefinition::Fn { sig }) => {
+                todo!()
+            }
+            Some(CppTraitDefinition::Normal {
+                as_ty,
+                methods,
+                link_name: _,
+                link_name_ref,
+            }) => {
+                writeln!(
+                    state,
+                    r#"
+rust::Ref<{my_name}> rust::Ref<{my_name}>::build({as_ty}& args) {{
+auto data_as_impl = &args;
+rust::Ref<{my_name}> o;
+::rust::__zngur_internal_assume_init(o);
+{link_name_ref}(
+(uint8_t *)data_as_impl,
+"#,
+                )?;
                 writeln!(
                     state,
                     r#"
@@ -1044,46 +1166,6 @@ return o;
                 }
             }
         }
-        if let Some(trd) = &self.from_trait {
-            match trd {
-                CppTraitDefinition::Fn {
-                    sig:
-                        CppFnSig {
-                            rust_link_name,
-                            inputs: _,
-                            output: _,
-                        },
-                } => {
-                    // TODO: too special
-                    writeln!(
-                        state,
-                        "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
-                    void call(uint8_t *, uint8_t *, uint8_t *),
-                    uint8_t *o);"
-                    )?;
-                }
-                CppTraitDefinition::Normal {
-                    as_ty: _,
-                    methods,
-                    link_name,
-                } => {
-                    // TODO: too special
-                    writeln!(
-                        state,
-                        "void {link_name}(uint8_t *data, void destructor(uint8_t *),"
-                    )?;
-                    for method in methods {
-                        writeln!(
-                            state,
-                            "void f_{}({}),",
-                            method.name,
-                            (0..method.inputs.len() + 2).map(|_| "uint8_t*").join(", ")
-                        )?;
-                    }
-                    writeln!(state, "uint8_t *o);")?;
-                }
-            };
-        }
         Ok(())
     }
 }
@@ -1091,6 +1173,7 @@ return o;
 #[derive(Default)]
 pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
+    pub trait_defs: HashMap<RustTrait, CppTraitDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,
@@ -1248,6 +1331,9 @@ namespace rust {
         for td in &self.type_defs {
             td.emit_rust_links(state)?;
         }
+        for (_, td) in &self.trait_defs {
+            td.emit_rust_links(state)?;
+        }
         writeln!(state, "}}")?;
         for td in &self.type_defs {
             td.ty.emit_header(state)?;
@@ -1258,11 +1344,14 @@ namespace rust {
                 tr.emit_header(state)?;
             }
         }
+        for (_, td) in &self.trait_defs {
+            td.emit(state)?;
+        }
         for td in &self.type_defs {
             td.emit(state)?;
         }
         for td in &self.type_defs {
-            td.emit_cpp_fn_defs(state)?;
+            td.emit_cpp_fn_defs(state, &self.trait_defs)?;
         }
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
@@ -1306,9 +1395,13 @@ namespace rust {
 
     fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
         writeln!(state, r#"#include "./generated.h""#)?;
+        writeln!(state, "extern \"C\" {{")?;
+        for t in &self.trait_defs {
+            *is_really_needed = true;
+            t.1.emit_cpp(state)?;
+        }
         for func in &self.exported_fn_defs {
             *is_really_needed = true;
-            writeln!(state, "extern \"C\" {{")?;
             func.sig.emit_rust_link(state)?;
             writeln!(state, "{{")?;
             writeln!(
@@ -1327,11 +1420,9 @@ namespace rust {
             )?;
             writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
             writeln!(state, "}}")?;
-            writeln!(state, "}}")?;
         }
         for imp in &self.exported_impls {
             *is_really_needed = true;
-            writeln!(state, "extern \"C\" {{")?;
             for (name, sig) in &imp.methods {
                 sig.emit_rust_link(state)?;
                 writeln!(state, "{{")?;
@@ -1356,8 +1447,8 @@ namespace rust {
                 writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
                 writeln!(state, "}}")?;
             }
-            writeln!(state, "}}")?;
         }
+        writeln!(state, "}}")?;
         Ok(())
     }
 

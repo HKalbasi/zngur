@@ -14,3 +14,19 @@ Rust semantics (See [idea](./zngur.md#idea)) and Rust can't express all C++ thin
 
 When Rust and C++ are used in a project, it means that performance is a requirement. So, unlike interoperability
 tools between Rust and higher level languages, Zngur is not allowed to do deep copies or invisible allocations.
+
+## Don't special case standard library types
+
+## Keep Rust things Rusty
+
+To minimizing the surprise. Rust decisions are usually superior to C++ ones.
+
+### `Result<T, E>` is not automatically converted to exception
+
+### Copy constructors are deleted, manual `.clone()` should be used
+
+### `RustType r;` has the same semantics as `let r: RustType;`
+
+### Rust functions returning `()` do the same in C++
+
+This one has very little practical benefits, and might be revisited in future.

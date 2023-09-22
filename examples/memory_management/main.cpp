@@ -6,30 +6,20 @@
 // Rust values are available in the `::rust` namespace from their absolute path
 // in Rust
 template <typename T> using Vec = ::rust::std::vec::Vec<T>;
-template <typename T> using Option = ::rust::std::option::Option<T>;
+// template <typename T> using Option = ::rust::std::option::Option<T>;
 template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
+template <typename T> using RmDyn = ::rust::Ref<::rust::Dyn<T>>;
+using crate::consume_n_times;
 using rust::crate::PrintOnDrop;
+using rust::crate::PrintOnDropConsumer;
 
-// You can implement Rust traits for your classes
-template <typename T>
-class VectorIterator : public rust::Impl<::rust::std::iter::Iterator<T>> {
-  std::vector<T> vec;
-  size_t pos;
-
-public:
-  VectorIterator(std::vector<T> &&v) : vec(v), pos(0) {}
-  ~VectorIterator() {
-    std::cout << "vector iterator has been destructed" << std::endl;
+class CppPrintOnDropHolder : public PrintOnDropConsumer {
+  ::rust::Unit consume(PrintOnDrop p) override {
+    item = std::move(p);
+    return {};
   }
 
-  Option<T> next() override {
-    if (pos >= vec.size()) {
-      return Option<T>::None();
-    }
-    T value = vec[pos++];
-    // You can construct Rust enum with fields in C++
-    return Option<T>::Some(value);
-  }
+  PrintOnDrop item;
 };
 
 int main() {
@@ -61,9 +51,37 @@ int main() {
     std::cout << "Checkpoint 8" << std::endl;
     vec2.clone(); // Clone and drop immediately
     std::cout << "Checkpoint 9" << std::endl;
-    std::cout << "Checkpoint 10" << std::endl;
   }
-  std::cout << "Checkpoint 11" << std::endl;
-  std::cout << "Checkpoint 12" << std::endl;
-  std::cout << "Checkpoint 13" << std::endl;
+  {
+    CppPrintOnDropHolder c;
+    {
+      std::cout << "Checkpoint 10" << std::endl;
+      auto holder = BoxDyn<PrintOnDropConsumer>::make_box<CppPrintOnDropHolder>(
+          std::move(c));
+      std::cout << "Checkpoint 11" << std::endl;
+      consume_n_times(holder.deref_mut(), ::rust::Str::from_char_star("P"), 3);
+      std::cout << "Checkpoint 12" << std::endl;
+      consume_n_times(holder.deref_mut(), ::rust::Str::from_char_star("Q"), 2);
+      std::cout << "Checkpoint 13" << std::endl;
+    }
+    std::cout << "Checkpoint 14" << std::endl;
+  }
+  {
+    CppPrintOnDropHolder c;
+    {
+      std::cout << "Checkpoint 15" << std::endl;
+      auto holder = RmDyn<PrintOnDropConsumer>::build(c);
+      std::cout << "Checkpoint 16" << std::endl;
+      consume_n_times(holder, ::rust::Str::from_char_star("P2"), 3);
+      std::cout << "Checkpoint 17" << std::endl;
+      consume_n_times(holder, ::rust::Str::from_char_star("Q2"), 2);
+      std::cout << "Checkpoint 18" << std::endl;
+    }
+    std::cout << "Checkpoint 19" << std::endl;
+  }
+  std::cout << "Checkpoint 20" << std::endl;
+  std::cout << "Checkpoint 26" << std::endl;
+  std::cout << "Checkpoint 27" << std::endl;
+  std::cout << "Checkpoint 28" << std::endl;
+  std::cout << "Checkpoint 29" << std::endl;
 }

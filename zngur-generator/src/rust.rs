@@ -3,7 +3,7 @@ use std::{fmt::Write, iter};
 use iter_tools::Itertools;
 
 use crate::{
-    cpp::{cpp_handle_keyword, CppPath, CppType},
+    cpp::{cpp_handle_keyword, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
     ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
@@ -262,30 +262,56 @@ impl RustFile {
         );
     }
 
-    pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &crate::ZngurTrait) -> String {
+    pub(crate) fn add_builder_for_dyn_trait(
+        &mut self,
+        tr: &crate::ZngurTrait,
+    ) -> CppTraitDefinition {
+        let mut method_mangled_name = vec![];
+        wln!(self, r#"extern "C" {{"#);
+        for method in &tr.methods {
+            let name = mangle_name(&tr.tr.to_string()) + "_" + &method.name;
+            wln!(
+                self,
+                r#"fn {name}(data: *mut u8, {} o: *mut u8);"#,
+                method
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .map(|(n, _)| format!("i{n}: *mut u8,"))
+                    .join(" ")
+            );
+            method_mangled_name.push(name);
+        }
+        wln!(self, "}}");
+        let link_name = self.add_builder_for_dyn_trait_owned(tr, &method_mangled_name);
+        let link_name_ref = self.add_builder_for_dyn_trait_borrowed(tr, &method_mangled_name);
+        CppTraitDefinition::Normal {
+            as_ty: tr.tr.into_cpp(),
+            methods: tr
+                .methods
+                .clone()
+                .into_iter()
+                .zip(method_mangled_name)
+                .map(|(x, rust_link_name)| CppTraitMethod {
+                    name: x.name,
+                    rust_link_name,
+                    inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
+                    output: x.output.into_cpp(),
+                })
+                .collect(),
+            link_name,
+            link_name_ref,
+        }
+    }
+
+    fn add_builder_for_dyn_trait_owned(
+        &mut self,
+        tr: &ZngurTrait,
+        method_mangled_name: &[String],
+    ) -> String {
         let trait_name = tr.tr.to_string();
         let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
         let mangled_name = mangle_name(&trait_name);
-        let method_and_types = tr
-            .methods
-            .iter()
-            .map(|x| {
-                format!(
-                    r#"f_{}: extern "C" fn(data: *mut u8, {} o: *mut u8),"#,
-                    x.name,
-                    x.inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, _)| format!("i{n}: *mut u8,"))
-                        .join(" ")
-                )
-            })
-            .join("\n");
-        let method_names = tr
-            .methods
-            .iter()
-            .map(|x| format!("f_{},", x.name))
-            .join("\n");
         wln!(
             self,
             r#"
@@ -293,12 +319,10 @@ impl RustFile {
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
-    {method_and_types}
     o: *mut u8,
 ) {{
     struct Wrapper {{ 
         value: ZngurCppOpaqueOwnedObject,
-        {method_and_types}
     }}
     impl {trait_without_assocs} for Wrapper {{
 "#
@@ -306,7 +330,7 @@ pub extern "C" fn {mangled_name}(
         for (name, ty) in assocs {
             wln!(self, "        type {name} = {ty};");
         }
-        for method in &tr.methods {
+        for (method, rust_link_name) in tr.methods.iter().zip(method_mangled_name) {
             w!(self, "        fn {}(", method.name);
             match method.receiver {
                 crate::ZngurMethodReceiver::Static => {
@@ -321,10 +345,7 @@ pub extern "C" fn {mangled_name}(
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
             wln!(self, "            let data = self.value.ptr();");
-            self.call_cpp_function(
-                &format!("(self.f_{})(data, ", method.name),
-                method.inputs.len(),
-            );
+            self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
             wln!(self, "        }} }}");
         }
         wln!(
@@ -334,9 +355,63 @@ pub extern "C" fn {mangled_name}(
     unsafe {{ 
         let this = Wrapper {{
             value: ZngurCppOpaqueOwnedObject::new(data, destructor),
-            {method_names}
         }};
         let r: Box<dyn {trait_name}> = Box::new(this);
+        std::ptr::write(o as *mut _, r)
+    }}
+}}"#
+        );
+        mangled_name
+    }
+
+    fn add_builder_for_dyn_trait_borrowed(
+        &mut self,
+        tr: &ZngurTrait,
+        method_mangled_name: &[String],
+    ) -> String {
+        let trait_name = tr.tr.to_string();
+        let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
+        let mangled_name = mangle_name(&trait_name) + "_borrowed";
+        wln!(
+            self,
+            r#"
+#[no_mangle]
+pub extern "C" fn {mangled_name}(
+    data: *mut u8,
+    o: *mut u8,
+) {{
+    struct Wrapper(ZngurCppOpaqueBorrowedObject);
+    impl {trait_without_assocs} for Wrapper {{
+"#
+        );
+        for (name, ty) in assocs {
+            wln!(self, "        type {name} = {ty};");
+        }
+        for (method, rust_link_name) in tr.methods.iter().zip(method_mangled_name) {
+            w!(self, "        fn {}(", method.name);
+            match method.receiver {
+                crate::ZngurMethodReceiver::Static => {
+                    panic!("traits with static methods are not object safe");
+                }
+                crate::ZngurMethodReceiver::Ref(Mutability::Not) => w!(self, "&self"),
+                crate::ZngurMethodReceiver::Ref(Mutability::Mut) => w!(self, "&mut self"),
+                crate::ZngurMethodReceiver::Move => w!(self, "self"),
+            }
+            for (i, ty) in method.inputs.iter().enumerate() {
+                w!(self, ", i{i}: {ty}");
+            }
+            wln!(self, ") -> {} {{ unsafe {{", method.output);
+            wln!(self, "            let data = self as *mut _ as *mut u8;");
+            self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
+            wln!(self, "        }} }}");
+        }
+        wln!(
+            self,
+            r#"
+    }}
+    unsafe {{ 
+        let this = data as *mut Wrapper;
+        let r: &dyn {trait_name} = &*this;
         std::ptr::write(o as *mut _, r)
     }}
 }}"#

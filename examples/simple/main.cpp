@@ -11,7 +11,7 @@ template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
 
 // You can implement Rust traits for your classes
 template <typename T>
-class VectorIterator : public rust::Impl<::rust::std::iter::Iterator<T>> {
+class VectorIterator : public ::rust::std::iter::Iterator<T> {
   std::vector<T> vec;
   size_t pos;
 
