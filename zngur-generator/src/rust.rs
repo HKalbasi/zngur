@@ -401,7 +401,10 @@ pub extern "C" fn {mangled_name}(
                 w!(self, ", i{i}: {ty}");
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
-            wln!(self, "            let data = self as *mut _ as *mut u8;");
+            wln!(
+                self,
+                "            let data = ::std::mem::transmute::<_, *mut u8>(self);"
+            );
             self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
             wln!(self, "        }} }}");
         }

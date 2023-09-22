@@ -5,7 +5,7 @@
 
 #include "./generated.h"
 
-class BlobStore : public ::rust::Impl<::rust::crate::BlobStoreTrait> {
+class BlobStore : public ::rust::crate::BlobStoreTrait {
   class Impl {
     friend BlobStore;
 
