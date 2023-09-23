@@ -18,3 +18,10 @@ fn consume_n_times(consumer: &mut dyn PrintOnDropConsumer, name: &'static str, t
         consumer.consume(PrintOnDrop(name));
     }
 }
+
+fn consume_and_panic(p: PrintOnDrop, do_panic: bool) -> PrintOnDrop {
+    if do_panic {
+        panic!("consume_and_panic executed with value {}", p.0);
+    }
+    p
+}

@@ -1,5 +1,12 @@
+#convert_panic_to_exception
+
 type () {
     layout(size = 0, align = 1);
+    wellknown_traits(Copy);
+}
+
+type bool {
+    layout(size = 1, align = 1);
     wellknown_traits(Copy);
 }
 
@@ -11,6 +18,8 @@ mod crate {
     type PrintOnDrop {
         layout(size = 16, align = 8);
         constructor(&str);
+
+        fn clone(&self) -> PrintOnDrop;
     }
 
     trait PrintOnDropConsumer {
@@ -28,6 +37,7 @@ mod crate {
     }
 
     fn consume_n_times(&mut dyn PrintOnDropConsumer, &str, usize);
+    fn consume_and_panic(PrintOnDrop, bool) -> PrintOnDrop;
 }
 
 mod ::std {

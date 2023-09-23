@@ -257,10 +257,10 @@ impl CppFnSig {
             "inline {output} {fn_name}({input_defs})
         {{
             {output} o;
-            ::rust::__zngur_internal_assume_init(o);
+            {deinits}
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
             {panic_handler}
-            {deinits}
+            ::rust::__zngur_internal_assume_init(o);
             return o;
         }}",
             input_defs = inputs
@@ -513,6 +513,7 @@ struct rust::Ref<{ty}> {{
         data = 0;
     }}
     Ref({ty}& t) {{
+        ::rust::__zngur_internal_check_init<{ty}>(t);
         data = (size_t)__zngur_internal_data_ptr(t);
     }}
 private:
@@ -914,6 +915,7 @@ namespace rust {{
     
         template<>
         inline void __zngur_internal_assume_deinit<{ty}>({ty}& t) {{
+            ::rust::__zngur_internal_check_init<{ty}>(t);
             t.drop_flag = false;
         }}
 "#,
@@ -924,7 +926,6 @@ namespace rust {{
                 r#"
     template<>
     inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
-        ::rust::__zngur_internal_check_init<{ty}>(t);
         return (uint8_t*)&t.data;
     }}
 }}
