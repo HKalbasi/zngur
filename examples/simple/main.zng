@@ -1,3 +1,5 @@
+#convert_panic_to_exception
+
 type () {
     layout(size = 0, align = 1);
     wellknown_traits(Copy);
@@ -16,6 +18,13 @@ mod ::std {
         constructor Some(i32);
 
         fn unwrap(self) -> i32;
+    }
+
+    type option::Option<&i32> {
+        layout(size = 8, align = 8);
+        wellknown_traits(Copy);
+
+        fn unwrap(self) -> &i32;
     }
 
     type iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>> {
@@ -40,6 +49,7 @@ mod ::std {
             fn new() -> Vec<i32>;
             fn push(&mut self, i32);
             fn clone(&self) -> Vec<i32>;
+            fn get(&self, usize) -> ::std::option::Option<&i32> deref [i32];
             fn into_iter(self) -> ::std::vec::IntoIter<i32>;
         }
     }

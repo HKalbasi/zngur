@@ -7,7 +7,7 @@ use iter_tools::{Either, Itertools};
 use zngur_def::{
     LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
     ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurFile, ZngurFn, ZngurMethod,
-    ZngurMethodReceiver, ZngurTrait, ZngurType, ZngurWellknownTrait,
+    ZngurMethodDetails, ZngurMethodReceiver, ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -58,6 +58,7 @@ impl ParsedPath<'_> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedItem<'a> {
+    ConvertPanicToException,
     CppAdditionalInclude(&'a str),
     Mod {
         path: ParsedPath<'a>,
@@ -106,7 +107,11 @@ enum ParsedTypeItem<'a> {
         name: Option<&'a str>,
         args: ParsedConstructorArgs<'a>,
     },
-    Method(ParsedMethod<'a>, Option<ParsedPath<'a>>),
+    Method {
+        data: ParsedMethod<'a>,
+        use_path: Option<ParsedPath<'a>>,
+        deref: Option<ParsedRustType<'a>>,
+    },
     CppValue {
         field: &'a str,
         cpp_type: &'a str,
@@ -214,8 +219,16 @@ impl ParsedItem<'_> {
                                 },
                             })
                         }
-                        ParsedTypeItem::Method(m, u) => {
-                            methods.push((m.to_zngur(base), u.map(|x| x.to_zngur(base))));
+                        ParsedTypeItem::Method {
+                            data,
+                            use_path,
+                            deref,
+                        } => {
+                            methods.push(ZngurMethodDetails {
+                                data: data.to_zngur(base),
+                                use_path: use_path.map(|x| x.to_zngur(base)),
+                                deref: deref.map(|x| x.to_zngur(base)),
+                            });
                         }
                         ParsedTypeItem::CppValue { field, cpp_type } => {
                             cpp_value = Some((field.to_owned(), cpp_type.to_owned()));
@@ -320,6 +333,9 @@ Use one of `layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
             }
             ParsedItem::CppAdditionalInclude(s) => {
                 r.additional_includes += s;
+            }
+            ParsedItem::ConvertPanicToException => {
+                r.convert_panic_to_exception = true;
             }
         }
     }
@@ -915,7 +931,17 @@ fn type_item<'a>(
                         .map(Some)
                         .or(empty().to(None)),
                 )
-                .map(|(m, u)| ParsedTypeItem::Method(m, u)))
+                .then(
+                    just(Token::Ident("deref"))
+                        .ignore_then(rust_type())
+                        .map(Some)
+                        .or(empty().to(None)),
+                )
+                .map(|((data, use_path), deref)| ParsedTypeItem::Method {
+                    deref,
+                    use_path,
+                    data,
+                }))
             .then_ignore(just(Token::Semicolon))
     }
     just(Token::KwType)
@@ -955,11 +981,14 @@ fn fn_item<'a>(
 fn additional_include_item<'a>(
 ) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
-    just(Token::Sharp)
-        .then(just(Token::Ident("cpp_additional_includes")))
-        .ignore_then(select! {
-            Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
-        })
+    just(Token::Sharp).ignore_then(
+        just(Token::Ident("cpp_additional_includes"))
+            .ignore_then(select! {
+                Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+            })
+            .or(just(Token::Ident("convert_panic_to_exception"))
+                .to(ParsedItem::ConvertPanicToException)),
+    )
 }
 
 fn extern_cpp_item<'a>(

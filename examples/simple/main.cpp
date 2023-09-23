@@ -41,6 +41,13 @@ int main() {
   Vec<int32_t>::push(s, 3);
   // You can call Rust functions just like normal Rust.
   std::cout << s.clone().into_iter().sum() << std::endl;
+  // You can catch Rust panics as C++ exceptions
+  try {
+    std::cout << "s[2] = " << *s.get(2).unwrap() << std::endl;
+    std::cout << "s[4] = " << *s.get(4).unwrap() << std::endl;
+  } catch (rust::Panic e) {
+    std::cout << "Rust panic happened" << std::endl;
+  }
   int state = 0;
   // You can convert a C++ lambda into a `Box<dyn Fn>` and friends.
   auto f = BoxDyn<::rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {

@@ -128,12 +128,15 @@ impl IntoCpp for RustType {
     }
 }
 
-pub struct RustFile(pub String);
+pub struct RustFile {
+    pub text: String,
+    pub panic_to_exception: bool,
+}
 
 impl Default for RustFile {
     fn default() -> Self {
-        Self(
-            r#"
+        Self {
+            text: r#"
 #[allow(dead_code)]
 mod zngur_types {
     pub struct ZngurCppOpaqueBorrowedObject(());
@@ -168,13 +171,14 @@ pub use zngur_types::ZngurCppOpaqueOwnedObject;
 pub use zngur_types::ZngurCppOpaqueBorrowedObject;
 "#
             .to_owned(),
-        )
+            panic_to_exception: false,
+        }
     }
 }
 
 impl Write for RustFile {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
-        self.0.write_str(s)
+        self.text.write_str(s)
     }
 }
 
@@ -610,6 +614,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         inputs: &[RustType],
         output: &RustType,
         use_path: Option<Vec<String>>,
+        deref: bool,
     ) -> String {
         let mangled_name = mangle_name(rust_name);
         w!(
@@ -622,21 +627,27 @@ pub extern "C" fn {mangled_name}("#
             w!(self, "i{n}: *mut u8, ");
         }
         wln!(self, "o: *mut u8) {{ unsafe {{");
-        if let Some(use_path) = use_path {
-            if use_path.first().is_some_and(|x| x == "crate") {
-                wln!(self, "    use {};", use_path.iter().join("::"));
-            } else {
-                wln!(self, "    use ::{};", use_path.iter().join("::"));
+        self.wrap_in_catch_unwind(|this| {
+            if let Some(use_path) = use_path {
+                if use_path.first().is_some_and(|x| x == "crate") {
+                    wln!(this, "    use {};", use_path.iter().join("::"));
+                } else {
+                    wln!(this, "    use ::{};", use_path.iter().join("::"));
+                }
             }
-        }
-        w!(
-            self,
-            "    ::std::ptr::write(o as *mut {output}, {rust_name}("
-        );
-        for (n, ty) in inputs.iter().enumerate() {
-            w!(self, "::std::ptr::read(i{n} as *mut {ty}), ");
-        }
-        wln!(self, ")) }} }}");
+            w!(
+                this,
+                "    ::std::ptr::write(o as *mut {output}, {rust_name}("
+            );
+            if deref {
+                w!(this, "&");
+            }
+            for (n, ty) in inputs.iter().enumerate() {
+                w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");
+            }
+            wln!(this, "));");
+        });
+        wln!(self, " }} }}");
         mangled_name
     }
 
@@ -684,6 +695,47 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                     debug_print,
                 }
             }
+        }
+    }
+
+    pub(crate) fn enable_panic_to_exception(&mut self) {
+        wln!(
+            self,
+            r#"thread_local! {{
+            pub static PANIC_PAYLOAD: ::std::cell::Cell<Option<()>> = ::std::cell::Cell::new(None);
+        }}
+        #[no_mangle]
+        pub fn __zngur_detect_panic() -> u8 {{
+            PANIC_PAYLOAD.with(|p| {{
+                let pp = p.take();
+                let r = if pp.is_some() {{ 1 }} else {{ 0 }};
+                p.set(pp);
+                r
+            }})
+        }}
+
+        #[no_mangle]
+        pub fn __zngur_take_panic() {{
+            PANIC_PAYLOAD.with(|p| {{
+                p.take();
+            }})
+        }}
+        "#
+        );
+        self.panic_to_exception = true;
+    }
+
+    fn wrap_in_catch_unwind(&mut self, f: impl FnOnce(&mut RustFile)) {
+        if !self.panic_to_exception {
+            f(self);
+        } else {
+            wln!(self, "let e = ::std::panic::catch_unwind(|| {{");
+            f(self);
+            wln!(self, "}});");
+            wln!(
+                self,
+                "if let Err(_) = e {{ PANIC_PAYLOAD.with(|p| p.set(Some(()))) }}"
+            );
         }
     }
 }

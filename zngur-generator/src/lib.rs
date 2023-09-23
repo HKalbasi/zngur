@@ -40,6 +40,10 @@ impl ZngurGenerator {
             .iter()
             .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(&value)))
             .collect();
+        if zng.convert_panic_to_exception {
+            rust_file.enable_panic_to_exception();
+            cpp_file.panic_to_exception = true;
+        }
         for ty_def in zng.types {
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
             match ty_def.layout {
@@ -98,18 +102,24 @@ impl ZngurGenerator {
                 let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
                 wellknown_traits.push(data);
             }
-            for (method, use_path) in ty_def.methods {
+            for method_details in ty_def.methods {
+                let ZngurMethodDetails {
+                    data: method,
+                    use_path,
+                    deref,
+                } = method_details;
                 let (rusty_inputs, inputs) = real_inputs_of_method(&method, &ty_def.ty);
                 let rust_link_name = rust_file.add_function(
                     &format!(
                         "<{}>::{}::<{}>",
-                        ty_def.ty,
+                        deref.as_ref().unwrap_or(&ty_def.ty),
                         method.name,
                         method.generics.iter().join(", "),
                     ),
                     &rusty_inputs,
                     &method.output,
                     use_path,
+                    deref.is_some(),
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
@@ -171,8 +181,13 @@ impl ZngurGenerator {
             });
         }
         for func in zng.funcs {
-            let rust_link_name =
-                rust_file.add_function(&func.path.to_string(), &func.inputs, &func.output, None);
+            let rust_link_name = rust_file.add_function(
+                &func.path.to_string(),
+                &func.inputs,
+                &func.output,
+                None,
+                false,
+            );
             cpp_file.fn_defs.push(CppFnDefinition {
                 name: CppPath(func.path.path),
                 sig: CppFnSig {
@@ -222,7 +237,7 @@ impl ZngurGenerator {
             });
         }
         let (h, cpp) = cpp_file.render();
-        (rust_file.0, h, cpp)
+        (rust_file.text, h, cpp)
     }
 }
 

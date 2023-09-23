@@ -172,6 +172,23 @@ impl From<&str> for CppType {
 
 struct State {
     text: String,
+    panic_to_exception: bool,
+}
+
+impl State {
+    fn panic_handler(&self) -> String {
+        if self.panic_to_exception {
+            r#"
+            if (__zngur_detect_panic()) {
+                __zngur_take_panic();
+                throw ::rust::Panic{};
+            }
+            "#
+            .to_owned()
+        } else {
+            "".to_owned()
+        }
+    }
 }
 
 impl Write for State {
@@ -242,6 +259,7 @@ impl CppFnSig {
             {output} o;
             ::rust::__zngur_internal_assume_init(o);
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
+            {panic_handler}
             {deinits}
             return o;
         }}",
@@ -253,6 +271,7 @@ impl CppFnSig {
             input_args = (0..inputs.len())
                 .map(|n| format!("::rust::__zngur_internal_data_ptr(i{n}), "))
                 .join(""),
+            panic_handler = state.panic_handler(),
             deinits = (0..inputs.len())
                 .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
                 .join("\n"),
@@ -403,7 +422,7 @@ impl CppTraitDefinition {
                 link_name: _,
                 link_name_ref: _,
             } => {
-                for method in dbg!(methods) {
+                for method in methods {
                     write!(state, "void {}(uint8_t* data", method.rust_link_name)?;
                     for arg in 0..method.inputs.len() {
                         write!(state, ", uint8_t* i{arg}")?;
@@ -1178,6 +1197,7 @@ pub struct CppFile {
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,
     pub additional_includes: String,
+    pub panic_to_exception: bool,
 }
 
 impl CppFile {
@@ -1192,7 +1212,19 @@ impl CppFile {
 #include <iostream>
 #include <functional>
 #include <math.h>
-
+"#;
+        if self.panic_to_exception {
+            state.text += r#"
+            namespace rust {
+                class Panic {};
+            }
+            extern "C" {
+                uint8_t __zngur_detect_panic();
+                void __zngur_take_panic();
+            }
+            "#;
+        }
+        state.text += r#"
 #define zngur_dbg(x)                                                           \
   {                                                                            \
     ::std::cerr << "[" << __FILE__ << ":" << __LINE__ << "] " << #x << " = ";  \
@@ -1270,6 +1302,12 @@ namespace rust {
         for ty in [8, 16, 32, 64]
             .into_iter()
             .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
+            .chain([8, 16, 32, 64].into_iter().flat_map(|x| {
+                [
+                    format!("::rust::Ref<int{x}_t>"),
+                    format!("::rust::Ref<uint{x}_t>"),
+                ]
+            }))
             .chain([
                 format!("::rust::ZngurCppOpaqueOwnedObject"),
                 format!("::double_t"),
@@ -1455,9 +1493,11 @@ namespace rust {
     pub fn render(self) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
+            panic_to_exception: self.panic_to_exception,
         };
         let mut cpp_file = State {
             text: "".to_owned(),
+            panic_to_exception: self.panic_to_exception,
         };
         self.emit_h_file(&mut h_file).unwrap();
         let mut is_cpp_needed = false;

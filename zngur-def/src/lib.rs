@@ -77,11 +77,17 @@ pub enum LayoutPolicy {
     OnlyByRef,
 }
 
+pub struct ZngurMethodDetails {
+    pub data: ZngurMethod,
+    pub use_path: Option<Vec<String>>,
+    pub deref: Option<RustType>,
+}
+
 pub struct ZngurType {
     pub ty: RustType,
     pub layout: LayoutPolicy,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
-    pub methods: Vec<(ZngurMethod, Option<Vec<String>>)>,
+    pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
     pub cpp_value: Option<(String, String)>,
     pub cpp_ref: Option<String>,
@@ -100,6 +106,7 @@ pub struct ZngurFile {
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,
     pub additional_includes: String,
+    pub convert_panic_to_exception: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
