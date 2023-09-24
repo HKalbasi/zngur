@@ -71,6 +71,7 @@ pub enum ZngurWellknownTraitData {
     Copy,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutPolicy {
     StackAllocated { size: usize, align: usize },
     HeapAllocated,

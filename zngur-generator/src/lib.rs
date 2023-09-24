@@ -137,7 +137,7 @@ impl ZngurGenerator {
             }
             cpp_file.type_defs.push(CppTypeDefinition {
                 ty: ty_def.ty.into_cpp(),
-                layout: ty_def.layout,
+                layout: rust_file.add_layout_policy_shim(&ty_def.ty, ty_def.layout),
                 constructors,
                 methods: cpp_methods,
                 wellknown_traits,

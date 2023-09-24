@@ -3,7 +3,9 @@ use std::{fmt::Write, iter};
 use iter_tools::Itertools;
 
 use crate::{
-    cpp::{cpp_handle_keyword, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
+    cpp::{
+        cpp_handle_keyword, CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
+    },
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
@@ -736,6 +738,48 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 self,
                 "if let Err(_) = e {{ PANIC_PAYLOAD.with(|p| p.set(Some(()))) }}"
             );
+        }
+    }
+
+    pub(crate) fn add_layout_policy_shim(
+        &mut self,
+        ty: &RustType,
+        layout: LayoutPolicy,
+    ) -> CppLayoutPolicy {
+        match layout {
+            LayoutPolicy::StackAllocated { size, align } => {
+                CppLayoutPolicy::StackAllocated { size, align }
+            }
+            LayoutPolicy::HeapAllocated => {
+                let size_fn = mangle_name(&format!("{ty}_size_fn"));
+                let alloc_fn = mangle_name(&format!("{ty}_alloc_fn"));
+                let free_fn = mangle_name(&format!("{ty}_free_fn"));
+                wln!(
+                    self,
+                    r#"
+                #[no_mangle]
+                pub fn {size_fn}() -> usize {{
+                    ::std::mem::size_of::<{ty}>()
+                }}
+        
+                #[no_mangle]
+                pub fn {alloc_fn}() -> *mut u8 {{
+                    unsafe {{ ::std::alloc::alloc(::std::alloc::Layout::new::<{ty}>()) }}
+                }}
+
+                #[no_mangle]
+                pub fn {free_fn}(p: *mut u8) {{
+                    unsafe {{ ::std::alloc::dealloc(p, ::std::alloc::Layout::new::<{ty}>()) }}
+                }}
+                "#
+                );
+                CppLayoutPolicy::HeapAllocated {
+                    size_fn,
+                    alloc_fn,
+                    free_fn,
+                }
+            }
+            LayoutPolicy::OnlyByRef => CppLayoutPolicy::OnlyByRef,
         }
     }
 }

@@ -4,7 +4,7 @@ use std::{
 };
 
 use iter_tools::Itertools;
-use zngur_def::{LayoutPolicy, RustTrait};
+use zngur_def::RustTrait;
 
 use crate::{rust::IntoCpp, ZngurWellknownTraitData};
 
@@ -455,9 +455,23 @@ impl CppTraitDefinition {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CppLayoutPolicy {
+    StackAllocated {
+        size: usize,
+        align: usize,
+    },
+    HeapAllocated {
+        size_fn: String,
+        alloc_fn: String,
+        free_fn: String,
+    },
+    OnlyByRef,
+}
+
 pub struct CppTypeDefinition {
     pub ty: CppType,
-    pub layout: LayoutPolicy,
+    pub layout: CppLayoutPolicy,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
     pub from_trait: Option<RustTrait>,
@@ -471,7 +485,7 @@ impl Default for CppTypeDefinition {
     fn default() -> Self {
         Self {
             ty: CppType::from("fill::me::you::forgot::it"),
-            layout: LayoutPolicy::OnlyByRef,
+            layout: CppLayoutPolicy::OnlyByRef,
             methods: vec![],
             constructors: vec![],
             wellknown_traits: vec![],
@@ -670,13 +684,16 @@ namespace rust {{
         )?;
         self.ty.path.emit_in_namespace(state, |state| {
             if self.ty.path.0 == ["rust", "Unit"] {
-                write!(state, "template<> struct Tuple<> {{ uint8_t data; }};")?;
+                write!(
+                    state,
+                    "template<> struct Tuple<> {{ ::std::array<::uint8_t, 1> data; }};"
+                )?;
                 return Ok(());
             } else {
                 self.ty.emit_specialization_decl(state)?;
             }
             match self.layout {
-                LayoutPolicy::HeapAllocated | LayoutPolicy::OnlyByRef => {
+                CppLayoutPolicy::OnlyByRef => {
                     writeln!(
                         state,
                         r#"
@@ -695,13 +712,33 @@ public:
                         )?;
                     }
                 }
-                LayoutPolicy::StackAllocated { size, align } => {
-                    writeln!(
-                        state,
-                        r#"
+                CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => {
+                    match self.layout {
+                        CppLayoutPolicy::StackAllocated { size, align } => {
+                            writeln!(
+                                state,
+                                r#"
 {{
 private:
     alignas({align}) ::std::array<uint8_t, {size}> data;
+            "#,
+                            )?;
+                        }
+                        CppLayoutPolicy::HeapAllocated { .. } => {
+                            writeln!(
+                                state,
+                                r#"
+{{
+private:
+    uint8_t* data;
+            "#,
+                            )?;
+                        }
+                        CppLayoutPolicy::OnlyByRef => unreachable!(),
+                    }
+                    writeln!(
+                        state,
+                        r#"
     friend uint8_t* ::rust::__zngur_internal_data_ptr<{ty}>({ty}& t);
     friend void ::rust::__zngur_internal_check_init<{ty}>({ty}& t);
     friend void ::rust::__zngur_internal_assume_init<{ty}>({ty}& t);
@@ -711,8 +748,10 @@ private:
                         ty = self.ty,
                     )?;
                     if self.ty.path.to_string() == "::rust::Bool" {
-                        assert_eq!(size, 1);
-                        assert_eq!(align, 1);
+                        assert_eq!(
+                            self.layout,
+                            CppLayoutPolicy::StackAllocated { size: 1, align: 1 }
+                        );
                         assert!(is_copy);
                         writeln!(
                             state,
@@ -731,21 +770,44 @@ private:
                     if !is_copy {
                         writeln!(state, "   bool drop_flag;")?;
                     }
+                    let (alloc_heap, free_heap, copy_data) = match &self.layout {
+                        CppLayoutPolicy::StackAllocated { .. } => (
+                            "".to_owned(),
+                            "".to_owned(),
+                            "this->data = other.data;".to_owned(),
+                        ),
+                        CppLayoutPolicy::HeapAllocated {
+                            size_fn,
+                            alloc_fn,
+                            free_fn,
+                        } => (
+                            format!("data = {alloc_fn}();"),
+                            format!("{free_fn}(data);"),
+                            format!("memcpy(this->data, other.data, {size_fn}());"),
+                        ),
+                        CppLayoutPolicy::OnlyByRef => unreachable!(),
+                    };
                     writeln!(state, "public:")?;
                     if is_copy {
                         writeln!(
                             state,
                             r#"
-    {ty}() {{}}
-    ~{ty}() {{}}
-    {ty}(const {ty}& other) : data(other.data) {{}}
+    {ty}() {{ {alloc_heap} }}
+    ~{ty}() {{ {free_heap} }}
+    {ty}(const {ty}& other) {{
+        {alloc_heap}
+        {copy_data}
+    }}
     {ty}& operator=(const {ty}& other) {{
-        this->data = other.data;
+        {copy_data}
         return *this;
     }}
-    {ty}({ty}&& other) : data(other.data) {{}}
+    {ty}({ty}&& other) {{
+        {alloc_heap}
+        {copy_data}
+    }}
     {ty}& operator=({ty}&& other) {{
-        this->data = other.data;
+        {copy_data}
         return *this;
     }}
     "#,
@@ -765,15 +827,17 @@ private:
                         writeln!(
                             state,
                             r#"
-    {ty}() : drop_flag(false) {{}}
+    {ty}() : drop_flag(false) {{ {alloc_heap} }}
     ~{ty}() {{
         if (drop_flag) {{
             {drop_in_place}(&data[0]);
         }}
+        {free_heap}
     }}
     {ty}(const {ty}& other) = delete;
     {ty}& operator=(const {ty}& other) = delete;
     {ty}({ty}&& other) : drop_flag(false) {{
+        {alloc_heap}
         *this = ::std::move(other);
     }}
     {ty}& operator=({ty}&& other) {{
@@ -783,7 +847,7 @@ private:
                 {drop_in_place}(&data[0]);
             }}
             this->drop_flag = other.drop_flag;
-            this->data = other.data;
+            {copy_data}
             other.drop_flag = false;
         }}
         return *this;
@@ -868,17 +932,35 @@ private:
             writeln!(state, "}};")
         })?;
         let ty = &self.ty;
-        if let LayoutPolicy::StackAllocated { size, .. } = self.layout {
-            writeln!(
-                state,
-                r#"
+        if self.layout != CppLayoutPolicy::OnlyByRef {
+            match &self.layout {
+                CppLayoutPolicy::StackAllocated { size, align: _ } => {
+                    writeln!(
+                        state,
+                        r#"
 namespace rust {{
     template<>
     inline size_t __zngur_internal_size_of<{ty}>() {{
         return {size};
     }}
-"#,
-            )?;
+        "#,
+                    )?;
+                }
+                CppLayoutPolicy::HeapAllocated { size_fn, .. } => {
+                    writeln!(
+                        state,
+                        r#"
+namespace rust {{
+    template<>
+    inline size_t __zngur_internal_size_of<{ty}>() {{
+        return {size_fn}();
+    }}
+        "#,
+                    )?;
+                }
+                CppLayoutPolicy::OnlyByRef => unreachable!(),
+            }
+
             if is_copy {
                 writeln!(
                     state,
@@ -926,7 +1008,7 @@ namespace rust {{
                 r#"
     template<>
     inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
-        return (uint8_t*)&t.data;
+        return &t.data[0];
     }}
 }}
 "#,
@@ -1143,7 +1225,7 @@ return o;
                 template<>
                 inline void zngur_pretty_print<{ty}>({ty}& t) {{
                     ::rust::__zngur_internal_check_init<{ty}>(t);
-                    {pretty_print}((uint8_t*)&t.data);
+                    {pretty_print}(&t.data[0]);
                 }}
             }}"#,
                         ty = self.ty,
@@ -1170,6 +1252,16 @@ return o;
                 "::rust::ZngurCppOpaqueOwnedObject* {}(uint8_t*);",
                 cpp_value.0
             )?;
+        }
+        if let CppLayoutPolicy::HeapAllocated {
+            size_fn,
+            alloc_fn,
+            free_fn,
+        } = &self.layout
+        {
+            writeln!(state, "size_t {size_fn}();")?;
+            writeln!(state, "uint8_t* {alloc_fn}();")?;
+            writeln!(state, "void {free_fn}(uint8_t*);")?;
         }
         for tr in &self.wellknown_traits {
             match tr {

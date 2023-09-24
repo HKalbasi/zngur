@@ -24,26 +24,26 @@ mod ::std {
 
 mod ::rustyline {
     type error::ReadlineError {
-        layout(size = 16, align = 8);
+        #heap_allocated;
 
         constructor Interrupted;
         constructor Eof;
     }
 
     type Result<DefaultEditor> {
-        layout(size = 688, align = 8);
+        #heap_allocated;
 
         fn unwrap(self) -> DefaultEditor;
     }
 
     type ::std::result::Result<&::std::string::String, &error::ReadlineError> {
-        layout(size = 16, align = 8);
+        #heap_allocated;
 
         fn unwrap(self) -> &::std::string::String;
     }
 
     type Result<::std::string::String> {
-        layout(size = 24, align = 8);
+        #heap_allocated;
     
         fn is_err(&self) -> bool;
         fn as_ref(&self) -> ::std::result::Result<&::std::string::String, &error::ReadlineError>;
@@ -51,19 +51,19 @@ mod ::rustyline {
     }
 
     type Result<()> {
-        layout(size = 16, align = 8);
+        #heap_allocated;
     
         fn is_err(&self) -> bool;
     }
 
     type Result<bool> {
-        layout(size = 16, align = 8);
+        #heap_allocated;
     
         fn is_err(&self) -> bool;
     }
 
     type DefaultEditor {
-        layout(size = 688, align = 8);
+        #heap_allocated;
     
         fn new() -> Result<DefaultEditor>;
         fn readline(&mut self, &::core::primitive::str) -> Result<::std::string::String>;
