@@ -24,7 +24,7 @@ for your C++ type, and then convert that type into a `Box<dyn Trait>` and use it
 
 - Create a `main.zng` file.
 - Add everything in the `extern "Rust"` block into the `main.zng`. Zngur should support everything supported by CXX.
-- For every opaque type in the `extern "C++"` and its methods, write an equivalent trait.
+- For every opaque type in the `extern "C++"` and its methods, write an equivalent trait or opaque type.
 - For builtin C++ types that CXX supports:
   - `CxxString`:
     - Convert it to a Rust `&CStr`, `&[u8]`, or `&str` if ownership is not required.
@@ -34,7 +34,7 @@ for your C++ type, and then convert that type into a `Box<dyn Trait>` and use it
     - Similar to `CxxString`
   - `CxxVector<opaque_type>`:
     - Copy it into a Rust `Vec<Box<dyn Trait>>` if the performance cost is acceptable.
-    - Write a trait and wrap it like a separate opaque type.
+    - Write a trait and wrap it like a separate opaque type, which has a `get(usize) -> &dyn Trait` method.
 
 ## AutoCXX
 

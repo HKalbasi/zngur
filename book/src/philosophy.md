@@ -19,14 +19,51 @@ tools between Rust and higher level languages, Zngur is not allowed to do deep c
 
 ## Keep Rust things Rusty
 
-To minimizing the surprise. Rust decisions are usually superior to C++ ones.
+- To minimizing the surprise.
+- Rust decisions are usually superior to C++ ones.
 
 ### `Result<T, E>` is not automatically converted to exception
 
 ### Copy constructors are deleted, manual `.clone()` should be used
 
+Implicit copy constructors are a source of accidental performance cost, and complicate the control flow of program. Rust doesn't support
+them and uses explicit `.clone()` calls for that propose, and Zngur follows Rust.
+
+Note that for `Copy` types, where the move operation is not destructive, Zngur doesn't delete the copy constructor.
+
 ### `RustType r;` has the same semantics as `let r: RustType;`
 
-### Rust functions returning `()` do the same in C++
+Normally in C++ the default constructor creates a basic initialized object, and you can use it immediately after that. For example, this
+code is valid:
+
+```C++
+std::vector<int32_t> v;
+v.push_back(2);
+```
+
+But in Zngur, default constructor always exists and creates an uninitialized object, so this code is invalid:
+
+```C++
+rust::std::vec::Vec<int32_t> v;
+v.push(2);
+```
+
+An alternative would be running `Default::default()` in the default constructor.
+This behavior is selected over that, because it can enable somethings that are not possible without it with the same performance, such as
+conditional initialization:
+
+```C++
+Vec<int32_t> v;
+if (reserve_capacity) {
+    v = Vec<int32_t>::with_capacity(1000);
+} else {
+    v = Vec<int32_t>::new_();
+}
+```
+
+If `Vec<int32_t> v` used the default constructor, it would be a waste call to itself and a wasted call to the drop code
+executed immediately after that. Rust also support this, but checks the initialization before usage, which Zngur can't check.
+
+### Rust functions returning `()` return `rust::Unit` in C++ instead of `void`
 
 This one has very little practical benefits, and might be revisited in future.
