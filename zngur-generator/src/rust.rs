@@ -139,6 +139,8 @@ impl Default for RustFile {
     fn default() -> Self {
         Self {
             text: r#"
+#![allow(non_snake_case)]
+
 #[allow(dead_code)]
 mod zngur_types {
     pub struct ZngurCppOpaqueBorrowedObject(());
