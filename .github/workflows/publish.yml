@@ -10,7 +10,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
         with:
-          ssh-key: ${{ secrets.PUBLISH_DEPLOY_KEY }}
+          token: ${{ secrets.PAT }}
           fetch-depth: 0
 
       - name: Install Rust toolchain
