@@ -4,7 +4,7 @@ A normal Zngur usage requires explicitly declaring data layout information (size
 by value in the C++ stack. But the layout of Rust type are not stable, and can break when changing the compiler version, using
 different compiler configuration (e.g. `-Z randomize-layout`) and in different targets. This can make Zngur unusable for certain
 circumstances, so Zngur supports different strategies (and all of them has their own drawback) for storing Rust things by value
-in the C++ stack, called "Layout policies".
+in the C++, called "Layout policies".
 
 In fact, you should never use this mode of Zngur (and any other form of static assertion on size and align) when you don't control
 the final compiler that compiles the code, since it can break for your users in an unrecoverable state if they can't change the `zng` file
