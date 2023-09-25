@@ -1,0 +1,53 @@
+name: Publish
+on:
+  workflow_dispatch:
+jobs:
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+        with:
+          ssh-key: ${{ secrets.PUBLISH_DEPLOY_KEY }}
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Install cargo-workspaces
+        uses: actions-rs/install@v0.1
+        with:
+          crate: cargo-workspaces
+          version: 0.2.44
+
+      - name: Release
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        shell: bash
+        run: |
+          # Check if we can skip releasing a new version
+          # (there are no changes and the job was not manually triggered)
+          export CHANGED=$(cargo workspaces changed --include-merged-tags --ignore-changes "**/Cargo.toml")
+          if [[ -z "$CHANGED" && "$GITHUB_EVENT_NAME" != "workflow_dispatch" ]]; then
+            # Nothing has changed, so don't publish a new version
+            echo "No changes detected, skipping publish."
+            exit 0
+          fi
+
+          # Update version
+          git config --global user.email "runner@gha.local"
+          git config --global user.name "Github Action"
+          cargo workspaces -v version -ay --force '*' --include-merged-tags --no-git-commit --exact patch
+          export VERSION=$(cargo pkgid | sed -E 's/.*#(.*)/\1/g')
+
+          # Commit and publish
+          git commit -am "Release $VERSION"
+          git tag "v$VERSION"
+          cargo workspaces -v publish --from-git --skip-published
+          git push --tags
