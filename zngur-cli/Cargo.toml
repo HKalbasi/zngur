@@ -14,4 +14,4 @@ bench = false
 
 [dependencies]
 zngur = { version = "0.2.0", path = "../zngur" }
-clap = { version = "4.3.21", features = ["derive"] }
+clap = { version = "4.3.12", features = ["derive"] }

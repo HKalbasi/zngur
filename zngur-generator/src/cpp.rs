@@ -528,7 +528,7 @@ struct rust::Ref<{ty}> {{
     }}
     Ref({ty}& t) {{
         ::rust::__zngur_internal_check_init<{ty}>(t);
-        data = (size_t)__zngur_internal_data_ptr(t);
+        data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
 private:
     size_t data;
@@ -569,7 +569,7 @@ static inline {ty} build({as_std_function} f);
                 state,
                 r#"
                 inline {cpp_ty}& cpp() {{
-                    return (*{rust_link_name}((uint8_t*)data)).as_cpp<{cpp_ty}>();
+                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data)).as_cpp<{cpp_ty}>();
                 }}"#
             )?;
         }
@@ -578,7 +578,7 @@ static inline {ty} build({as_std_function} f);
                 state,
                 r#"
                 inline {cpp_ty}& cpp() {{
-                    return *({cpp_ty}*)data;
+                    return *reinterpret_cast<{cpp_ty}*>(data);
                 }}"#
             )?;
             writeln!(
@@ -586,7 +586,7 @@ static inline {ty} build({as_std_function} f);
                 r#"
                 inline static Ref build(const {cpp_ty}& t) {{
                     Ref o;
-                    o.data = (size_t)&t;
+                    o.data = reinterpret_cast<size_t>(&t);
                     return o;
                 }}"#
             )?;
@@ -619,7 +619,7 @@ static inline {ty} build({as_std_function} f);
 }};
 inline ::rust::Ref<::rust::Str> rust::Str::from_char_star(const char* s) {{
     ::rust::Ref<::rust::Str> o;
-    o.data[0] = (size_t)s;
+    o.data[0] = reinterpret_cast<size_t>(s);
     o.data[1] = strlen(s);
     return o;
 }}
@@ -635,7 +635,7 @@ namespace rust {{
 
 template<>
 inline uint8_t* __zngur_internal_data_ptr<Ref<{ty}>>(Ref<{ty}>& t) {{
-    return (uint8_t*)&t.data;
+    return reinterpret_cast<uint8_t*>(&t.data);
 }}
 
 template<>
@@ -890,7 +890,7 @@ private:
                     state,
                     r#"
                     inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}((uint8_t*)&data[0])).as_cpp<{cpp_ty}>();
+                        return (*{rust_link_name}(&data[0])).as_cpp<{cpp_ty}>();
                     }}"#
                 )?;
             }
@@ -1067,7 +1067,7 @@ namespace rust {{
                     .inputs
                     .iter()
                     .enumerate()
-                    .map(|(n, x)| format!("{x} ii{n} = *({x} *)i{n};"))
+                    .map(|(n, x)| format!("{x} ii{n} = *reinterpret_cast<{x} *>(i{n});"))
                     .join("\n");
                 writeln!(
                     state,
@@ -1077,12 +1077,12 @@ auto data = new {as_std_function}(f);
 {my_name} o;
 ::rust::__zngur_internal_assume_init(o);
 {link_name}(
-(uint8_t *)data,
-[](uint8_t *d) {{ delete ({as_std_function} *)d; }},
+reinterpret_cast<uint8_t*>(data),
+[](uint8_t *d) {{ delete reinterpret_cast<{as_std_function}*>(d); }},
 [](uint8_t *d, uint8_t *i0, uint8_t *o) {{
-int32_t *oo = (int32_t *)o;
+int32_t *oo = reinterpret_cast<int32_t *>(o);
 {ii_args}
-auto dd = ({as_std_function} *)d;
+auto dd = reinterpret_cast<{as_std_function} *>(d);
 *oo = (*dd)(ii0);
 }},
 ::rust::__zngur_internal_data_ptr(o));
@@ -1108,8 +1108,8 @@ auto data_as_impl = dynamic_cast<{as_ty}*>(data);
 {my_name} o;
 ::rust::__zngur_internal_assume_init(o);
 {link_name}(
-(uint8_t *)data_as_impl,
-[](uint8_t *d) {{ delete ({as_ty} *)d; }},
+reinterpret_cast<uint8_t*>(data_as_impl),
+[](uint8_t *d) {{ delete reinterpret_cast<{as_ty} *>(d); }},
 "#,
                 )?;
                 writeln!(
@@ -1363,16 +1363,16 @@ namespace rust {
         template<typename T, typename... Args>
         inline static ZngurCppOpaqueOwnedObject build(Args&&... args) {
             ZngurCppOpaqueOwnedObject o;
-            o.data = (uint8_t*) new T(::std::forward<Args>(args)...);
+            o.data = reinterpret_cast<uint8_t*>(new T(::std::forward<Args>(args)...));
             o.destructor = [](uint8_t* d) {
-                delete (T*)d;
+                delete reinterpret_cast<T*>(d);
             };
             return o;
         }
 
         template<typename T>
         inline T& as_cpp() {
-            return *(T *)data;
+            return *reinterpret_cast<T *>(data);
         }
     };
 
@@ -1412,7 +1412,7 @@ namespace rust {
                 r#"
     template<>
     inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
-        return (uint8_t*)&t;
+        return reinterpret_cast<uint8_t*>(&t);
     }}
 
     template<>
@@ -1427,7 +1427,7 @@ namespace rust {
 
     template<>
     inline uint8_t* __zngur_internal_data_ptr<{ty}*>({ty}*& t) {{
-        return (uint8_t*)&t;
+        return reinterpret_cast<uint8_t*>(&t);
     }}
 
     template<>
@@ -1441,11 +1441,11 @@ namespace rust {
             data = 0;
         }}
         Ref({ty}& t) {{
-            data = (size_t)__zngur_internal_data_ptr(t);
+            data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }}
 
         {ty}& operator*() {{
-            return *({ty}*)data;
+            return *reinterpret_cast<{ty}*>(data);
         }}
         private:
             size_t data;
