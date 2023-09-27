@@ -7,7 +7,6 @@ use cpp::CppFile;
 use cpp::CppFnDefinition;
 use cpp::CppFnSig;
 use cpp::CppMethod;
-use cpp::CppMethodKind;
 use cpp::CppPath;
 use cpp::CppTraitDefinition;
 use cpp::CppType;
@@ -69,7 +68,7 @@ impl ZngurGenerator {
                         );
                         cpp_methods.push(CppMethod {
                             name: cpp_handle_keyword(&name).to_owned(),
-                            kind: CppMethodKind::StaticOnly,
+                            kind: ZngurMethodReceiver::Static,
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.constructor,
                                 inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
@@ -78,7 +77,7 @@ impl ZngurGenerator {
                         });
                         cpp_methods.push(CppMethod {
                             name: format!("matches_{}", cpp_handle_keyword(&name)),
-                            kind: CppMethodKind::Lvalue,
+                            kind: ZngurMethodReceiver::Ref(Mutability::Not),
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.match_check,
                                 inputs: vec![ty_def.ty.into_cpp().into_ref()],
@@ -123,11 +122,7 @@ impl ZngurGenerator {
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
-                    kind: match method.receiver {
-                        ZngurMethodReceiver::Static => CppMethodKind::StaticOnly,
-                        ZngurMethodReceiver::Ref(_) => CppMethodKind::Lvalue,
-                        ZngurMethodReceiver::Move => CppMethodKind::Rvalue,
-                    },
+                    kind: method.receiver,
                     sig: CppFnSig {
                         rust_link_name,
                         inputs,

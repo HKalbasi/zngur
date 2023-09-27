@@ -4,7 +4,7 @@ use std::{
 };
 
 use iter_tools::Itertools;
-use zngur_def::RustTrait;
+use zngur_def::{Mutability, RustTrait, ZngurMethodReceiver};
 
 use crate::{rust::IntoCpp, ZngurWellknownTraitData};
 
@@ -303,16 +303,9 @@ impl CppFnDefinition {
     }
 }
 
-#[derive(PartialEq, Eq, Hash)]
-pub enum CppMethodKind {
-    StaticOnly,
-    Lvalue,
-    Rvalue,
-}
-
 pub struct CppMethod {
     pub name: String,
-    pub kind: CppMethodKind,
+    pub kind: ZngurMethodReceiver,
     pub sig: CppFnSig,
 }
 
@@ -506,14 +499,15 @@ impl CppTypeDefinition {
             writeln!(
                 state,
                 r#"
+namespace rust {{
 template<>
-struct rust::Ref<{ty}> {{
+struct Ref<{ty}> {{
     Ref() {{
         data = {{0, 0}};
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(::rust::Ref<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
 "#,
                 ty = self.ty,
             )?;
@@ -521,18 +515,19 @@ private:
             writeln!(
                 state,
                 r#"
+namespace rust {{
 template<>
-struct rust::Ref<{ty}> {{
+struct Ref<{ty}> {{
     Ref() {{
         data = 0;
     }}
-    Ref({ty}& t) {{
+    Ref(const {ty}& t) {{
         ::rust::__zngur_internal_check_init<{ty}>(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(::rust::Ref<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
 "#,
                 ty = self.ty,
             )?;
@@ -592,7 +587,7 @@ static inline {ty} build({as_std_function} f);
             )?;
         }
         for method in &self.methods {
-            if method.kind == CppMethodKind::Lvalue {
+            if let ZngurMethodReceiver::Ref(_) = method.kind {
                 let CppFnSig {
                     rust_link_name: _,
                     inputs,
@@ -600,7 +595,7 @@ static inline {ty} build({as_std_function} f);
                 } = &method.sig;
                 writeln!(
                     state,
-                    "{output} {fn_name}({input_defs});",
+                    "{output} {fn_name}({input_defs}) const;",
                     fn_name = &method.name,
                     input_defs = inputs
                         .iter()
@@ -615,10 +610,10 @@ static inline {ty} build({as_std_function} f);
             writeln!(
                 state,
                 r#"
-    friend rust::Str;
+    friend Str;
 }};
-inline ::rust::Ref<::rust::Str> rust::Str::from_char_star(const char* s) {{
-    ::rust::Ref<::rust::Str> o;
+inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
+    Ref<Str> o;
     o.data[0] = reinterpret_cast<size_t>(s);
     o.data[1] = strlen(s);
     return o;
@@ -631,11 +626,9 @@ inline ::rust::Ref<::rust::Str> rust::Str::from_char_star(const char* s) {{
         writeln!(
             state,
             r#"
-namespace rust {{
-
 template<>
-inline uint8_t* __zngur_internal_data_ptr<Ref<{ty}>>(Ref<{ty}>& t) {{
-    return reinterpret_cast<uint8_t*>(&t.data);
+inline uint8_t* __zngur_internal_data_ptr<Ref<{ty}>>(const Ref<{ty}>& t) {{
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
@@ -643,7 +636,7 @@ inline void __zngur_internal_assume_init<Ref<{ty}>>(Ref<{ty}>&) {{
 }}
 
 template<>
-inline void __zngur_internal_check_init<Ref<{ty}>>(Ref<{ty}>&) {{
+inline void __zngur_internal_check_init<Ref<{ty}>>(const Ref<{ty}>&) {{
 }}
 
 template<>
@@ -670,9 +663,9 @@ inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
             r#"
 namespace rust {{
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t);
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>(const {ty}& t);
     template<>
-    inline void __zngur_internal_check_init<{ty}>({ty}& t);
+    inline void __zngur_internal_check_init<{ty}>(const {ty}& t);
     template<>
     inline void __zngur_internal_assume_init<{ty}>({ty}& t);
     template<>
@@ -739,8 +732,8 @@ private:
                     writeln!(
                         state,
                         r#"
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<{ty}>({ty}& t);
-    friend void ::rust::__zngur_internal_check_init<{ty}>({ty}& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<{ty}>(const {ty}& t);
+    friend void ::rust::__zngur_internal_check_init<{ty}>(const {ty}& t);
     friend void ::rust::__zngur_internal_assume_init<{ty}>({ty}& t);
     friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
     friend void ::rust::zngur_pretty_print<{ty}>({ty}& t);
@@ -897,7 +890,7 @@ private:
             for method in &self.methods {
                 write!(state, "static ")?;
                 method.sig.emit_cpp_header(state, &method.name)?;
-                if method.kind != CppMethodKind::StaticOnly {
+                if method.kind != ZngurMethodReceiver::Static {
                     let CppFnSig {
                         rust_link_name: _,
                         inputs,
@@ -905,7 +898,7 @@ private:
                     } = &method.sig;
                     writeln!(
                         state,
-                        "{output} {fn_name}({input_defs});",
+                        "{output} {fn_name}({input_defs}) {const_kw};",
                         fn_name = &method.name,
                         input_defs = inputs
                             .iter()
@@ -913,6 +906,11 @@ private:
                             .enumerate()
                             .map(|(n, ty)| format!("{ty} i{n}"))
                             .join(", "),
+                        const_kw = if method.kind != ZngurMethodReceiver::Ref(Mutability::Not) {
+                            ""
+                        } else {
+                            "const"
+                        },
                     )?;
                 }
             }
@@ -966,7 +964,7 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init<{ty}>({ty}&) {{
+        inline void __zngur_internal_check_init<{ty}>(const {ty}&) {{
         }}
 
         template<>
@@ -983,7 +981,7 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init<{ty}>({ty}& t) {{
+        inline void __zngur_internal_check_init<{ty}>(const {ty}& t) {{
             if (!t.drop_flag) {{
                 ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type {ty}" << ::std::endl;
                 while (true) raise(SIGSEGV);
@@ -1007,8 +1005,8 @@ namespace rust {{
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
-        return &t.data[0];
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty} const & t) {{
+        return const_cast<uint8_t*>(&t.data[0]);
     }}
 }}
 "#,
@@ -1158,7 +1156,7 @@ return o;
         for method in &self.methods {
             let fn_name = my_name.to_owned() + "::" + &method.name;
             method.sig.emit_cpp_def(state, &fn_name)?;
-            if method.kind == CppMethodKind::Lvalue {
+            if let ZngurMethodReceiver::Ref(_) = method.kind {
                 let CppFnSig {
                     rust_link_name: _,
                     inputs,
@@ -1166,7 +1164,7 @@ return o;
                 } = &method.sig;
                 writeln!(
                     state,
-                    "inline {output} rust::Ref<{ty}>::{method_name}({input_defs})
+                    "inline {output} rust::Ref<{ty}>::{method_name}({input_defs}) const
                 {{
                     return {fn_name}(*this{input_args});
                 }}",
@@ -1183,7 +1181,7 @@ return o;
                         .join("")
                 )?;
             }
-            if !is_unsized && method.kind != CppMethodKind::StaticOnly {
+            if !is_unsized && method.kind != ZngurMethodReceiver::Static {
                 let CppFnSig {
                     rust_link_name: _,
                     inputs,
@@ -1191,14 +1189,14 @@ return o;
                 } = &method.sig;
                 writeln!(
                     state,
-                    "inline {output} {fn_name}({input_defs})
+                    "inline {output} {fn_name}({input_defs}) {const_kw}
                 {{
                     return {fn_name}({this_arg}{input_args});
                 }}",
                     this_arg = match method.kind {
-                        CppMethodKind::Lvalue => "*this",
-                        CppMethodKind::Rvalue => "::std::move(*this)",
-                        CppMethodKind::StaticOnly => unreachable!(),
+                        ZngurMethodReceiver::Ref(_) => "*this",
+                        ZngurMethodReceiver::Move => "::std::move(*this)",
+                        ZngurMethodReceiver::Static => unreachable!(),
                     },
                     input_defs = inputs
                         .iter()
@@ -1208,7 +1206,12 @@ return o;
                         .join(", "),
                     input_args = (0..inputs.len() - 1)
                         .map(|n| format!(", ::std::move(i{n})"))
-                        .join("")
+                        .join(""),
+                    const_kw = if method.kind != ZngurMethodReceiver::Ref(Mutability::Not) {
+                        ""
+                    } else {
+                        "const"
+                    },
                 )?;
             }
         }
@@ -1326,7 +1329,7 @@ impl CppFile {
 
 namespace rust {
     template<typename T>
-    uint8_t* __zngur_internal_data_ptr(T& t);
+    uint8_t* __zngur_internal_data_ptr(const T& t);
 
     template<typename T>
     void __zngur_internal_assume_init(T& t);
@@ -1352,7 +1355,7 @@ namespace rust {
     }
 
     template<typename T>
-    inline void __zngur_internal_check_init(T& t) {
+    inline void __zngur_internal_check_init(const T& t) {
     }
 
     class ZngurCppOpaqueOwnedObject {
@@ -1411,8 +1414,8 @@ namespace rust {
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty}& t) {{
-        return reinterpret_cast<uint8_t*>(&t);
+    inline uint8_t* __zngur_internal_data_ptr<{ty}>(const {ty}& t) {{
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
@@ -1426,8 +1429,8 @@ namespace rust {
     }}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}*>({ty}*& t) {{
-        return reinterpret_cast<uint8_t*>(&t);
+    inline uint8_t* __zngur_internal_data_ptr<{ty}*>({ty}* const & t) {{
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
@@ -1440,7 +1443,7 @@ namespace rust {
         Ref() {{
             data = 0;
         }}
-        Ref({ty}& t) {{
+        Ref(const {ty}& t) {{
             data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }}
 
@@ -1449,7 +1452,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<{ty}>>(::rust::Ref<{ty}>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
     }};
 "#
             )?;
