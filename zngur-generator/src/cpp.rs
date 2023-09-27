@@ -564,7 +564,7 @@ static inline {ty} build({as_std_function} f);
                 state,
                 r#"
                 inline {cpp_ty}& cpp() {{
-                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data)).as_cpp<{cpp_ty}>();
+                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp<{cpp_ty}>();
                 }}"#
             )?;
         }
