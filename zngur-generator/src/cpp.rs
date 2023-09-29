@@ -1298,8 +1298,9 @@ pub struct CppFile {
 
 impl CppFile {
     fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
-        state.text += &self.additional_includes;
         state.text += r#"
+#pragma once
+
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
@@ -1309,6 +1310,7 @@ impl CppFile {
 #include <functional>
 #include <math.h>
 "#;
+        state.text += &self.additional_includes;
         if self.panic_to_exception {
             state.text += r#"
             namespace rust {
