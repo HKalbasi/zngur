@@ -15,6 +15,12 @@ type str {
 }
 
 mod crate {
+    type PrintOnDropPair {
+        layout(size = 32, align = 8);
+
+        constructor { first: PrintOnDrop, second: PrintOnDrop };
+    }
+
     type PrintOnDrop {
         layout(size = 16, align = 8);
         constructor(&str);

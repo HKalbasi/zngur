@@ -1,7 +1,12 @@
 mod generated;
 
 #[derive(Clone)]
-struct PrintOnDrop(&'static str);
+pub struct PrintOnDrop(&'static str);
+
+pub struct PrintOnDropPair {
+    pub first: PrintOnDrop,
+    pub second: PrintOnDrop,
+}
 
 impl Drop for PrintOnDrop {
     fn drop(&mut self) {

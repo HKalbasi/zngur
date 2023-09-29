@@ -13,6 +13,7 @@ using crate::consume_and_panic;
 using crate::consume_n_times;
 using rust::crate::PrintOnDrop;
 using rust::crate::PrintOnDropConsumer;
+using rust::crate::PrintOnDropPair;
 
 class CppPrintOnDropHolder : public PrintOnDropConsumer {
   ::rust::Unit consume(PrintOnDrop p) override {
@@ -91,8 +92,12 @@ int main() {
   } catch (rust::Panic e) {
     std::cout << "Checkpoint 24" << std::endl;
   }
-  std::cout << "Checkpoint 25" << std::endl;
-  std::cout << "Checkpoint 26" << std::endl;
+  {
+    std::cout << "Checkpoint 25" << std::endl;
+    PrintOnDropPair p{::rust::Str::from_char_star("first"),
+                      ::rust::Str::from_char_star("second")};
+    std::cout << "Checkpoint 26" << std::endl;
+  }
   std::cout << "Checkpoint 27" << std::endl;
   std::cout << "Checkpoint 28" << std::endl;
   std::cout << "Checkpoint 29" << std::endl;

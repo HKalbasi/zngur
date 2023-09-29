@@ -90,6 +90,7 @@ enum ParsedExternCppItem<'a> {
 enum ParsedConstructorArgs<'a> {
     Unit,
     Tuple(Vec<ParsedRustType<'a>>),
+    Named(Vec<(&'a str, ParsedRustType<'a>)>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,6 +216,10 @@ impl ParsedItem<'_> {
                                         .into_iter()
                                         .enumerate()
                                         .map(|(i, t)| (i.to_string(), t.to_zngur(base)))
+                                        .collect(),
+                                    ParsedConstructorArgs::Named(t) => t
+                                        .into_iter()
+                                        .map(|(i, t)| (i.to_owned(), t.to_zngur(base)))
                                         .collect(),
                                 },
                             })
@@ -496,12 +501,13 @@ fn emit_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Token<'a> {
-    ColonColon,
     Arrow,
     AngleOpen,
     AngleClose,
     BracketOpen,
     BracketClose,
+    Colon,
+    ColonColon,
     ParenOpen,
     ParenClose,
     BraceOpen,
@@ -554,7 +560,6 @@ impl<'a> Token<'a> {
 impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Token::ColonColon => write!(f, "::"),
             Token::Arrow => write!(f, "->"),
             Token::AngleOpen => write!(f, "<"),
             Token::AngleClose => write!(f, ">"),
@@ -564,6 +569,8 @@ impl Display for Token<'_> {
             Token::ParenClose => write!(f, ")"),
             Token::BraceOpen => write!(f, "{{"),
             Token::BraceClose => write!(f, "}}"),
+            Token::Colon => write!(f, ":"),
+            Token::ColonColon => write!(f, "::"),
             Token::And => write!(f, "&"),
             Token::Star => write!(f, "*"),
             Token::Sharp => write!(f, "#"),
@@ -594,7 +601,6 @@ impl Display for Token<'_> {
 fn lexer<'src>(
 ) -> impl Parser<'src, &'src str, Vec<(Token<'src>, Span)>, extra::Err<Rich<'src, char, Span>>> {
     let token = choice([
-        just("::").to(Token::ColonColon),
         just("->").to(Token::Arrow),
         just("<").to(Token::AngleOpen),
         just(">").to(Token::AngleClose),
@@ -604,6 +610,8 @@ fn lexer<'src>(
         just(")").to(Token::ParenClose),
         just("{").to(Token::BraceOpen),
         just("}").to(Token::BraceClose),
+        just("::").to(Token::ColonColon),
+        just(":").to(Token::Colon),
         just("&").to(Token::And),
         just("*").to(Token::Star),
         just("#").to(Token::Sharp),
@@ -892,6 +900,15 @@ fn type_item<'a>(
             .collect::<Vec<_>>()
             .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
             .map(ParsedConstructorArgs::Tuple)
+            .or((select! {
+                Token::Ident(c) => c,
+            })
+            .then_ignore(just(Token::Colon))
+            .then(rust_type())
+            .separated_by(just(Token::Comma))
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+            .map(ParsedConstructorArgs::Named))
             .or(empty().to(ParsedConstructorArgs::Unit));
         let constructor = just(Token::Ident("constructor")).ignore_then(
             (select! {
