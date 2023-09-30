@@ -15,7 +15,7 @@
   - [Implementing Rust traits for Rust types](./call_cpp_from_rust/rust_impl_trait.md)
   - [`Box<dyn Fn>`]()
   - [Converting C++ objects to `Box<dyn Trait>`]()
-  - [`Opaque C++ types`]()
+  - [`Opaque C++ types`](./call_cpp_from_rust/opaque.md)
 - [Safety](./safety.md)
 - [Footguns]()
 - [How it compares to other tools](./how_it_compares.md)
