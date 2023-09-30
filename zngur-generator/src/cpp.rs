@@ -1,6 +1,7 @@
 use std::{
     collections::HashMap,
     fmt::{Display, Write},
+    iter,
 };
 
 use iter_tools::Itertools;
@@ -37,6 +38,16 @@ impl CppPath {
 
     fn need_header(&self) -> bool {
         self.0.first().map(|x| x.as_str()) == Some("rust") && self.0 != ["rust", "Unit"]
+    }
+
+    pub(crate) fn from_rust_path(path: &[String]) -> CppPath {
+        CppPath(
+            iter::once("rust")
+                .chain(path.iter().map(|x| x.as_str()))
+                .map(cpp_handle_keyword)
+                .map(|x| x.to_owned())
+                .collect(),
+        )
     }
 }
 

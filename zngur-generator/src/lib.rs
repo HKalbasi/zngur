@@ -184,7 +184,7 @@ impl ZngurGenerator {
                 false,
             );
             cpp_file.fn_defs.push(CppFnDefinition {
-                name: CppPath(func.path.path),
+                name: CppPath::from_rust_path(&func.path.path),
                 sig: CppFnSig {
                     rust_link_name,
                     inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),

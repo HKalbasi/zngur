@@ -1,11 +1,9 @@
-use std::{fmt::Write, iter};
+use std::fmt::Write;
 
 use iter_tools::Itertools;
 
 use crate::{
-    cpp::{
-        cpp_handle_keyword, CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
-    },
+    cpp::{CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
 };
 
@@ -24,13 +22,7 @@ impl IntoCpp for RustPathAndGenerics {
         } = self;
         let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {
-            path: CppPath(
-                iter::once("rust")
-                    .chain(path.iter().map(|x| x.as_str()))
-                    .map(cpp_handle_keyword)
-                    .map(|x| x.to_owned())
-                    .collect(),
-            ),
+            path: CppPath::from_rust_path(path),
             generic_args: generics
                 .iter()
                 .chain(named_generics)

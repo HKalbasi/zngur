@@ -5,7 +5,7 @@ type () {
     wellknown_traits(Copy);
 }
 
-type ::core::primitive::str {
+type str {
     wellknown_traits(?Sized); // Unsized types don't need layout policy
 
     fn as_ptr(&self) -> *const u8;
@@ -20,7 +20,7 @@ type bool {
 mod ::std {
     type string::String {
         #only_by_ref; // String has stable layout, but we don't use it by value, so we can use this policy.
-        fn as_str(&self) -> &::core::primitive::str;
+        fn as_str(&self) -> &str;
     }
 }
 
@@ -33,10 +33,10 @@ mod ::rustyline {
         #heap_allocated;
     
         fn new() -> Result<DefaultEditor>;
-        fn readline(&mut self, &::core::primitive::str) -> Result<::std::string::String>;
-        fn load_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
-        fn add_history_entry<&::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<bool>;
-        fn save_history<::core::primitive::str>(&mut self, &::core::primitive::str) -> Result<()>;
+        fn readline(&mut self, &str) -> Result<::std::string::String>;
+        fn load_history<str>(&mut self, &str) -> Result<()>;
+        fn add_history_entry<&str>(&mut self, &str) -> Result<bool>;
+        fn save_history<str>(&mut self, &str) -> Result<()>;
     }
 
     type error::ReadlineError {
@@ -77,8 +77,4 @@ mod ::rustyline {
     
         fn is_err(&self) -> bool;
     }
-}
-
-mod crate {
-    fn rust_str(*const i8) -> &::core::primitive::str;
 }
