@@ -68,8 +68,12 @@ impl IntoCpp for RustType {
                         Some(CppType::from("rust::ZngurCppOpaqueOwnedObject"))
                     }
                 },
-                RustType::Raw(_, t) => Some(CppType::from(&*format!(
+                RustType::Raw(Mutability::Mut, t) => Some(CppType::from(&*format!(
                     "{}*",
+                    for_builtin(t)?.to_string().strip_prefix("::")?
+                ))),
+                RustType::Raw(Mutability::Not, t) => Some(CppType::from(&*format!(
+                    "{} const*",
                     for_builtin(t)?.to_string().strip_prefix("::")?
                 ))),
                 _ => None,

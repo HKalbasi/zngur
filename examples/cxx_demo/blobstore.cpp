@@ -51,7 +51,9 @@ public:
     if (blob != impl.blobs.end()) {
       r.set_size(blob->second.data.size());
       std::for_each(blob->second.tags.cbegin(), blob->second.tags.cend(),
-                    [&](auto &t) { r.push_tag((int8_t *)t.c_str()); });
+                    [&](auto &t) {
+                      r.push_tag(reinterpret_cast<const int8_t *>(t.c_str()));
+                    });
     }
     return r;
   }

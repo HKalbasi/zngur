@@ -1452,6 +1452,16 @@ namespace rust {
     inline void __zngur_internal_assume_deinit<{ty}*>({ty}*&) {{}}
 
     template<>
+    inline uint8_t* __zngur_internal_data_ptr<{ty} const*>({ty} const* const & t) {{
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }}
+
+    template<>
+    inline void __zngur_internal_assume_init<{ty} const*>({ty} const*&) {{}}
+    template<>
+    inline void __zngur_internal_assume_deinit<{ty} const*>({ty} const*&) {{}}
+
+    template<>
     struct Ref<{ty}> {{
         Ref() {{
             data = 0;
