@@ -98,7 +98,19 @@ int main() {
                       ::rust::Str::from_char_star("second")};
     std::cout << "Checkpoint 26" << std::endl;
   }
-  std::cout << "Checkpoint 27" << std::endl;
-  std::cout << "Checkpoint 28" << std::endl;
-  std::cout << "Checkpoint 29" << std::endl;
+  {
+    std::cout << "Checkpoint 27" << std::endl;
+    Vec<PrintOnDrop> vec2 = Vec<PrintOnDrop>::new_();
+    vec2.push(PrintOnDrop(::rust::Str::from_char_star("elem1")));
+    vec2.push(PrintOnDrop(::rust::Str::from_char_star("elem2")));
+    std::cout << "Checkpoint 28" << std::endl;
+    vec2.get(0).unwrap().clone();
+    {
+      auto vec_slice = vec2.deref();
+      auto tmp = vec_slice.get(0).unwrap().clone();
+      std::cout << "Checkpoint 29" << std::endl;
+    }
+    std::cout << "Checkpoint 30" << std::endl;
+  }
+  std::cout << "Checkpoint 31" << std::endl;
 }

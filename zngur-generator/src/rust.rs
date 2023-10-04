@@ -612,7 +612,11 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         use_path: Option<Vec<String>>,
         deref: bool,
     ) -> String {
-        let mangled_name = mangle_name(rust_name);
+        let mut mangled_name = mangle_name(rust_name);
+        if deref {
+            mangled_name += "_deref_";
+            mangled_name += &mangle_name(&inputs[0].to_string());
+        }
         w!(
             self,
             r#"

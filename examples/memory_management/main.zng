@@ -28,6 +28,12 @@ mod crate {
         fn clone(&self) -> PrintOnDrop;
     }
 
+    type [PrintOnDrop] {
+        wellknown_traits(?Sized);
+
+        fn get(&self, usize) -> ::std::option::Option<&crate::PrintOnDrop>;    
+    }
+
     trait PrintOnDropConsumer {
         fn consume(&mut self, PrintOnDrop);
     }
@@ -47,6 +53,14 @@ mod crate {
 }
 
 mod ::std {
+    mod option {
+        type Option<&crate::PrintOnDrop> {
+            layout(size = 8, align = 8);
+
+            fn unwrap(self) -> &crate::PrintOnDrop;
+        }
+    }
+
     mod vec {
         type Vec<crate::PrintOnDrop> {
             layout(size = 24, align = 8);
@@ -54,6 +68,8 @@ mod ::std {
             fn new() -> Vec<crate::PrintOnDrop>;
             fn push(&mut self, crate::PrintOnDrop);
             fn clone(&self) -> Vec<crate::PrintOnDrop>;
+            fn get(&self, usize) -> ::std::option::Option<&crate::PrintOnDrop> deref [crate::PrintOnDrop];
+            fn deref(&self) -> &[crate::PrintOnDrop] use ::std::ops::Deref;
         }
     }
 }
