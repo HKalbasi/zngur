@@ -503,124 +503,147 @@ impl Default for CppTypeDefinition {
 
 impl CppTypeDefinition {
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
-        let is_unsized = self
-            .wellknown_traits
-            .contains(&ZngurWellknownTraitData::Unsized);
-        if is_unsized {
-            writeln!(
-                state,
-                r#"
+        for ref_kind in ["RefMut", "Ref"] {
+            let is_unsized = self
+                .wellknown_traits
+                .contains(&ZngurWellknownTraitData::Unsized);
+            if is_unsized {
+                writeln!(
+                    state,
+                    r#"
 namespace rust {{
 template<>
-struct Ref<{ty}> {{
-    Ref() {{
+struct {ref_kind}<{ty}> {{
+    {ref_kind}() {{
         data = {{0, 0}};
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}<{ty}>>(const ::rust::{ref_kind}<{ty}>& t);
 "#,
-                ty = self.ty,
-            )?;
-        } else {
-            writeln!(
-                state,
-                r#"
+                    ty = self.ty,
+                )?;
+            } else {
+                writeln!(
+                    state,
+                    r#"
 namespace rust {{
 template<>
-struct Ref<{ty}> {{
-    Ref() {{
+struct {ref_kind}<{ty}> {{
+    {ref_kind}() {{
         data = 0;
     }}
-    Ref(const {ty}& t) {{
+    {ref_kind}(const {ty}& t) {{
         ::rust::__zngur_internal_check_init<{ty}>(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}<{ty}>>(const ::rust::{ref_kind}<{ty}>& t);
 "#,
-                ty = self.ty,
-            )?;
-        }
-        writeln!(state, "public:")?;
-        match &self.from_trait_ref {
-            Some(RustTrait::Fn { inputs, output, .. }) => {
-                let as_std_function = format!(
-                    "::std::function<{}({})>",
-                    output.into_cpp(),
-                    inputs.iter().map(|x| x.into_cpp()).join(", ")
-                );
+                    ty = self.ty,
+                )?;
+            }
+            writeln!(state, "public:")?;
+            if ref_kind == "Ref" {
                 writeln!(
                     state,
                     r#"
+    Ref(RefMut<{ty}> rm) {{
+        data = rm.data;
+    }}
+    "#,
+                    ty = self.ty,
+                )?;
+            } else {
+                writeln!(
+                    state,
+                    r#"
+    friend Ref<{ty}>;
+    "#,
+                    ty = self.ty,
+                )?;
+            }
+            match &self.from_trait_ref {
+                Some(RustTrait::Fn { inputs, output, .. }) => {
+                    let as_std_function = format!(
+                        "::std::function<{}({})>",
+                        output.into_cpp(),
+                        inputs.iter().map(|x| x.into_cpp()).join(", ")
+                    );
+                    writeln!(
+                        state,
+                        r#"
 static inline {ty} build({as_std_function} f);
 "#,
-                    ty = self.ty.path.name(),
-                )?;
+                        ty = self.ty.path.name(),
+                    )?;
+                }
+                Some(tr @ RustTrait::Normal { .. }) => {
+                    let tr = tr.into_cpp();
+                    writeln!(
+                        state,
+                        r#"
+            static inline {ref_kind} build({tr}& arg);
+            "#,
+                    )?;
+                }
+                None => (),
             }
-            Some(tr @ RustTrait::Normal { .. }) => {
-                let tr = tr.into_cpp();
+            if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
                 writeln!(
                     state,
                     r#"
-            static inline Ref build({tr}& arg);
-            "#,
-                )?;
-            }
-            None => (),
-        }
-        if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
-            writeln!(
-                state,
-                r#"
                 inline {cpp_ty}& cpp() {{
                     return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp<{cpp_ty}>();
                 }}"#
-            )?;
-        }
-        if let Some(cpp_ty) = &self.cpp_ref {
-            writeln!(
-                state,
-                r#"
+                )?;
+            }
+            if let Some(cpp_ty) = &self.cpp_ref {
+                writeln!(
+                    state,
+                    r#"
                 inline {cpp_ty}& cpp() {{
                     return *reinterpret_cast<{cpp_ty}*>(data);
                 }}"#
-            )?;
-            writeln!(
-                state,
-                r#"
-                inline static Ref build(const {cpp_ty}& t) {{
-                    Ref o;
+                )?;
+                writeln!(
+                    state,
+                    r#"
+                inline static {ref_kind} build(const {cpp_ty}& t) {{
+                    {ref_kind} o;
                     o.data = reinterpret_cast<size_t>(&t);
                     return o;
                 }}"#
-            )?;
-        }
-        for method in &self.methods {
-            if let ZngurMethodReceiver::Ref(_) = method.kind {
-                let CppFnSig {
-                    rust_link_name: _,
-                    inputs,
-                    output,
-                } = &method.sig;
-                writeln!(
-                    state,
-                    "{output} {fn_name}({input_defs}) const;",
-                    fn_name = &method.name,
-                    input_defs = inputs
-                        .iter()
-                        .skip(1)
-                        .enumerate()
-                        .map(|(n, ty)| format!("{ty} i{n}"))
-                        .join(", "),
                 )?;
             }
-        }
-        if self.ty.path.to_string() == "::rust::Str" {
-            writeln!(
-                state,
-                r#"
+            for method in &self.methods {
+                if let ZngurMethodReceiver::Ref(m) = method.kind {
+                    if m == Mutability::Mut && ref_kind == "Ref" {
+                        continue;
+                    }
+                    let CppFnSig {
+                        rust_link_name: _,
+                        inputs,
+                        output,
+                    } = &method.sig;
+                    writeln!(
+                        state,
+                        "{output} {fn_name}({input_defs}) const;",
+                        fn_name = &method.name,
+                        input_defs = inputs
+                            .iter()
+                            .skip(1)
+                            .enumerate()
+                            .map(|(n, ty)| format!("{ty} i{n}"))
+                            .join(", "),
+                    )?;
+                }
+            }
+            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
+                writeln!(
+                    state,
+                    r#"
     friend Str;
 }};
 inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
@@ -630,38 +653,39 @@ inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
     return o;
 }}
 "#,
-            )?;
-        } else {
-            writeln!(state, "}};")?;
-        }
-        writeln!(
-            state,
-            r#"
+                )?;
+            } else {
+                writeln!(state, "}};")?;
+            }
+            writeln!(
+                state,
+                r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr<Ref<{ty}>>(const Ref<{ty}>& t) {{
+inline uint8_t* __zngur_internal_data_ptr<{ref_kind}<{ty}>>(const {ref_kind}<{ty}>& t) {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init<Ref<{ty}>>(Ref<{ty}>&) {{
+inline void __zngur_internal_assume_init<{ref_kind}<{ty}>>({ref_kind}<{ty}>&) {{
 }}
 
 template<>
-inline void __zngur_internal_check_init<Ref<{ty}>>(const Ref<{ty}>&) {{
+inline void __zngur_internal_check_init<{ref_kind}<{ty}>>(const {ref_kind}<{ty}>&) {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit<Ref<{ty}>>(Ref<{ty}>&) {{
+inline void __zngur_internal_assume_deinit<{ref_kind}<{ty}>>({ref_kind}<{ty}>&) {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of<Ref<{ty}>>() {{
+inline size_t __zngur_internal_size_of<{ref_kind}<{ty}>>() {{
     return {size};
 }}
 }}"#,
-            ty = self.ty,
-            size = if is_unsized { 16 } else { 8 },
-        )?;
+                ty = self.ty,
+                size = if is_unsized { 16 } else { 8 },
+            )?;
+        }
         Ok(())
     }
 
@@ -1142,55 +1166,63 @@ return o;
                 link_name: _,
                 link_name_ref,
             }) => {
-                writeln!(
-                    state,
-                    r#"
-rust::Ref<{my_name}> rust::Ref<{my_name}>::build({as_ty}& args) {{
+                for ref_kind in ["Ref", " RefMut"] {
+                    writeln!(
+                        state,
+                        r#"
+rust::{ref_kind}<{my_name}> rust::{ref_kind}<{my_name}>::build({as_ty}& args) {{
 auto data_as_impl = &args;
-rust::Ref<{my_name}> o;
+rust::{ref_kind}<{my_name}> o;
 ::rust::__zngur_internal_assume_init(o);
 {link_name_ref}(
 (uint8_t *)data_as_impl,
 "#,
-                )?;
-                writeln!(
-                    state,
-                    r#"
+                    )?;
+                    writeln!(
+                        state,
+                        r#"
 ::rust::__zngur_internal_data_ptr(o));
 return o;
 }}
 "#,
-                )?;
+                    )?;
+                }
             }
             None => (),
         }
         for method in &self.methods {
             let fn_name = my_name.to_owned() + "::" + &method.name;
             method.sig.emit_cpp_def(state, &fn_name)?;
-            if let ZngurMethodReceiver::Ref(_) = method.kind {
-                let CppFnSig {
-                    rust_link_name: _,
-                    inputs,
-                    output,
-                } = &method.sig;
-                writeln!(
-                    state,
-                    "inline {output} rust::Ref<{ty}>::{method_name}({input_defs}) const
+            if let ZngurMethodReceiver::Ref(m) = method.kind {
+                let ref_kinds: &[&str] = match m {
+                    Mutability::Mut => &["RefMut"],
+                    Mutability::Not => &["Ref", "RefMut"],
+                };
+                for ref_kind in ref_kinds {
+                    let CppFnSig {
+                        rust_link_name: _,
+                        inputs,
+                        output,
+                    } = &method.sig;
+                    writeln!(
+                        state,
+                        "inline {output} rust::{ref_kind}<{ty}>::{method_name}({input_defs}) const
                 {{
                     return {fn_name}(*this{input_args});
                 }}",
-                    ty = &self.ty,
-                    method_name = &method.name,
-                    input_defs = inputs
-                        .iter()
-                        .skip(1)
-                        .enumerate()
-                        .map(|(n, ty)| format!("{ty} i{n}"))
-                        .join(", "),
-                    input_args = (0..inputs.len() - 1)
-                        .map(|n| format!(", ::std::move(i{n})"))
-                        .join("")
-                )?;
+                        ty = &self.ty,
+                        method_name = &method.name,
+                        input_defs = inputs
+                            .iter()
+                            .skip(1)
+                            .enumerate()
+                            .map(|(n, ty)| format!("{ty} i{n}"))
+                            .join(", "),
+                        input_args = (0..inputs.len() - 1)
+                            .map(|n| format!(", ::std::move(i{n})"))
+                            .join("")
+                    )?;
+                }
             }
             if !is_unsized && method.kind != ZngurMethodReceiver::Static {
                 let CppFnSig {
@@ -1395,6 +1427,9 @@ namespace rust {
     template<typename T>
     struct Ref;
 
+    template<typename T>
+    struct RefMut;
+
     template<typename... T>
     struct Tuple;
 
@@ -1415,6 +1450,8 @@ namespace rust {
                 [
                     format!("::rust::Ref<int{x}_t>"),
                     format!("::rust::Ref<uint{x}_t>"),
+                    format!("::rust::RefMut<int{x}_t>"),
+                    format!("::rust::RefMut<uint{x}_t>"),
                 ]
             }))
             .chain([
@@ -1476,6 +1513,23 @@ namespace rust {
         private:
             size_t data;
         friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
+    }};
+
+    template<>
+    struct RefMut<{ty}> {{
+        RefMut() {{
+            data = 0;
+        }}
+        RefMut({ty}& t) {{
+            data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+        }}
+
+        {ty}& operator*() {{
+            return *reinterpret_cast<{ty}*>(data);
+        }}
+        private:
+            size_t data;
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut<{ty}>>(const ::rust::RefMut<{ty}>& t);
     }};
 "#
             )?;

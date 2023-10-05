@@ -8,7 +8,7 @@
 template <typename T> using Vec = ::rust::std::vec::Vec<T>;
 // template <typename T> using Option = ::rust::std::option::Option<T>;
 template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
-template <typename T> using RmDyn = ::rust::Ref<::rust::Dyn<T>>;
+template <typename T> using RmDyn = ::rust::RefMut<::rust::Dyn<T>>;
 using rust::crate::consume_and_panic;
 using rust::crate::consume_n_times;
 using rust::crate::PrintOnDrop;

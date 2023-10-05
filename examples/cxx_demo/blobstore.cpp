@@ -17,7 +17,7 @@ class BlobStore : public ::rust::crate::BlobStoreTrait {
   };
 
 public:
-  uint64_t put(::rust::Ref<::rust::crate::MultiBuf> buf) override {
+  uint64_t put(::rust::RefMut<::rust::crate::MultiBuf> buf) override {
     std::string contents;
 
     // Traverse the caller's chunk iterator.

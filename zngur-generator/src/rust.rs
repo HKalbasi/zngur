@@ -92,8 +92,11 @@ impl IntoCpp for RustType {
                 path: CppPath::from("rust::Box"),
                 generic_args: vec![t.into_cpp()],
             },
-            RustType::Ref(_, t) => CppType {
-                path: CppPath::from("rust::Ref"),
+            RustType::Ref(m, t) => CppType {
+                path: match m {
+                    Mutability::Mut => CppPath::from("rust::RefMut"),
+                    Mutability::Not => CppPath::from("rust::Ref"),
+                },
                 generic_args: vec![t.into_cpp()],
             },
             RustType::Slice(s) => CppType {
