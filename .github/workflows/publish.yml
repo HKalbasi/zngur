@@ -44,7 +44,7 @@ jobs:
           git config --global user.email "runner@gha.local"
           git config --global user.name "Github Action"
           cargo workspaces -v version -ay --force '*' --include-merged-tags --no-git-commit --exact patch
-          export VERSION=$(cargo pkgid | sed -E 's/.*#(.*)/\1/g')
+          export VERSION=$(cd zngur; cargo pkgid | sed -E 's/.*#(.*)/\1/g')
 
           # Commit and publish
           git commit -am "Release $VERSION"
