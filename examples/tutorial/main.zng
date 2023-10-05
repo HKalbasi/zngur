@@ -8,11 +8,28 @@ type ::std::vec::Vec<crate::Item> {
     wellknown_traits(Debug);
 }
 
+type str {
+    wellknown_traits(?Sized);
+
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    layout(size = 24, align = 8);
+}
+
+type crate::Item {
+    layout(size = 32, align = 8);
+
+    constructor { name: ::std::string::String, size: u32 };
+}
+
 type crate::Inventory {
     layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
     fn add_banana(&mut self, u32);
+    fn add_item(&mut self, crate::Item);
     fn into_items(self) -> ::std::vec::Vec<crate::Item>;
 }

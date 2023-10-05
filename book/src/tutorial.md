@@ -67,7 +67,8 @@ type crate::Inventory {
 Zngur needs to know the size and align of the types inside the bridge. You can figure it out using the rust-analyzer (by hovering
 over the struct or type alias) or fill it with some random number and then fix it from the compiler error.
 
-> **Note:** Ideally `main.zng` file should be auto-generated, but we are not there yet.
+> **Note:** Ideally `main.zng` file should be auto-generated, but we are not there yet. Also, Zngur can work without explicit size and
+> align (with some caveats), see [layout policies](./call_rust_from_cpp/layout_policy.md) for more details.
 
 Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files. It will generate a `./generated.h` C++ header file, and a
 `./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include the generated Rust file. Then fill `main.cpp` file
@@ -80,6 +81,9 @@ int main() {
   auto inventory = rust::crate::Inventory::new_empty(1000);
 }
 ```
+
+Zngur will add every Rust item with its full path in the `rust` namespace, so for example `String` will become `rust::std::string::String` in the
+C++ side.
 
 To build it, you need to first build the Rust code using `cargo build`, which will generate a `libyourcrate.a` in the `./target/debug` folder, and
 you can build your C++ code by linking to it:
@@ -184,11 +188,95 @@ int main() {
 }
 ```
 
-Bridging the `add_item` method requires a little more effort:
+Bridging the `add_item` method requires a little more effort. We need to declare `crate::Item` type as well since it is an argument
+of that function:
+
+```
+// ...
+
+type crate::Item {
+    layout(size = 32, align = 8);
+}
+
+type crate::Inventory {
+    // ...
+    fn add_item(&mut self, crate::Item);
+}
+```
+
+But using that alone we can't use the `add_item` since there is no way to obtain a `rust::crate::Item` in the C++ side. To fix that, we
+need to add the constructor for the `Item`:
+
+```
+type ::std::string::String {
+    layout(size = 24, align = 8);
+}
+
+type crate::Item {
+    layout(size = 32, align = 8);
+
+    constructor { name: ::std::string::String, size: u32 };
+}
+```
+
+But it doesn't solve the problem, since we can't create a `String` so we can't call the constructor. To creating a `String`, we declare the
+primitive type `str` and its `to_owned` method:
+
+```
+type str {
+    wellknown_traits(?Sized);
+
+    fn to_owned(&self) -> ::std::string::String;
+}
+```
+
+There are some new things here. First, since `str` is a primitive it doesn't need full path. Then there is `wellknown_traits(?Sized)` instead
+of `layout(size = X, align = Y)` which tells Zngur that this type is unsized and it should consider its references as fat and prevent storing it
+by value.
+
+Now you may wonder how we can obtain a `&str` to make a `String` from it? Fortunately, Zngur has some special support for primitive types and it
+has a `rust::Str::from_char_star` function that creates a `&str` from a zero terminated, valid UTF8 `char*` with the same lifetime. If Zngur didn't
+have this, we could create a `&[u8]` by exporting its `from_raw_parts` and then converting it to a `&str`, `from_char_star` exists just for convenience.
+
+So now we can finally use the `add_item` method:
+
+```C++
+int main() {
+  auto inventory = rust::crate::Inventory::new_empty(1000);
+  inventory.add_banana(3);
+  rust::Ref<rust::Str> name = rust::Str::from_char_star("apple");
+  inventory.add_item(rust::crate::Item(name.to_owned(), 5));
+  zngur_dbg(inventory);
+}
+```
+
+```
+[main.cpp:8] inventory = Inventory {
+    items: [
+        Item {
+            name: "banana",
+            size: 7,
+        },
+        Item {
+            name: "banana",
+            size: 7,
+        },
+        Item {
+            name: "banana",
+            size: 7,
+        },
+        Item {
+            name: "apple",
+            size: 5,
+        },
+    ],
+    remaining_space: 974,
+}
+```
 
 ## Generic types
 
-Now let's try to add and bridge the `into_items` method:
+Let's try to add and bridge the `into_items` method:
 
 ```Rust
 impl Inventory {
@@ -207,7 +295,7 @@ type ::std::vec::Vec<crate::Item> {
 }
 
 type crate::Inventory {
-    // Old things...
+    // ...
     fn into_items(self) -> ::std::vec::Vec<crate::Item>;
 }
 ```
@@ -221,3 +309,26 @@ Now you can use `into_items` method in C++:
 rust::std::vec::Vec<rust::crate::Item> v = inventory.into_items();
 zngur_dbg(v);
 ```
+
+```
+[main.cpp:11] v = [
+    Item {
+        name: "banana",
+        size: 7,
+    },
+    Item {
+        name: "banana",
+        size: 7,
+    },
+    Item {
+        name: "banana",
+        size: 7,
+    },
+    Item {
+        name: "apple",
+        size: 5,
+    },
+]
+```
+
+You can see the full code at [`examples/tutorial`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial/main.zng)

@@ -17,7 +17,6 @@
   - [Converting C++ objects to `Box<dyn Trait>`]()
   - [`Opaque C++ types`](./call_cpp_from_rust/opaque.md)
 - [Safety](./safety.md)
-- [Footguns]()
 - [How it compares to other tools](./how_it_compares.md)
 - [Design decisions](./philosophy.md)
 - [How it works?](./how_it_works.md)
