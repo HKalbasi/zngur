@@ -41,13 +41,13 @@ from C++ that operate on Rust types.
 
 // Rust values are available in the `::rust` namespace from their absolute path
 // in Rust
-template <typename T> using Vec = ::rust::std::vec::Vec<T>;
-template <typename T> using Option = ::rust::std::option::Option<T>;
-template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
+template <typename T> using Vec = rust::std::vec::Vec<T>;
+template <typename T> using Option = rust::std::option::Option<T>;
+template <typename T> using BoxDyn = rust::Box<rust::Dyn<T>>;
 
 // You can implement Rust traits for your classes
 template <typename T>
-class VectorIterator : public ::rust::std::iter::Iterator<T> {
+class VectorIterator : public rust::std::iter::Iterator<T> {
   std::vector<T> vec;
   size_t pos;
 
@@ -86,7 +86,7 @@ int main() {
   }
   int state = 0;
   // You can convert a C++ lambda into a `Box<dyn Fn>` and friends.
-  auto f = BoxDyn<::rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
+  auto f = BoxDyn<rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
     state += x;
     std::cout << "hello " << x << " " << state << "\n";
     return x * 2;
@@ -98,7 +98,7 @@ int main() {
   // You can convert a C++ type that implements `Trait` to a `Box<dyn Trait>`.
   // `make_box` is similar to the `make_unique`, it takes constructor arguments
   // and construct it inside the `Box` (instead of `unique_ptr`).
-  auto vec_as_iter = BoxDyn<::rust::std::iter::Iterator<int32_t>>::make_box<
+  auto vec_as_iter = BoxDyn<rust::std::iter::Iterator<int32_t>>::make_box<
       VectorIterator<int32_t>>(std::move(vec));
   // Then use it like a normal Rust value.
   auto t = vec_as_iter.collect();

@@ -31,8 +31,8 @@ public:
   RustHandler(BendHandler &&inner) : inner(std::move(inner)) {}
 };
 
-::rust::Tuple<> rust::exported_functions::apply(::rust::Ref<Reader> reader,
-                                                BendHandler handler) {
+rust::Tuple<> rust::exported_functions::apply(rust::Ref<Reader> reader,
+                                              BendHandler handler) {
   using IndexType =
       osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type,
                                          osmium::Location>;
@@ -53,8 +53,8 @@ rust::Ref<TagList> rust::Impl<Way>::tags(rust::Ref<Way> self) {
 }
 
 rust::std::option::Option<rust::Ref<rust::Str>>
-rust::Impl<TagList>::get_value_by_key(::rust::Ref<TagList> self,
-                                      ::rust::Ref<::rust::Str> key) {
+rust::Impl<TagList>::get_value_by_key(rust::Ref<TagList> self,
+                                      rust::Ref<rust::Str> key) {
   string cpp_key{(const char *)key.as_ptr(), key.len()};
   auto value = self.cpp().get_value_by_key(cpp_key.c_str());
   if (value == nullptr) {

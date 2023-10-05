@@ -5,7 +5,7 @@
 
 #include "./generated.h"
 
-class BlobStore : public ::rust::crate::BlobStoreTrait {
+class BlobStore : public rust::crate::BlobStoreTrait {
   class Impl {
     friend BlobStore;
 
@@ -17,7 +17,7 @@ class BlobStore : public ::rust::crate::BlobStoreTrait {
   };
 
 public:
-  uint64_t put(::rust::RefMut<::rust::crate::MultiBuf> buf) override {
+  uint64_t put(rust::RefMut<rust::crate::MultiBuf> buf) override {
     std::string contents;
 
     // Traverse the caller's chunk iterator.
@@ -39,14 +39,14 @@ public:
     return blob_id;
   }
 
-  ::rust::Unit tag(::uint64_t blob_id,
-                   ::rust::Ref<::rust::core::primitive::str> tag) override {
+  rust::Unit tag(::uint64_t blob_id,
+                 rust::Ref<rust::core::primitive::str> tag) override {
     impl.blobs[blob_id].tags.emplace((char *)tag.as_ptr(), tag.len());
-    return ::rust::Unit{};
+    return rust::Unit{};
   }
 
-  ::rust::crate::BlobMetadata metadata(::uint64_t blob_id) override {
-    ::rust::crate::BlobMetadata r = ::rust::crate::BlobMetadata::default_();
+  rust::crate::BlobMetadata metadata(::uint64_t blob_id) override {
+    rust::crate::BlobMetadata r = rust::crate::BlobMetadata::default_();
     auto blob = impl.blobs.find(blob_id);
     if (blob != impl.blobs.end()) {
       r.set_size(blob->second.data.size());
@@ -62,8 +62,8 @@ private:
   Impl impl;
 };
 
-::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>>
+rust::Box<rust::Dyn<rust::crate::BlobStoreTrait>>
 rust::exported_functions::new_blob_store_client() {
-  return ::rust::Box<::rust::Dyn<::rust::crate::BlobStoreTrait>>::make_box<
+  return rust::Box<rust::Dyn<rust::crate::BlobStoreTrait>>::make_box<
       BlobStore>();
 }

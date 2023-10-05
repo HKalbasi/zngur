@@ -28,8 +28,8 @@ And you need to implement that in a `.cpp` file, and link it to the crate:
 
 ```C++
 rust::std::option::Option<rust::Ref<rust::Str>>
-rust::Impl<TagList>::get_value_by_key(::rust::Ref<TagList> self,
-                                      ::rust::Ref<::rust::Str> key) {
+rust::Impl<TagList>::get_value_by_key(rust::Ref<TagList> self,
+                                      rust::Ref<rust::Str> key) {
   // Your code here
 }
 ```

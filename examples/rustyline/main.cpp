@@ -6,7 +6,7 @@
 #include "./generated.h"
 
 int main() {
-  auto editor = ::rust::rustyline::DefaultEditor::new_().unwrap();
+  auto editor = rust::rustyline::DefaultEditor::new_().unwrap();
   if (editor.load_history(rust::Str::from_char_star("history.txt")).is_err()) {
     std::cout << "No previous history." << std::endl;
   }
