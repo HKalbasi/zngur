@@ -67,6 +67,6 @@ int main() {
   // Then use it like a normal Rust value.
   auto t = vec_as_iter.collect();
   // Some utilities are also provided. For example, `zngur_dbg` is the
-  // equivalent of `dbg!` macros.
+  // equivalent of `dbg!` macro.
   zngur_dbg(t);
 }

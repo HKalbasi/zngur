@@ -47,12 +47,15 @@ template <typename T> using BoxDyn = ::rust::Box<::rust::Dyn<T>>;
 
 // You can implement Rust traits for your classes
 template <typename T>
-class VectorIterator : public rust::Impl<::rust::std::iter::Iterator<T>> {
+class VectorIterator : public ::rust::std::iter::Iterator<T> {
   std::vector<T> vec;
   size_t pos;
 
 public:
   VectorIterator(std::vector<T> &&v) : vec(v), pos(0) {}
+  ~VectorIterator() {
+    std::cout << "vector iterator has been destructed" << std::endl;
+  }
 
   Option<T> next() override {
     if (pos >= vec.size()) {
@@ -74,6 +77,13 @@ int main() {
   Vec<int32_t>::push(s, 3);
   // You can call Rust functions just like normal Rust.
   std::cout << s.clone().into_iter().sum() << std::endl;
+  // You can catch Rust panics as C++ exceptions
+  try {
+    std::cout << "s[2] = " << *s.get(2).unwrap() << std::endl;
+    std::cout << "s[4] = " << *s.get(4).unwrap() << std::endl;
+  } catch (rust::Panic e) {
+    std::cout << "Rust panic happened" << std::endl;
+  }
   int state = 0;
   // You can convert a C++ lambda into a `Box<dyn Fn>` and friends.
   auto f = BoxDyn<::rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
@@ -102,14 +112,21 @@ Output:
 
 ```
 17
+s[2] = 7
+thread '<unnamed>' panicked at 'called `Option::unwrap()` on a `None` value', examples/simple/src/generated.rs:186:39
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+s[4] = Rust panic happened
 hello 2 2
 hello 5 7
 hello 7 14
 hello 3 17
 34 17
-[main.cpp:61] t = [
+vector iterator has been destructed
+[main.cpp:71] t = [
     10,
     20,
     60,
 ]
 ```
+
+See the [`examples/simple`](https://github.com/HKalbasi/zngur/blob/main/examples/simple) if you want to build and run it.

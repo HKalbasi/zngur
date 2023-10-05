@@ -331,4 +331,4 @@ zngur_dbg(v);
 ]
 ```
 
-You can see the full code at [`examples/tutorial`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial/main.zng)
+You can see the full code at [`examples/tutorial`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial)
