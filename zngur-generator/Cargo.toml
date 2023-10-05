@@ -1,7 +1,7 @@
 [package]
 name = "zngur-generator"
 description = "Generates Rust and C++ glue codes from the zng file"
-version = "0.2.0"
+version = "0.2.1"
 edition.workspace = true
 license.workspace = true
 
@@ -11,5 +11,5 @@ license.workspace = true
 ariadne = "0.3.0"
 chumsky = { version = "1.0.0-alpha.4", features = ["label"] }
 iter_tools = "0.1.4"
-zngur-parser = { version = "0.2.0", path = "../zngur-parser" }
-zngur-def = { version = "0.2.0", path = "../zngur-def" }
+zngur-parser = { version = "=0.2.1", path = "../zngur-parser" }
+zngur-def = { version = "=0.2.1", path = "../zngur-def" }
