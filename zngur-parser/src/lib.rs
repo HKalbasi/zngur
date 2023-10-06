@@ -1,6 +1,6 @@
 use std::{fmt::Display, process::exit, sync::Mutex};
 
-use ariadne::{sources, Color, Label, Report, ReportKind, Source};
+use ariadne::{sources, Color, Label, Report, ReportKind};
 use chumsky::prelude::*;
 use iter_tools::{Either, Itertools};
 
@@ -11,6 +11,9 @@ use zngur_def::{
 };
 
 pub type Span = SimpleSpan<usize>;
+
+#[cfg(test)]
+mod tests;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Spanned<T> {
@@ -66,7 +69,7 @@ enum ParsedItem<'a> {
     },
     Type {
         ty: Spanned<ParsedRustType<'a>>,
-        items: Vec<ParsedTypeItem<'a>>,
+        items: Vec<Spanned<ParsedTypeItem<'a>>>,
     },
     Trait {
         tr: ParsedRustTrait<'a>,
@@ -165,6 +168,8 @@ impl ParsedItem<'_> {
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
                 for item in items {
+                    let item_span = item.span;
+                    let item = item.inner;
                     match item {
                         ParsedTypeItem::Layout(span, p) => {
                             layout = Some(match p {
@@ -239,6 +244,16 @@ impl ParsedItem<'_> {
                             cpp_value = Some((field.to_owned(), cpp_type.to_owned()));
                         }
                         ParsedTypeItem::CppRef { cpp_type } => {
+                            match layout_span {
+                                Some(span) => {
+                                    create_and_emit_error("Duplicate layout policy found", span);
+                                }
+                                None => {
+                                    layout =
+                                        Some(LayoutPolicy::StackAllocated { size: 0, align: 1 });
+                                    layout_span = Some(item_span);
+                                }
+                            }
                             cpp_ref = Some(cpp_type.to_owned());
                         }
                     }
@@ -260,18 +275,27 @@ impl ParsedItem<'_> {
                 }
                 if let Some(is_unsized) = is_unsized {
                     if let Some(span) = layout_span {
+                        let file_name = LATEST_FILENAME.lock().unwrap().to_owned();
                         emit_ariadne_error(
-                            Report::build(ReportKind::Error, (), span.start)
-                                .with_message("Duplicate layout policy found for unsized type.")
-                                .with_label(Label::new(span.start..span.end).with_message(
-                                    "Unsized types have implicit layout policy, remove this.",
-                                ).with_color(Color::Red))
-                                .with_label(
-                                    Label::new(is_unsized.span.start..is_unsized.span.end)
-                                        .with_message("Type declared as unsized here.")
-                                        .with_color(Color::Blue),
-                                )
-                                .finish(),
+                            Report::build(
+                                ReportKind::Error,
+                                file_name.clone(),
+                                span.start,
+                            )
+                            .with_message("Duplicate layout policy found for unsized type.")
+                            .with_label(
+                                Label::new((file_name.clone(), span.start..span.end))
+                                    .with_message(
+                                        "Unsized types have implicit layout policy, remove this.",
+                                    )
+                                    .with_color(Color::Red),
+                            )
+                            .with_label(
+                                Label::new((file_name.clone(), is_unsized.span.start..is_unsized.span.end))
+                                    .with_message("Type declared as unsized here.")
+                                    .with_color(Color::Blue),
+                            )
+                            .finish(),
                         )
                     }
                     layout = Some(LayoutPolicy::OnlyByRef);
@@ -434,11 +458,7 @@ static LATEST_FILENAME: Mutex<String> = Mutex::new(String::new());
 static LATEST_TEXT: Mutex<String> = Mutex::new(String::new());
 
 impl ParsedZngFile<'_> {
-    pub fn parse<T>(
-        filename: &str,
-        text: &str,
-        then: impl for<'a> Fn(ParsedZngFile<'a>) -> T,
-    ) -> T {
+    pub fn parse(filename: &str, text: &str) -> ZngurFile {
         *LATEST_FILENAME.lock().unwrap() = filename.to_string();
         *LATEST_TEXT.lock().unwrap() = text.to_string();
         let (tokens, errs) = lexer().parse(text).into_output_errors();
@@ -454,7 +474,7 @@ impl ParsedZngFile<'_> {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
             emit_error(errs);
         };
-        then(ast.0)
+        ast.0.into_zngur_file()
     }
 
     pub fn into_zngur_file(self) -> ZngurFile {
@@ -470,31 +490,49 @@ fn create_and_emit_error<'a>(error: &str, span: Span) -> ! {
     emit_error([Rich::custom(span, error)].into_iter())
 }
 
-fn emit_ariadne_error<'a>(err: Report<'_>) -> ! {
-    err.eprint(Source::from(&**LATEST_TEXT.lock().unwrap()))
-        .unwrap();
+#[cfg(test)]
+fn emit_ariadne_error(err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
+    let mut r = Vec::<u8>::new();
+    // Block needed to drop lock guards before panic
+    {
+        let filename = &**LATEST_FILENAME.lock().unwrap();
+        let text = &**LATEST_TEXT.lock().unwrap();
+
+        err.write(sources([(filename.to_string(), text)]), &mut r)
+            .unwrap();
+    }
+    std::panic::resume_unwind(Box::new(tests::ErrorText(
+        String::from_utf8(strip_ansi_escapes::strip(r)).unwrap(),
+    )));
+}
+
+#[cfg(not(test))]
+fn emit_ariadne_error(err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
+    let filename = &**LATEST_FILENAME.lock().unwrap();
+    let text = &**LATEST_TEXT.lock().unwrap();
+
+    err.eprint(sources([(filename.to_string(), text)])).unwrap();
     exit(101);
 }
 
 fn emit_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
-    let filename = &**LATEST_FILENAME.lock().unwrap();
-    let text = &**LATEST_TEXT.lock().unwrap();
+    let filename = LATEST_FILENAME.lock().unwrap().to_owned();
     for e in errs {
-        Report::build(ReportKind::Error, filename, e.span().start)
-            .with_message(e.to_string())
-            .with_label(
-                Label::new((filename.to_string(), e.span().into_range()))
-                    .with_message(e.reason().to_string())
-                    .with_color(Color::Red),
-            )
-            .with_labels(e.contexts().map(|(label, span)| {
-                Label::new((filename.to_string(), span.into_range()))
-                    .with_message(format!("while parsing this {}", label))
-                    .with_color(Color::Yellow)
-            }))
-            .finish()
-            .print(sources([(filename.to_string(), text)]))
-            .unwrap();
+        emit_ariadne_error(
+            Report::build(ReportKind::Error, &filename, e.span().start)
+                .with_message(e.to_string())
+                .with_label(
+                    Label::new((filename.to_string(), e.span().into_range()))
+                        .with_message(e.reason().to_string())
+                        .with_color(Color::Red),
+                )
+                .with_labels(e.contexts().map(|(label, span)| {
+                    Label::new((filename.to_string(), span.into_range()))
+                        .with_message(format!("while parsing this {}", label))
+                        .with_color(Color::Yellow)
+                }))
+                .finish(),
+        )
     }
     exit(101);
 }
@@ -964,7 +1002,7 @@ fn type_item<'a>(
     just(Token::KwType)
         .ignore_then(spanned(rust_type()))
         .then(
-            inner_item()
+            spanned(inner_item())
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),

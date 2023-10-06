@@ -43,26 +43,18 @@ type crate::Reader {
 }
 
 type crate::Way {
-    layout(size = 0, align = 1);
-
     #cpp_ref "::osmium::Way";
 }
 
 type crate::WayNodeList {
-    layout(size = 0, align = 1);
-
     #cpp_ref "::osmium::WayNodeList";
 }
 
 type crate::TagList {
-    layout(size = 0, align = 1);
-
     #cpp_ref "::osmium::TagList";
 }
 
 type crate::Node {
-    layout(size = 0, align = 1);
-
     #cpp_ref "::osmium::NodeRef";
 }
 

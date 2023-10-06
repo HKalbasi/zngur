@@ -6,7 +6,7 @@ most of the existing code is in C++ and Rust code needs a way to use them in ord
 direction.
 
 Zngur general idea is that Rust semantics is a subset of C++ semantics, so we should use Rust things in C++ and avoid bringing
-C++ things in Rust (See [Philosophy](../philosophy.md)). So, even in the C++ to Rust direction, Zngur operates only on Rust types. For
+C++ things in Rust (See [Design decisions](../philosophy.md)). So, even in the C++ to Rust direction, Zngur operates only on Rust types. For
 example, Zngur allows you to call a C++ function that takes Rust types in inputs in Rust, but you can't call a function that takes
 a C++ object. Or you can write an `impl` block for a Rust type in C++ and call those methods in Rust, but you can't call C++ methods
 of a C++ object in Rust.

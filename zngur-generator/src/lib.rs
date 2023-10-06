@@ -25,8 +25,8 @@ pub use zngur_def::*;
 pub struct ZngurGenerator(ZngurFile);
 
 impl ZngurGenerator {
-    pub fn build_from_zng(zng: ParsedZngFile<'_>) -> Self {
-        ZngurGenerator(zng.into_zngur_file())
+    pub fn build_from_zng(zng: ZngurFile) -> Self {
+        ZngurGenerator(zng)
     }
 
     pub fn render(self) -> (String, String, Option<String>) {
