@@ -18,7 +18,7 @@ using Zngur with explicit data layout annotations for unstable types is usually 
 
 These are the layout policies Zngur currently supports:
 
-## `layout(size = X, align = Y)`
+## `#layout(size = X, align = Y)`
 
 This is the normal mode, which you should provide exact value of size and align for your type, which enables storing
 them by value in the stack of C++. This mode has the best performance, but it has problems mentioned above.
@@ -34,7 +34,7 @@ size and align, such as:
 - `[T; N]` where `T` has stable layout
 - primitives
 
-## `layout_conservative(size = X, align = Y)`
+## `#layout_conservative(size = X, align = Y)`
 
 {{#include ../unimplemented_begin.md}}1{{#include ../unimplemented_end.md}}
 

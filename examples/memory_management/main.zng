@@ -1,12 +1,12 @@
 #convert_panic_to_exception
 
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
 type bool {
-    layout(size = 1, align = 1);
+    #layout(size = 1, align = 1);
     wellknown_traits(Copy);
 }
 
@@ -16,13 +16,13 @@ type str {
 
 mod crate {
     type PrintOnDropPair {
-        layout(size = 32, align = 8);
+        #layout(size = 32, align = 8);
 
         constructor { first: PrintOnDrop, second: PrintOnDrop };
     }
 
     type PrintOnDrop {
-        layout(size = 16, align = 8);
+        #layout(size = 16, align = 8);
         constructor(&str);
 
         fn clone(&self) -> PrintOnDrop;
@@ -39,7 +39,7 @@ mod crate {
     }
 
     type Box<dyn PrintOnDropConsumer> {
-        layout(size = 16, align = 8);
+        #layout(size = 16, align = 8);
     
         fn deref_mut(&mut self) -> &mut dyn PrintOnDropConsumer use ::std::ops::DerefMut;
     }
@@ -55,7 +55,7 @@ mod crate {
 mod ::std {
     mod option {
         type Option<&crate::PrintOnDrop> {
-            layout(size = 8, align = 8);
+            #layout(size = 8, align = 8);
 
             fn unwrap(self) -> &crate::PrintOnDrop;
         }
@@ -63,7 +63,7 @@ mod ::std {
 
     mod vec {
         type Vec<crate::PrintOnDrop> {
-            layout(size = 24, align = 8);
+            #layout(size = 24, align = 8);
 
             fn new() -> Vec<crate::PrintOnDrop>;
             fn push(&mut self, crate::PrintOnDrop);

@@ -303,7 +303,7 @@ impl ParsedItem<'_> {
                 let Some(layout) = layout else {
                     create_and_emit_error(
                         "No layout policy found for this type. \
-Use one of `layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
+Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
                         ty.span,
                     );
                 };
@@ -906,7 +906,7 @@ fn type_item<'a>(
         .then(select! {
             Token::Number(c) => c,
         });
-        let layout = just(Token::Ident("layout"))
+        let layout = just([Token::Sharp, Token::Ident("layout")])
             .ignore_then(
                 property_item
                     .separated_by(just(Token::Comma))

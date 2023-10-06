@@ -28,7 +28,7 @@ fn parse_unit() {
     check_success(
         r#"
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
     "#,
@@ -40,7 +40,7 @@ fn typo_in_wellknown_trait() {
     check_fail(
         r#"
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
     welcome_traits(Copy);
 }
     "#,
@@ -61,7 +61,7 @@ fn multiple_layout_policies() {
     check_fail(
         r#"
 type ::std::string::String {
-    layout(size = 24, align = 8);
+    #layout(size = 24, align = 8);
     #heap_allocated;
 }
     "#,
@@ -82,7 +82,7 @@ fn cpp_ref_should_not_need_layout_info() {
     check_fail(
         r#"
 type crate::Way {
-    layout(size = 1, align = 2);
+    #layout(size = 1, align = 2);
 
     #cpp_ref "::osmium::Way";
 }
@@ -91,7 +91,7 @@ type crate::Way {
             Error: Duplicate layout policy found
                ╭─[main.zng:3:5]
                │
-             3 │     layout(size = 1, align = 2);
+             3 │     #layout(size = 1, align = 2);
                │     ─────────────┬─────────────  
                │                  ╰─────────────── Duplicate layout policy found
             ───╯

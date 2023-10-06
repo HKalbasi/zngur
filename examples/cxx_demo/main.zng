@@ -1,5 +1,5 @@
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
@@ -19,13 +19,13 @@ type ::core::primitive::str {
 
 mod crate {
     type MultiBuf {
-        layout(size = 32, align = 8);
+        #layout(size = 32, align = 8);
 
         fn next_chunk(&mut self) -> &[u8];
     }
 
     type BlobMetadata {
-        layout(size = 32, align = 8);
+        #layout(size = 32, align = 8);
 
         fn default() -> BlobMetadata;  
         fn set_size(&mut self, usize);
@@ -39,7 +39,7 @@ mod crate {
     }
 
     type Box<dyn BlobStoreTrait> {
-        layout(size = 16, align = 8);
+        #layout(size = 16, align = 8);
     }
 }
 

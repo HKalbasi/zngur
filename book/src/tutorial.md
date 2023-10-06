@@ -58,7 +58,7 @@ Copy it into `src/lib.rs`. Now we need to declare things that we need to access 
 
 ```
 type crate::Inventory {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
 
     fn new_empty(u32) -> crate::Inventory;
 }
@@ -96,7 +96,7 @@ To ensure that everything works, let's add a `#[derive(Debug)]` to `Inventory` a
 
 ```
 type crate::Inventory {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
@@ -144,11 +144,11 @@ impl Inventory {
 
 ```
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
 }
 
 type crate::Inventory {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
@@ -195,7 +195,7 @@ of that function:
 // ...
 
 type crate::Item {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
 }
 
 type crate::Inventory {
@@ -209,11 +209,11 @@ need to add the constructor for the `Item`:
 
 ```
 type ::std::string::String {
-    layout(size = 24, align = 8);
+    #layout(size = 24, align = 8);
 }
 
 type crate::Item {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
 
     constructor { name: ::std::string::String, size: u32 };
 }
@@ -231,7 +231,7 @@ type str {
 ```
 
 There are some new things here. First, since `str` is a primitive it doesn't need full path. Then there is `wellknown_traits(?Sized)` instead
-of `layout(size = X, align = Y)` which tells Zngur that this type is unsized and it should consider its references as fat and prevent storing it
+of `#layout(size = X, align = Y)` which tells Zngur that this type is unsized and it should consider its references as fat and prevent storing it
 by value.
 
 Now you may wonder how we can obtain a `&str` to make a `String` from it? Fortunately, Zngur has some special support for primitive types and it
@@ -290,7 +290,7 @@ impl Inventory {
 
 ```
 type ::std::vec::Vec<crate::Item> {
-    layout(size = 24, align = 8);
+    #layout(size = 24, align = 8);
     wellknown_traits(Debug);
 }
 

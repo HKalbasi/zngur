@@ -1,7 +1,7 @@
 // This example uses various layout policies to demonstrate them. See https://hkalbasi.github.io/zngur/call_rust_from_cpp/layout_policy.html
 
 type () {
-    layout(size = 0, align = 1); // Unit type has stable layout
+    #layout(size = 0, align = 1); // Unit type has stable layout
     wellknown_traits(Copy);
 }
 
@@ -13,7 +13,7 @@ type str {
 }
 
 type bool {
-    layout(size = 1, align = 1); // primitives like bool have stable layout
+    #layout(size = 1, align = 1); // primitives like bool have stable layout
     wellknown_traits(Copy);
 }
 

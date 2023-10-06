@@ -1,10 +1,10 @@
 type () {
-    layout(size = 0, align = 1);
+    #layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
 
 type ::std::vec::Vec<crate::Item> {
-    layout(size = 24, align = 8);
+    #layout(size = 24, align = 8);
     wellknown_traits(Debug);
 }
 
@@ -15,17 +15,17 @@ type str {
 }
 
 type ::std::string::String {
-    layout(size = 24, align = 8);
+    #layout(size = 24, align = 8);
 }
 
 type crate::Item {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
 
     constructor { name: ::std::string::String, size: u32 };
 }
 
 type crate::Inventory {
-    layout(size = 32, align = 8);
+    #layout(size = 32, align = 8);
     wellknown_traits(Debug);
 
     fn new_empty(u32) -> crate::Inventory;
