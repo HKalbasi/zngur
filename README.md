@@ -1,5 +1,11 @@
 # Zngur
 
+[<img alt="github" src="https://img.shields.io/badge/github-hkalbasi/zngur-8da0cb?style=for-the-badge&labelColor=555555&logo=github" height="20">](https://github.com/hkalbasi/zngur)
+[<img alt="crates.io" src="https://img.shields.io/crates/v/zngur.svg?style=for-the-badge&color=fc8d62&logo=rust" height="20">](https://crates.io/crates/zngur)
+[<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-zngur-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/zngur)
+[<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/hkalbasi/zngur/ci.yml?branch=main&style=for-the-badge" height="20">](https://github.com/hkalbasi/zngur/actions?query=branch%3Amain)
+
+
 Zngur (/zængɑr/) is a C++/Rust interop tool. It tries to expose arbitrary Rust types, methods and functions, while preserving its
 semantics and ergonomics as much as possible. Using Zngur, you can use arbitrary Rust crate in your C++ code as easily as using it in
 normal Rust code, and you can write idiomatic Rusty API for your C++ library inside C++. See [the documentation](https://hkalbasi.github.io/zngur/)
