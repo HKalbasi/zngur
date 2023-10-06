@@ -37,7 +37,7 @@ impl ZngurGenerator {
         cpp_file.trait_defs = zng
             .traits
             .iter()
-            .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(&value)))
+            .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(value)))
             .collect();
         if zng.convert_panic_to_exception {
             rust_file.enable_panic_to_exception();

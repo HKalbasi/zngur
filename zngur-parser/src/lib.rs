@@ -44,7 +44,7 @@ impl ParsedPath<'_> {
             ParsedPathStart::Relative => base
                 .iter()
                 .map(|x| x.as_str())
-                .chain(self.segments.into_iter())
+                .chain(self.segments)
                 .map(|x| x.to_owned())
                 .collect(),
             ParsedPathStart::Crate => ["crate"]
@@ -839,8 +839,8 @@ fn method<'a>(
                 }
             };
             let (inputs, receiver) = match args.0.get(0) {
-                Some(x) if is_self(&x) => (args.0[1..].to_vec(), ZngurMethodReceiver::Move),
-                Some(ParsedRustType::Ref(m, x)) if is_self(&x) => {
+                Some(x) if is_self(x) => (args.0[1..].to_vec(), ZngurMethodReceiver::Move),
+                Some(ParsedRustType::Ref(m, x)) if is_self(x) => {
                     (args.0[1..].to_vec(), ZngurMethodReceiver::Ref(*m))
                 }
                 _ => (args.0, ZngurMethodReceiver::Static),

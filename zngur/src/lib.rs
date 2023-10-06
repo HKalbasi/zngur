@@ -41,8 +41,8 @@ impl Zngur {
 
     pub fn generate(self) {
         let path = self.zng_file;
-        let file = std::fs::read_to_string(&path).unwrap();
-        let file = ParsedZngFile::parse("main.zng", &file, |f| ZngurGenerator::build_from_zng(f));
+        let file = std::fs::read_to_string(path).unwrap();
+        let file = ParsedZngFile::parse("main.zng", &file, ZngurGenerator::build_from_zng);
 
         let (rust, h, cpp) = file.render();
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");

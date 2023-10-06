@@ -165,13 +165,13 @@ fn split_string(input: &str) -> impl Iterator<Item = String> {
 impl From<&str> for CppType {
     fn from(value: &str) -> Self {
         let value = value.trim();
-        match value.split_once("<") {
+        match value.split_once('<') {
             None => CppType {
                 path: CppPath::from(value),
                 generic_args: vec![],
             },
             Some((path, generics)) => {
-                let generics = generics.strip_suffix(">").unwrap();
+                let generics = generics.strip_suffix('>').unwrap();
                 CppType {
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
@@ -1061,7 +1061,7 @@ namespace rust {{
         let cpp_type = &self.ty.to_string();
         let my_name = cpp_type.strip_prefix("::").unwrap();
         for c in &self.constructors {
-            let fn_name = my_name.to_owned() + "::" + &self.ty.path.0.last().unwrap();
+            let fn_name = my_name.to_owned() + "::" + self.ty.path.0.last().unwrap();
             let CppFnSig {
                 inputs,
                 output: _,
@@ -1088,7 +1088,7 @@ namespace rust {{
                     .join("\n"),
             )?;
         }
-        match self.from_trait.as_ref().and_then(|k| traits.get(&k)) {
+        match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
             Some(CppTraitDefinition::Fn { sig }) => {
                 // TODO: too special
                 let as_std_function = format!(
@@ -1156,7 +1156,7 @@ return o;
             }
             None => (),
         }
-        match self.from_trait_ref.as_ref().and_then(|k| traits.get(&k)) {
+        match self.from_trait_ref.as_ref().and_then(|k| traits.get(k)) {
             Some(CppTraitDefinition::Fn { .. }) => {
                 todo!()
             }
@@ -1455,9 +1455,9 @@ namespace rust {
                 ]
             }))
             .chain([
-                format!("::rust::ZngurCppOpaqueOwnedObject"),
-                format!("::double_t"),
-                format!("::float_t"),
+                "::rust::ZngurCppOpaqueOwnedObject".to_string(),
+                "::double_t".to_string(),
+                "::float_t".to_string(),
             ])
         {
             writeln!(
@@ -1586,7 +1586,7 @@ namespace rust {
                 imp.ty,
                 match &imp.tr {
                     Some(x) => format!("{x}"),
-                    None => format!("::rust::Inherent"),
+                    None => "::rust::Inherent".to_string(),
                 }
             )?;
             for (name, sig) in &imp.methods {
@@ -1644,7 +1644,7 @@ namespace rust {
                     imp.ty,
                     match &imp.tr {
                         Some(x) => format!("{x}"),
-                        None => format!("::rust::Inherent"),
+                        None => "::rust::Inherent".to_string(),
                     },
                     name,
                     sig.inputs
