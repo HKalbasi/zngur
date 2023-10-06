@@ -51,3 +51,4 @@ jobs:
           git tag "v$VERSION"
           cargo workspaces -v publish --from-git --skip-published
           git push --tags
+          git push
