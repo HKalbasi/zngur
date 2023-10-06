@@ -277,7 +277,7 @@ dependencies = [
 
 [[package]]
 name = "example-cxx_demo"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -286,11 +286,11 @@ dependencies = [
 
 [[package]]
 name = "example-memory_management"
-version = "0.2.2"
+version = "0.3.0"
 
 [[package]]
 name = "example-osmium"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "bitflags 2.4.0",
  "build-rs",
@@ -301,25 +301,25 @@ dependencies = [
 
 [[package]]
 name = "example-rayon"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "example-rustyline"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "rustyline",
 ]
 
 [[package]]
 name = "example-simple"
-version = "0.2.2"
+version = "0.3.0"
 
 [[package]]
 name = "example-tutorial"
-version = "0.2.2"
+version = "0.3.0"
 
 [[package]]
 name = "expect-test"
@@ -773,7 +773,7 @@ checksum = "7e2c411759b501fb9501aac2b1b2d287a6e93e5bdcf13c25306b23e1b716dd0e"
 
 [[package]]
 name = "xtask"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -788,14 +788,14 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zngur"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "zngur-generator",
 ]
 
 [[package]]
 name = "zngur-cli"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "clap",
  "zngur",
@@ -803,14 +803,14 @@ dependencies = [
 
 [[package]]
 name = "zngur-def"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "iter_tools",
 ]
 
 [[package]]
 name = "zngur-generator"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "ariadne",
  "chumsky",
@@ -821,7 +821,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-parser"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "ariadne",
  "chumsky",
