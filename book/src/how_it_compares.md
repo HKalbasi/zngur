@@ -29,12 +29,13 @@ for your C++ type, and then convert that type into a `Box<dyn Trait>` and use it
   - `CxxString`:
     - Convert it to a Rust `&CStr`, `&[u8]`, or `&str` if ownership is not required.
     - Copy it into a Rust `CString`, `Vec<u8>`, or `String` if the performance cost is acceptable.
-    - Write a trait for functionalities you need from it and convert the string to `Box<dyn Trait>`
+    - Write a trait for functionalities you need from it and convert the string to `Box<dyn Trait>`.
+    - Write an opaque type `CxxString` and implement the functionalities you need in `impl`.
   - `CxxVector<uintX_t>`:
     - Similar to `CxxString`
   - `CxxVector<opaque_type>`:
     - Copy it into a Rust `Vec<Box<dyn Trait>>` if the performance cost is acceptable.
-    - Write a trait and wrap it like a separate opaque type, which has a `get(usize) -> &dyn Trait` method.
+    - Write two opaque types `VectorFoo` and `Foo`, where `VecFoo` has a `get(usize) -> &Foo` method.
 
 ## AutoCXX
 

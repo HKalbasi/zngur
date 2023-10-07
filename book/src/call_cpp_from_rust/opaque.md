@@ -43,6 +43,50 @@ objects in the Rust stack is not supported. If you really need to store things i
 
 Keeping C++ object in Rust using heap allocation is supported with `ZngurCppOpaqueOwnedObject`.
 
+## Creating trait objects from C++ types
+
+By the above infrastructure you can convert your C++ types into `&dyn Trait` or `Box<dyn Trait>`. To do that, you need to:
+
+- Create a opaque borrowed (or owned for `Box<dyn Trait>`) type for the C++ type.
+- Implement the `Trait` for that type inside C++.
+- Cast `&Opaque` to `&dyn Trait` when needed.
+
+There is a shortcut provided by Zngur. You can define the trait in your `main.zng`:
+
+```
+trait iter::Iterator::<Item = i32> {
+    fn next(&mut self) -> ::std::option::Option<i32>;
+}
+```
+
+and inherit in your C++ type from it:
+
+```
+template <typename T>
+class VectorIterator : public rust::std::iter::Iterator<T> {
+  std::vector<T> vec;
+  size_t pos;
+
+public:
+  VectorIterator(std::vector<T> &&v) : vec(v), pos(0) {}
+
+  Option<T> next() override {
+    if (pos >= vec.size()) {
+      return Option<T>::None();
+    }
+    T value = vec[pos++];
+    return Option<T>::Some(value);
+  }
+};
+```
+
+Then you can construct a `rust::Box<rust::Dyn>` or `rust::Ref<rust::Dyn>` from it.
+
+```
+auto vec_as_iter = rust::Box<rust::Dyn<rust::std::iter::Iterator<int32_t>>>::make_box<
+      VectorIterator<int32_t>>(std::move(vec));
+```
+
 ## Semantics of the opaque types
 
 The `ZngurCppOpaqueBorrowedObject` and newtype wrappers around it don't represent a C++ object, but they represent an imaginary ZST Rust object at the first
@@ -54,4 +98,5 @@ to represent the whole C++ object. Some examples (assume `RustType` is a newtype
 - `std::mem::alignof::<RustType>()` is 1, not the align of `CppType`
 - `std::mem::swap::<RustType>(a, b)` only swaps the first zero bytes of those, i.e. does nothing.
 
-Those problem might be solved by the `extern type` language feature.
+Those problem might be solved by the `extern type` language feature. Using that, we can define the `ZngurCppOpaqueBorrowedObject` as a proper
+extern type instead of an imaginary zero sized type at the first of C++ objects.

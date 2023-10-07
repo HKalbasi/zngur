@@ -1,3 +1,6 @@
+//! This crate contains an API for using the Zngur code generator inside build scripts. For more information
+//! about the Zngur itself, see [the documentation](https://hkalbasi.github.io/zngur).
+
 use std::{
     fs::File,
     io::Write,
@@ -7,6 +10,18 @@ use std::{
 use zngur_generator::{ParsedZngFile, ZngurGenerator};
 
 #[must_use]
+/// Builder for the Zngur generator.
+///
+/// Usage:
+/// ```ignore
+/// let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+/// let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+/// Zngur::from_zng_file(crate_dir.join("main.zng"))
+///     .with_cpp_file(out_dir.join("generated.cpp"))
+///     .with_h_file(out_dir.join("generated.h"))
+///     .with_rs_file(out_dir.join("generated.rs"))
+///     .generate();
+/// ```
 pub struct Zngur {
     zng_file: PathBuf,
     h_file_path: Option<PathBuf>,

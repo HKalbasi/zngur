@@ -10,12 +10,24 @@ harder than what Rust actually is, creates a not really great first Rust experie
 Writing glue code in C++ also makes things considerably easier, since C++ semantics are a superset of
 Rust semantics (See [idea](./zngur.md#idea)) and Rust can't express all C++ things easily.
 
+### Keep `main.zng` in a separate file
+
+CXX style embedding of the IDL in a Rust proc macro confused Rust newcomers, so Zngur avoids it.
+
 ## Be a zero cost abstraction
 
 When Rust and C++ are used in a project, it means that performance is a requirement. So, unlike interoperability
 tools between Rust and higher level languages, Zngur is not allowed to do deep copies or invisible allocations.
 
-## Don't special case standard library types
+## Be build system agnostic
+
+C/C++ build systems are complex, each in a different way. To support all of them, Zngur doesn't integrate with
+any of them. Any build system that can do the following process is able to build a Zngur project:
+
+- Running `zngur g main.zng`
+- Building the Rust project (e.g. by running the `cargo build`)
+- Build the C++ `generated.cpp` together with the rest of codes
+- Link all together
 
 ## Keep Rust things Rusty
 
@@ -23,6 +35,14 @@ tools between Rust and higher level languages, Zngur is not allowed to do deep c
 - Rust decisions are usually superior to C++ ones.
 
 ### `Result<T, E>` is not automatically converted to exception
+
+`Result<T, E>` has some benefits over exception based error handling. For example, the unhappy case can not be forgotten
+and must be handled. Due these benefits, a similar `std::expected<T, E>` is added to the C++23. In order to not losing
+this Rust benefit, `Result<T, E>` is not converted to a C++ exception.
+
+Panics, which are implemented by stack unwinding similar to C++ exceptions, are converted to a C++ exception with
+the [`#convert_panic_to_exception`](./call_rust_from_cpp/panic_and_exceptions.md) flag. So if you quickly want an exception
+out of a `Result<T, E>`, you can use `.unwrap()`.
 
 ### Copy constructors are deleted, manual `.clone()` should be used
 
@@ -62,7 +82,8 @@ if (reserve_capacity) {
 ```
 
 If `Vec<int32_t> v` used the default constructor, it would be a waste call to itself and a wasted call to the drop code
-executed immediately after that. Rust also support this, but checks the initialization before usage, which Zngur can't check.
+executed immediately after that. Rust also support this, but checks the initialization before usage, which Zngur can't check in the
+compile time, but will check in the run time by default.
 
 ### Rust functions returning `()` return `rust::Unit` in C++ instead of `void`
 
