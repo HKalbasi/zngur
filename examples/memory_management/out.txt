@@ -1,0 +1,59 @@
+Checkpoint 1
+PrintOnDrop(B) has been dropped
+Checkpoint 2
+Checkpoint 3
+Checkpoint 4
+PrintOnDrop(A) has been dropped
+Checkpoint 5
+PrintOnDrop(cpp_V3) has been dropped
+Checkpoint 6
+PrintOnDrop(cpp_V1) has been dropped
+PrintOnDrop(cpp_V2) has been dropped
+Checkpoint 7
+Checkpoint 8
+PrintOnDrop(rust_V1) has been dropped
+PrintOnDrop(rust_V2) has been dropped
+Checkpoint 9
+PrintOnDrop(rust_V1) has been dropped
+PrintOnDrop(rust_V2) has been dropped
+Checkpoint 10
+Checkpoint 11
+PrintOnDrop(P) has been dropped
+PrintOnDrop(P) has been dropped
+Checkpoint 12
+PrintOnDrop(P) has been dropped
+PrintOnDrop(Q) has been dropped
+Checkpoint 13
+PrintOnDrop(Q) has been dropped
+Checkpoint 14
+Checkpoint 15
+Checkpoint 16
+PrintOnDrop(P2) has been dropped
+PrintOnDrop(P2) has been dropped
+Checkpoint 17
+PrintOnDrop(P2) has been dropped
+PrintOnDrop(Q2) has been dropped
+Checkpoint 18
+Checkpoint 19
+PrintOnDrop(Q2) has been dropped
+Checkpoint 20
+Checkpoint 21
+PrintOnDrop(A) has been dropped
+Checkpoint 22
+PrintOnDrop(B) has been dropped
+PrintOnDrop(A) has been dropped
+Checkpoint 24
+Checkpoint 25
+Checkpoint 26
+PrintOnDrop(first) has been dropped
+PrintOnDrop(second) has been dropped
+Checkpoint 27
+Checkpoint 28
+PrintOnDrop(elem1) has been dropped
+Checkpoint 29
+PrintOnDrop(elem1) has been dropped
+Checkpoint 30
+PrintOnDrop(elem1) has been dropped
+PrintOnDrop(elem2) has been dropped
+Checkpoint 31
+PrintOnDrop(C) has been dropped

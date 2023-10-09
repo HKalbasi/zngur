@@ -23,10 +23,7 @@ class RustHandler : public osmium::handler::Handler {
   BendHandler inner;
 
 public:
-  void way(osmium::Way &way) {
-    auto rusty_way = rust::Ref<Way>::build(way);
-    inner.way(rusty_way);
-  }
+  void way(osmium::Way &way) { inner.way(way); }
 
   RustHandler(BendHandler &&inner) : inner(std::move(inner)) {}
 };
@@ -45,11 +42,11 @@ rust::Tuple<> rust::exported_functions::apply(rust::Ref<Reader> reader,
 }
 
 rust::Ref<WayNodeList> rust::Impl<Way>::nodes(rust::Ref<Way> self) {
-  return rust::Ref<WayNodeList>::build(self.cpp().nodes());
+  return self.cpp().nodes();
 }
 
 rust::Ref<TagList> rust::Impl<Way>::tags(rust::Ref<Way> self) {
-  return rust::Ref<TagList>::build(self.cpp().tags());
+  return self.cpp().tags();
 }
 
 rust::std::option::Option<rust::Ref<rust::Str>>
@@ -71,7 +68,7 @@ size_t rust::Impl<WayNodeList>::len(rust::Ref<WayNodeList> self) {
 rust::Ref<Node>
 rust::Impl<WayNodeList, rust::std::ops::Index<size_t, Node>>::index(
     rust::Ref<WayNodeList> self, size_t i) {
-  return rust::Ref<Node>::build(self.cpp()[i]);
+  return self.cpp()[i];
 }
 
 double rust::Impl<Node>::distance(rust::Ref<Node> self, rust::Ref<Node> other) {

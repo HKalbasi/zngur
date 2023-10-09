@@ -5,7 +5,6 @@
 [<img alt="docs.rs" src="https://img.shields.io/badge/docs.rs-zngur-66c2a5?style=for-the-badge&labelColor=555555&logo=docs.rs" height="20">](https://docs.rs/zngur)
 [<img alt="build status" src="https://img.shields.io/github/actions/workflow/status/hkalbasi/zngur/ci.yml?branch=main&style=for-the-badge" height="20">](https://github.com/hkalbasi/zngur/actions?query=branch%3Amain)
 
-
 Zngur (/zængɑr/) is a C++/Rust interop tool. It tries to expose arbitrary Rust types, methods and functions, while preserving its
 semantics and ergonomics as much as possible. Using Zngur, you can use arbitrary Rust crate in your C++ code as easily as using it in
 normal Rust code, and you can write idiomatic Rusty API for your C++ library inside C++. See [the documentation](https://hkalbasi.github.io/zngur/)
@@ -66,7 +65,7 @@ int main() {
   }
   int state = 0;
   // You can convert a C++ lambda into a `Box<dyn Fn>` and friends.
-  auto f = BoxDyn<rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
+  auto f = BoxDyn<rust::Fn<int32_t, int32_t>>::make_box([&](int32_t x) {
     state += x;
     std::cout << "hello " << x << " " << state << "\n";
     return x * 2;

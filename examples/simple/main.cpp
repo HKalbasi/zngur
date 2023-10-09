@@ -50,7 +50,7 @@ int main() {
   }
   int state = 0;
   // You can convert a C++ lambda into a `Box<dyn Fn>` and friends.
-  auto f = BoxDyn<rust::Fn<int32_t, int32_t>>::build([&](int32_t x) {
+  auto f = BoxDyn<rust::Fn<int32_t, int32_t>>::make_box([&](int32_t x) {
     state += x;
     std::cout << "hello " << x << " " << state << "\n";
     return x * 2;

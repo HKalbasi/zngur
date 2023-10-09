@@ -72,7 +72,7 @@ int main() {
     CppPrintOnDropHolder c;
     {
       std::cout << "Checkpoint 15" << std::endl;
-      auto holder = RmDyn<PrintOnDropConsumer>::build(c);
+      auto holder = RmDyn<PrintOnDropConsumer>(c);
       std::cout << "Checkpoint 16" << std::endl;
       consume_n_times(holder, rust::Str::from_char_star("P2"), 3);
       std::cout << "Checkpoint 17" << std::endl;

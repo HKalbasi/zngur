@@ -574,7 +574,7 @@ private:
                     writeln!(
                         state,
                         r#"
-static inline {ty} build({as_std_function} f);
+inline {ty}({as_std_function} f);
 "#,
                         ty = self.ty.path.name(),
                     )?;
@@ -584,7 +584,7 @@ static inline {ty} build({as_std_function} f);
                     writeln!(
                         state,
                         r#"
-            static inline {ref_kind} build({tr}& arg);
+            inline {ref_kind}({tr}& arg);
             "#,
                     )?;
                 }
@@ -610,11 +610,7 @@ static inline {ty} build({as_std_function} f);
                 writeln!(
                     state,
                     r#"
-                inline static {ref_kind} build(const {cpp_ty}& t) {{
-                    {ref_kind} o;
-                    o.data = reinterpret_cast<size_t>(&t);
-                    return o;
-                }}"#
+                inline {ref_kind}(const {cpp_ty}& t) : data(reinterpret_cast<size_t>(&t)) {{}}"#
                 )?;
             }
             for method in &self.methods {
@@ -894,7 +890,7 @@ private:
                             writeln!(
                                 state,
                                 r#"
-    static inline {ty} build({as_std_function} f);
+    static inline {ty} make_box({as_std_function} f);
     "#,
                                 ty = self.ty.path.name(),
                             )?;
@@ -1105,7 +1101,7 @@ namespace rust {{
                 writeln!(
                     state,
                     r#"
-{my_name} {my_name}::build({as_std_function} f) {{
+{my_name} {my_name}::make_box({as_std_function} f) {{
 auto data = new {as_std_function}(f);
 {my_name} o;
 ::rust::__zngur_internal_assume_init(o);
@@ -1170,10 +1166,9 @@ return o;
                     writeln!(
                         state,
                         r#"
-rust::{ref_kind}<{my_name}> rust::{ref_kind}<{my_name}>::build({as_ty}& args) {{
+rust::{ref_kind}<{my_name}>::{ref_kind}({as_ty}& args) {{
 auto data_as_impl = &args;
-rust::{ref_kind}<{my_name}> o;
-::rust::__zngur_internal_assume_init(o);
+::rust::__zngur_internal_assume_init(*this);
 {link_name_ref}(
 (uint8_t *)data_as_impl,
 "#,
@@ -1181,8 +1176,7 @@ rust::{ref_kind}<{my_name}> o;
                     writeln!(
                         state,
                         r#"
-::rust::__zngur_internal_data_ptr(o));
-return o;
+::rust::__zngur_internal_data_ptr(*this));
 }}
 "#,
                     )?;
