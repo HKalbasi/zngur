@@ -37,7 +37,10 @@ impl CppPath {
     }
 
     fn need_header(&self) -> bool {
-        self.0.first().map(|x| x.as_str()) == Some("rust") && self.0 != ["rust", "Unit"]
+        self.0.first().map(|x| x.as_str()) == Some("rust")
+            && self.0 != ["rust", "Unit"]
+            && self.0 != ["rust", "Ref"]
+            && self.0 != ["rust", "RefMut"]
     }
 
     pub(crate) fn from_rust_path(path: &[String]) -> CppPath {
@@ -107,13 +110,7 @@ impl CppType {
         }
         self.path.emit_in_namespace(state, |state| {
             if !self.generic_args.is_empty() {
-                writeln!(
-                    state,
-                    "template<{}>",
-                    (0..self.generic_args.len())
-                        .map(|n| format!("typename T{n}"))
-                        .join(", ")
-                )?;
+                writeln!(state, "template<typename ...T>")?;
             }
             writeln!(state, "struct {};", self.path.name())
         })
@@ -345,16 +342,16 @@ impl CppTraitDefinition {
                 sig:
                     CppFnSig {
                         rust_link_name,
-                        inputs: _,
+                        inputs,
                         output: _,
                     },
             } => {
-                // TODO: too special
                 writeln!(
                     state,
                     "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
-                void call(uint8_t *, uint8_t *, uint8_t *),
-                uint8_t *o);"
+                void call(uint8_t *, {} uint8_t *),
+                uint8_t *o);",
+                    (0..inputs.len()).map(|_| "uint8_t *, ").join(" ")
                 )?;
             }
             CppTraitDefinition::Normal {
@@ -1086,18 +1083,24 @@ namespace rust {{
         }
         match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
             Some(CppTraitDefinition::Fn { sig }) => {
-                // TODO: too special
                 let as_std_function = format!(
                     "::std::function<{}({})>",
                     sig.output,
                     sig.inputs.iter().join(", ")
                 );
-                let ii_args = sig
+                let ii_names = sig
                     .inputs
                     .iter()
                     .enumerate()
-                    .map(|(n, x)| format!("{x} ii{n} = *reinterpret_cast<{x} *>(i{n});"))
-                    .join("\n");
+                    .map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust<{x}>(i{n})"))
+                    .join(", ");
+                let uint8_t_ix = sig
+                    .inputs
+                    .iter()
+                    .enumerate()
+                    .map(|(n, _)| format!("uint8_t* i{n},"))
+                    .join(" ");
+                let out_ty = &sig.output;
                 writeln!(
                     state,
                     r#"
@@ -1108,11 +1111,10 @@ auto data = new {as_std_function}(f);
 {link_name}(
 reinterpret_cast<uint8_t*>(data),
 [](uint8_t *d) {{ delete reinterpret_cast<{as_std_function}*>(d); }},
-[](uint8_t *d, uint8_t *i0, uint8_t *o) {{
-int32_t *oo = reinterpret_cast<int32_t *>(o);
-{ii_args}
+[](uint8_t *d, {uint8_t_ix} uint8_t *o) {{
 auto dd = reinterpret_cast<{as_std_function} *>(d);
-*oo = (*dd)(ii0);
+{out_ty} oo = (*dd)({ii_names});
+::rust::__zngur_internal_move_to_rust<{out_ty}>(o, oo);
 }},
 ::rust::__zngur_internal_data_ptr(o));
 return o;

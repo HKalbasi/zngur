@@ -442,16 +442,26 @@ pub extern "C" fn {mangled_name}(
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
-    call: extern "C" fn(data: *mut u8, i1: *mut u8, o: *mut u8),
+    call: extern "C" fn(data: *mut u8, {} o: *mut u8),
     o: *mut u8,
 ) {{
     let this = unsafe {{ ZngurCppOpaqueOwnedObject::new(data, destructor) }};
-    let r: Box<dyn {trait_str}> = Box::new(move |i0| unsafe {{
+    let r: Box<dyn {trait_str}> = Box::new(move |{}| unsafe {{
         _ = &this;
         let data = this.ptr();
 "#,
+            inputs
+                .iter()
+                .enumerate()
+                .map(|(n, _)| format!("i{n}: *mut u8, "))
+                .join(" "),
+            inputs
+                .iter()
+                .enumerate()
+                .map(|(n, ty)| format!("i{n}: {ty}"))
+                .join(", "),
         );
-        self.call_cpp_function("call(data, ", 1);
+        self.call_cpp_function("call(data, ", inputs.len());
         wln!(
             self,
             r#"

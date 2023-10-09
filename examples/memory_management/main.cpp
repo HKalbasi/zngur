@@ -6,7 +6,7 @@
 // Rust values are available in the `::rust` namespace from their absolute path
 // in Rust
 template <typename T> using Vec = rust::std::vec::Vec<T>;
-// template <typename T> using Option = rust::std::option::Option<T>;
+template <typename T> using Option = rust::std::option::Option<T>;
 template <typename T> using BoxDyn = rust::Box<rust::Dyn<T>>;
 template <typename T> using RmDyn = rust::RefMut<rust::Dyn<T>>;
 using rust::crate::consume_and_panic;
@@ -122,4 +122,39 @@ int main() {
     std::cout << "Checkpoint 34" << std::endl;
   }
   std::cout << "Checkpoint 35" << std::endl;
+  {
+    auto p1 = Option<PrintOnDrop>::Some(
+        PrintOnDrop(rust::Str::from_char_star("option_A")));
+    std::cout << "Checkpoint 36" << std::endl;
+    auto p2 = Option<PrintOnDrop>::Some(
+        PrintOnDrop(rust::Str::from_char_star("option_B")));
+    std::cout << "Checkpoint 37" << std::endl;
+    p2.take();
+    std::cout << "Checkpoint 38" << std::endl;
+    p2.take();
+    std::cout << "Checkpoint 39" << std::endl;
+  }
+  std::cout << "Checkpoint 40" << std::endl;
+  {
+    const char *elems[3] = {"elem1", "elem2", "elem3"};
+    int i = 0;
+    auto iter = rust::std::iter::from_fn(
+        ::rust::Box<::rust::Dyn<::rust::Fn<::rust::std::option::Option<
+            ::rust::crate::PrintOnDrop>>>>::make_box([&] {
+          if (i == 3) {
+            return Option<PrintOnDrop>::None();
+          }
+          return Option<PrintOnDrop>::Some(
+              PrintOnDrop(rust::Str::from_char_star(elems[i++])));
+        }));
+    std::cout << "Checkpoint 41" << std::endl;
+    iter.for_each(
+        ::rust::Box<
+            ::rust::Dyn<::rust::Fn<::rust::crate::PrintOnDrop, rust::Unit>>>::
+            make_box([](PrintOnDrop p) -> rust::Unit {
+              std::cout << "Checkpoint 42" << std::endl;
+              return {};
+            }));
+  }
+  std::cout << "Checkpoint 43" << std::endl;
 }

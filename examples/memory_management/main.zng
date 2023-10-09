@@ -14,6 +14,14 @@ type str {
     wellknown_traits(?Sized);
 }
 
+type Box<dyn Fn() -> ::std::option::Option<crate::PrintOnDrop>> {
+    #layout(size = 16, align = 8);
+}
+
+type Box<dyn Fn(crate::PrintOnDrop)> {
+    #layout(size = 16, align = 8);
+}
+
 mod crate {
     type PrintOnDropPair {
         #layout(size = 32, align = 8);
@@ -60,6 +68,27 @@ mod ::std {
 
             fn unwrap(self) -> &crate::PrintOnDrop;
         }
+
+        type Option<crate::PrintOnDrop> {
+            #layout(size = 16, align = 8);
+
+            constructor Some(crate::PrintOnDrop);
+            constructor None;
+
+            fn take(&mut self) -> Option<crate::PrintOnDrop>;
+        }
+    }
+
+    mod iter {
+        type FromFn<Box<dyn Fn() -> ::std::option::Option<crate::PrintOnDrop>>> {
+            #layout(size = 16, align = 8);
+        
+            fn for_each<Box<dyn Fn(crate::PrintOnDrop)>>(self, Box<dyn Fn(crate::PrintOnDrop)>);
+        }
+
+        fn from_fn<crate::PrintOnDrop, Box<dyn Fn() -> ::std::option::Option<crate::PrintOnDrop>>>(
+            Box<dyn Fn() -> ::std::option::Option<crate::PrintOnDrop>>
+        ) -> FromFn<Box<dyn Fn() -> ::std::option::Option<crate::PrintOnDrop>>>;
     }
 
     mod vec {

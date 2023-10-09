@@ -72,4 +72,17 @@ Checkpoint 33
 Checkpoint 34
 PrintOnDrop(dbg_A) has been dropped
 Checkpoint 35
+Checkpoint 36
+Checkpoint 37
+PrintOnDrop(option_B) has been dropped
+Checkpoint 38
+Checkpoint 39
+PrintOnDrop(option_A) has been dropped
+Checkpoint 40
+Checkpoint 41
+PrintOnDrop(iter_elem) has been dropped
+PrintOnDrop(iter_elem) has been dropped
+PrintOnDrop(iter_elem) has been dropped
+Checkpoint 42
+Checkpoint 43
 PrintOnDrop(C) has been dropped
