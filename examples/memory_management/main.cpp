@@ -113,4 +113,13 @@ int main() {
     std::cout << "Checkpoint 30" << std::endl;
   }
   std::cout << "Checkpoint 31" << std::endl;
+  {
+    auto p1 = zngur_dbg(PrintOnDrop(rust::Str::from_char_star("dbg_A")));
+    std::cout << "Checkpoint 32" << std::endl;
+    auto p2 = zngur_dbg(std::move(p1));
+    std::cout << "Checkpoint 33" << std::endl;
+    zngur_dbg(p2);
+    std::cout << "Checkpoint 34" << std::endl;
+  }
+  std::cout << "Checkpoint 35" << std::endl;
 }

@@ -767,7 +767,7 @@ private:
     friend void ::rust::__zngur_internal_check_init<{ty}>(const {ty}& t);
     friend void ::rust::__zngur_internal_assume_init<{ty}>({ty}& t);
     friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
-    friend void ::rust::zngur_pretty_print<{ty}>({ty}& t);
+    friend void ::rust::zngur_pretty_print<{ty}>({ty} const& t);
 "#,
                         ty = self.ty,
                     )?;
@@ -1263,7 +1263,7 @@ auto data_as_impl = &args;
                         r#"
             namespace rust {{
                 template<>
-                inline void zngur_pretty_print<{ty}>({ty}& t) {{
+                inline void zngur_pretty_print<{ty}>({ty} const& t) {{
                     ::rust::__zngur_internal_check_init<{ty}>(t);
                     {pretty_print}(&t.data[0]);
                 }}
@@ -1360,11 +1360,7 @@ impl CppFile {
             "#;
         }
         state.text += r#"
-#define zngur_dbg(x)                                                           \
-  {                                                                            \
-    ::std::cerr << "[" << __FILE__ << ":" << __LINE__ << "] " << #x << " = ";  \
-    ::rust::zngur_pretty_print(x);                                             \
-  }
+#define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 
 namespace rust {
     template<typename T>
@@ -1430,12 +1426,19 @@ namespace rust {
     using Unit = Tuple<>;
 
     template<typename T>
-    void zngur_pretty_print(T&) {}
+    void zngur_pretty_print(const T&);
 
     class Inherent;
 
     template<typename Type, typename Trait = Inherent>
     class Impl;
+
+    template<typename T>
+    T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
+        ::std::cerr << "[" << file_name << ":" << line_number << "] " << exp << " = ";
+        zngur_pretty_print<typename ::std::remove_reference<T>::type>(input);
+        return ::std::forward<T>(input);
+    }
 "#;
         for ty in [8, 16, 32, 64]
             .into_iter()

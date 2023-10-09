@@ -1,6 +1,6 @@
 mod generated;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct PrintOnDrop(&'static str);
 
 pub struct PrintOnDropPair {

@@ -23,7 +23,7 @@ int main() {
   auto slice = rust::std::slice::from_raw_parts(v.data(), v.size());
   auto f =
       rust::Box<rust::Dyn<rust::Fn<rust::Ref<uint64_t>, rust::Bool>, rust::Sync,
-                          rust::Send>>::build([&](rust::Ref<uint64_t> x) {
+                          rust::Send>>::make_box([&](rust::Ref<uint64_t> x) {
         return is_prime(*x);
       });
   std::cout << "Sum = " << slice.par_iter().sum() << std::endl;

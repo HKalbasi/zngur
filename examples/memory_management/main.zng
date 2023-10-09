@@ -23,6 +23,7 @@ mod crate {
 
     type PrintOnDrop {
         #layout(size = 16, align = 8);
+        wellknown_traits(Debug);
         constructor(&str);
 
         fn clone(&self) -> PrintOnDrop;
