@@ -748,7 +748,7 @@ public:
                                 r#"
 {{
 private:
-    alignas({align}) ::std::array<uint8_t, {size}> data;
+    alignas({align}) mutable ::std::array<uint8_t, {size}> data;
             "#,
                             )?;
                         }

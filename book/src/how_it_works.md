@@ -14,8 +14,11 @@ only need the pointer to be valid (which basically means `ptr..ptr+size` should 
 aligned. So Zngur can use the pointer to the below `data` in those functions:
 
 ```C++
-alignas(align_value) ::std::array<uint8_t, size_value> data;
+alignas(align_value) mutable ::std::array<uint8_t, size_value> data;
 ```
+
+The `mutable` keyword is equivalent to the `UnsafeCell` in Rust. It allows modifying `const` objects (which happens with
+Rust interior mutable types) without triggering UB.
 
 To support running destructors of Rust types in C++, Zngur uses `std::ptr::drop_in_place` which has similar constraints to `read` and
 `write`. But to prevent double free, Zngur needs to track if a Rust type is moved out. It does this using a boolean field called
@@ -25,7 +28,7 @@ for a typical Rust type will look like this:
 ```C++
 struct MultiBuf {
 private:
-  alignas(8)::std::array<uint8_t, 32> data;
+  alignas(8) mutable ::std::array<uint8_t, 32> data;
   bool drop_flag;
 
 public:
