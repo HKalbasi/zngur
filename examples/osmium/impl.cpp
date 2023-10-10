@@ -12,11 +12,19 @@
 
 using namespace rust::crate;
 using namespace std;
+template <typename T, typename E>
+using Result = rust::std::result::Result<T, E>;
 
-Reader rust::exported_functions::new_blob_store_client(Flags f) {
-  Reader o(rust::ZngurCppOpaqueOwnedObject::build<osmium::io::Reader>(
-      "map.osm", static_cast<osmium::osm_entity_bits::type>(f.bits())));
-  return o;
+Result<Reader, rust::std::string::String>
+rust::exported_functions::new_reader(Flags f) {
+  try {
+    Reader o(rust::ZngurCppOpaqueOwnedObject::build<osmium::io::Reader>(
+        "map.osm", static_cast<osmium::osm_entity_bits::type>(f.bits())));
+    return Result<Reader, rust::std::string::String>::Ok(move(o));
+  } catch (const exception &ex) {
+    return Result<Reader, rust::std::string::String>::Err(
+        rust::Str::from_char_star(ex.what()).to_string());
+  }
 }
 
 class RustHandler : public osmium::handler::Handler {
@@ -28,8 +36,8 @@ public:
   RustHandler(BendHandler &&inner) : inner(std::move(inner)) {}
 };
 
-rust::Tuple<> rust::exported_functions::apply(rust::Ref<Reader> reader,
-                                              BendHandler handler) {
+rust::Tuple<> rust::Impl<Reader>::apply(rust::Ref<Reader> reader,
+                                        BendHandler handler) {
   using IndexType =
       osmium::index::map::SparseMemArray<osmium::unsigned_object_id_type,
                                          osmium::Location>;

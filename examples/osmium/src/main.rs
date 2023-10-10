@@ -80,6 +80,6 @@ impl Handler for BendHandler {
 
 fn main() {
     let f = Flags::way | Flags::node;
-    let reader = generated::new_blob_store_client(f);
-    generated::apply(&reader, BendHandler { count: 0 });
+    let reader = generated::new_reader(f).unwrap();
+    reader.apply(BendHandler { count: 0 });
 }

@@ -18,6 +18,7 @@ type str {
 
     fn as_ptr(&self) -> *const u8;
     fn len(&self) -> usize;
+    fn to_string(&self) -> ::std::string::String;
 }
 
 type ::std::option::Option<&str> {
@@ -40,6 +41,13 @@ type crate::Reader {
     constructor(ZngurCppOpaqueOwnedObject);
 
     #cpp_value "0" "::osmium::io::Reader";
+}
+
+type ::std::result::Result<crate::Reader, ::std::string::String> {
+    #layout(size = 24, align = 8);
+
+    constructor Ok(crate::Reader);
+    constructor Err(::std::string::String);
 }
 
 type crate::Way {
@@ -71,8 +79,11 @@ type crate::Flags {
 }
 
 extern "C++" {
-    fn new_blob_store_client(crate::Flags) -> crate::Reader;
-    fn apply(&crate::Reader, crate::BendHandler);
+    fn new_reader(crate::Flags) -> ::std::result::Result<crate::Reader, ::std::string::String>;
+    
+    impl crate::Reader {
+        fn apply(&self, crate::BendHandler);
+    }
 
     impl crate::Way {
         fn nodes(&self) -> &crate::WayNodeList;
