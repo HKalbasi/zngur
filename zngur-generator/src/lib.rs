@@ -11,7 +11,7 @@ use cpp::CppPath;
 use cpp::CppTraitDefinition;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
-use iter_tools::Itertools;
+use itertools::Itertools;
 use rust::IntoCpp;
 
 pub mod cpp;

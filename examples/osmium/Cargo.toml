@@ -9,7 +9,7 @@ publish = false
 
 [dependencies]
 bitflags = "2"
-iter_tools = "0.1.4"
+itertools = "0.11"
 
 [build-dependencies]
 cc = "1.0"

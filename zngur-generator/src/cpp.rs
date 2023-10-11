@@ -4,7 +4,7 @@ use std::{
     iter,
 };
 
-use iter_tools::Itertools;
+use itertools::Itertools;
 use zngur_def::{Mutability, RustTrait, ZngurMethodReceiver};
 
 use crate::{rust::IntoCpp, ZngurWellknownTraitData};

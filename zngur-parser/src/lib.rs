@@ -2,7 +2,7 @@ use std::{fmt::Display, process::exit, sync::Mutex};
 
 use ariadne::{sources, Color, Label, Report, ReportKind};
 use chumsky::prelude::*;
-use iter_tools::{Either, Itertools};
+use itertools::{Either, Itertools};
 
 use zngur_def::{
     LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,

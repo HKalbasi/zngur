@@ -1,6 +1,6 @@
 use std::fmt::Write;
 
-use iter_tools::Itertools;
+use itertools::Itertools;
 
 use crate::{
     cpp::{CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},

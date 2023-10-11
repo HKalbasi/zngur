@@ -11,7 +11,7 @@ license.workspace = true
 [dependencies]
 ariadne = "0.3.0"
 chumsky = { version = "=1.0.0-alpha.4", features = ["label"] }
-iter_tools = "0.1.4"
+itertools = "0.11"
 zngur-def = { version = "=0.4.0", path = "../zngur-def" }
 
 [dev-dependencies]

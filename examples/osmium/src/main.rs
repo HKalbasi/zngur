@@ -1,7 +1,7 @@
 use std::f64::consts::PI;
 
 use bitflags::bitflags;
-use iter_tools::dependency::itertools::iproduct;
+use itertools::iproduct;
 
 mod generated;
 

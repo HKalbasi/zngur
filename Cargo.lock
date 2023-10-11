@@ -274,7 +274,7 @@ dependencies = [
  "bitflags 2.4.0",
  "build-rs",
  "cc",
- "iter_tools",
+ "itertools",
  "zngur",
 ]
 
@@ -346,19 +346,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "iter_tools"
-version = "0.1.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "531cafdc99b3b3252bb32f5620e61d56b19415efc19900b12d1b2e7483854897"
-dependencies = [
- "itertools",
-]
-
-[[package]]
 name = "itertools"
-version = "0.10.5"
+version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0fd2260e829bddf4cb6ea802289de2f86d6a7a690192fbe91b3f46e0f2c8473"
+checksum = "b1c173a5686ce8bfa551b3563d0c2170bf24ca44da99c7ca4bfdab5418c3fe57"
 dependencies = [
  "either",
 ]
@@ -759,14 +750,14 @@ dependencies = [
 name = "zngur-def"
 version = "0.4.0"
 dependencies = [
- "iter_tools",
+ "itertools",
 ]
 
 [[package]]
 name = "zngur-generator"
 version = "0.4.0"
 dependencies = [
- "iter_tools",
+ "itertools",
  "zngur-def",
  "zngur-parser",
 ]
@@ -778,7 +769,7 @@ dependencies = [
  "ariadne",
  "chumsky",
  "expect-test",
- "iter_tools",
+ "itertools",
  "strip-ansi-escapes",
  "zngur-def",
 ]

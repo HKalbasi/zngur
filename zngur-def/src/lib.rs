@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use iter_tools::Itertools;
+use itertools::Itertools;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mutability {
