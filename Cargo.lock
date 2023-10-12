@@ -301,6 +301,15 @@ name = "example-tutorial"
 version = "0.4.0"
 
 [[package]]
+name = "example-tutorial_cpp"
+version = "0.4.0"
+dependencies = [
+ "build-rs",
+ "cc",
+ "zngur",
+]
+
+[[package]]
 name = "expect-test"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

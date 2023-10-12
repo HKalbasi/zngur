@@ -76,7 +76,7 @@ impl ZngurGenerator {
                             },
                         });
                         cpp_methods.push(CppMethod {
-                            name: format!("matches_{}", cpp_handle_keyword(&name)),
+                            name: format!("matches_{}", name),
                             kind: ZngurMethodReceiver::Ref(Mutability::Not),
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.match_check,
@@ -220,7 +220,7 @@ impl ZngurGenerator {
                     .map(|(method, link_name)| {
                         let (_, inputs) = real_inputs_of_method(method, &impl_block.ty);
                         (
-                            method.name.clone(),
+                            cpp_handle_keyword(&method.name).to_owned(),
                             CppFnSig {
                                 rust_link_name: link_name.clone(),
                                 inputs,

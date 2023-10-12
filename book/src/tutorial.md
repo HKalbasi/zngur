@@ -332,3 +332,263 @@ zngur_dbg(v);
 ```
 
 You can see the full code at [`examples/tutorial`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial)
+
+## Calling C++ from Rust
+
+C++/Rust interop has two sides, and no interop tool is complete without supporting both. Here, we will do the reverse of the
+above task, swapping the Rust and C++ rules. So, let's assume we have this C++ code:
+
+```C++
+#include <string>
+#include <vector>
+
+namespace cpp_inventory {
+struct Item {
+  std::string name;
+  uint32_t size;
+};
+
+struct Inventory {
+  std::vector<Item> items;
+  uint32_t remaining_space;
+
+  Inventory(uint32_t space) : items(), remaining_space(space) {}
+
+  void add_item(Item item) {
+    remaining_space -= item.size;
+    items.push_back(std::move(item));
+  }
+
+  void add_banana(uint32_t count) {
+    add_item(Item{
+        .name = "banana",
+        .size = 7,
+    });
+  }
+};
+
+} // namespace cpp_inventory
+```
+
+Create a new cargo project, this time a binary one since we want to write the main function to live inside Rust. Copy the above code into
+the `inventory.h` file. Then create a `main.zng` file with the following content:
+
+```
+type crate::Inventory {
+    #layout(size = 16, align = 8);
+
+    constructor(ZngurCppOpaqueOwnedObject);
+
+    #cpp_value "0" "::cpp_inventory::Inventory";
+}
+
+type crate::Item {
+    #layout(size = 16, align = 8);
+
+    constructor(ZngurCppOpaqueOwnedObject);
+
+    #cpp_value "0" "::cpp_inventory::Item";
+}
+```
+
+And add these to the `main.rs` file:
+
+```Rust
+mod generated {
+    include!(concat!(env!("OUT_DIR"), "/generated.rs"));
+}
+
+struct Inventory(generated::ZngurCppOpaqueOwnedObject);
+struct Item(generated::ZngurCppOpaqueOwnedObject);
+```
+
+This time we will use the Zngur generator inside of cargo build script. We could still use the `zngur-cli` but in projects
+where cargo is the boss, using build script is better. Add `zngur` and `cc` to your build dependencies:
+
+```toml
+[build-dependencies]
+cc = "1.0"
+build-rs = "0.1.2" # This one is optional
+zngur = "latest-version"
+```
+
+Then fill the `build.rs` file:
+
+```Rust
+use std::{env, path::PathBuf};
+
+use zngur::Zngur;
+
+fn main() {
+    build::rerun_if_changed("main.zng");
+    build::rerun_if_changed("impls.cpp");
+
+    let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+
+    Zngur::from_zng_file(crate_dir.join("main.zng"))
+        .with_cpp_file(out_dir.join("generated.cpp"))
+        .with_h_file(out_dir.join("generated.h"))
+        .with_rs_file(out_dir.join("generated.rs"))
+        .generate();
+
+    let my_build = &mut cc::Build::new();
+    let my_build = my_build
+        .cpp(true)
+        .compiler("g++")
+        .include(&crate_dir)
+        .include(&out_dir);
+    let my_build = || my_build.clone();
+
+    my_build()
+        .file(out_dir.join("generated.cpp"))
+        .compile("zngur_generated");
+    my_build().file("impls.cpp").compile("impls");
+}
+```
+
+Now we have a `crate::Inventory` and a `crate::Item` that can contain their C++ counterparts. But there is no way to use
+them in Rust. In Zngur, the Rust side can't access C++ opaque objects. So to make these types useful in Rust, we can
+add `impl` blocks for these types in C++. Add this to the `main.zng`:
+
+```
+type str {
+    wellknown_traits(?Sized);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
+}
+
+extern "C++" {
+    impl crate::Inventory {
+        fn new_empty(u32) -> crate::Inventory;
+        fn add_banana(&mut self, u32);
+        fn add_item(&mut self, crate::Item);
+    }
+
+    impl crate::Item {
+        fn new(&str, u32) -> crate::Item;
+    }
+}
+```
+
+Now we can define these methods in the C++ and use them in Rust. Create a file named `impls.cpp` with this content:
+
+```C++
+#include "generated.h"
+#include <string>
+
+using namespace rust::crate;
+
+Inventory rust::Impl<Inventory>::new_empty(uint32_t space) {
+  return Inventory(
+      rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Inventory>(space));
+}
+
+rust::Unit rust::Impl<Inventory>::add_banana(rust::RefMut<Inventory> self,
+                                             uint32_t count) {
+  self.cpp().add_banana(count);
+  return {};
+}
+
+rust::Unit rust::Impl<Inventory>::add_item(rust::RefMut<Inventory> self,
+                                           Item item) {
+  self.cpp().add_item(item.cpp());
+  return {};
+}
+
+Item rust::Impl<Item>::new_(rust::Ref<rust::Str> name, uint32_t size) {
+  return Item(rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Item>(
+      cpp_inventory::Item{
+          .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
+                                name.len()),
+          .size = size}));
+}
+```
+
+These functions look like some unnecessary boilerplate, but writing them has some benefits:
+
+- We can convert C++ types to the Rust equivalents in these functions. For example, converting a pointer and length to a slice, or `&str` to `std::string` that
+  happened in the `Item::new` above.
+- We can convert exceptions to Rust `Result` or `Option`.
+- We can control the signature of methods, and use proper lifetimes and mutability for references. In case of mutability, Rust mutability means
+  exclusiveness, which might be too restrictive and we may want to consider the C++ type interior mutable. We can also add nullability with `Option` or
+  make the function `unsafe`.
+- We can choose Rusty names for the functions (like `new` and `len`) or put the functionality in the proper trait (for example implementing the
+  `Iterator` trait instead of exposing the `.begin` and `.end` functions)
+
+Even in the tools that support calling C++ functions directly, people often end up writing Rust wrappers around C++ types for
+these reasons. In Zngur, that code is the wrapper, which lives in the C++ so it can do whatever C++ does.
+
+In the Rust to C++ side, we used `zngur_dbg` macro to see the result. We will do the same here with the `dbg!` macro. To do that, we need to implement
+the `Debug` trait for `crate::Inventory`. Add this to the `main.zng`:
+
+```
+// ...
+
+type ::std::fmt::Result {
+    #layout(size = 1, align = 1);
+
+    constructor Ok(());
+}
+
+type ::std::fmt::Formatter {
+    #layout(size = 64, align = 8);
+
+    fn write_str(&mut self, &str) -> ::std::fmt::Result;
+}
+
+extern "C++" {
+    // ...
+
+    impl std::fmt::Debug for crate::Inventory {
+        fn fmt(&self, &mut ::std::fmt::Formatter) -> ::std::fmt::Result;
+    }
+}
+```
+
+and this code to the `impls.cpp`:
+
+```C++
+rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
+    rust::Ref<::rust::crate::Inventory> self,
+    rust::RefMut<::rust::std::fmt::Formatter> f) {
+  ::std::string result = "Inventory { remaining_space: ";
+  result += ::std::to_string(self.cpp().remaining_space);
+  result += ", items: [";
+  bool is_first = true;
+  for (const auto &item : self.cpp().items) {
+    if (!is_first) {
+      result += ", ";
+    } else {
+      is_first = false;
+    }
+    result += "Item { name: \"";
+    result += item.name;
+    result += "\", size: ";
+    result += ::std::to_string(item.size);
+    result += " }";
+  }
+  result += "] }";
+  return f.write_str(rust::Str::from_char_star(result.c_str()));
+}
+```
+
+So now we can write the main function:
+
+```Rust
+fn main() {
+    let mut inventory = Inventory::new_empty(1000);
+    inventory.add_banana(3);
+    inventory.add_item(Item::new("apple", 5));
+    dbg!(inventory);
+}
+```
+
+and run it:
+
+```
+[examples/tutorial_cpp/src/main.rs:12] inventory = Inventory { remaining_space: 974, items: [Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "apple", size: 5 }] }
+```
+
+You can see the full code at [`examples/tutorial_cpp`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial_cpp)

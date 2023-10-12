@@ -1,0 +1,15 @@
+[package]
+name = "example-tutorial_cpp"
+version = "0.4.0"
+edition.workspace = true
+license.workspace = true
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+cc = "1.0"
+build-rs = "0.1.2"
+zngur = { path = "../../zngur" }

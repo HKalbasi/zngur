@@ -138,8 +138,6 @@ impl Default for RustFile {
     fn default() -> Self {
         Self {
             text: r#"
-#![allow(non_snake_case)]
-
 #[allow(dead_code)]
 mod zngur_types {
     pub struct ZngurCppOpaqueBorrowedObject(());
@@ -320,6 +318,7 @@ impl RustFile {
         wln!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
@@ -380,6 +379,7 @@ pub extern "C" fn {mangled_name}(
         wln!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
@@ -438,6 +438,7 @@ pub extern "C" fn {mangled_name}(
         wln!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
@@ -482,6 +483,7 @@ pub extern "C" fn {mangled_name}(
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {constructor}("#
         );
@@ -500,6 +502,7 @@ pub extern "C" fn {constructor}("#
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
     *o = matches!(&*(i as *mut &_), {rust_name} {{ .. }}) as u8;
@@ -613,6 +616,7 @@ pub(crate) fn {rust_name}("#
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {{
     unsafe {{ &mut (*(d as *mut {ty})).{field} }}
@@ -637,6 +641,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {mangled_name}("#
         );
@@ -681,6 +686,7 @@ pub extern "C" fn {mangled_name}("#
                 wln!(
                     self,
                     r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
     ::std::ptr::drop_in_place(v as *mut {ty});
@@ -694,6 +700,7 @@ pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
                 wln!(
                     self,
                     r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {pretty_print}(v: *mut u8) {{
     eprintln!("{{:#?}}", unsafe {{ &*(v as *mut {ty}) }});
@@ -702,6 +709,7 @@ pub extern "C" fn {pretty_print}(v: *mut u8) {{
                 wln!(
                     self,
                     r#"
+#[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {debug_print}(v: *mut u8) {{
     eprintln!("{{:?}}", unsafe {{ &*(v as *mut {ty}) }});
@@ -721,6 +729,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
             r#"thread_local! {{
             pub static PANIC_PAYLOAD: ::std::cell::Cell<Option<()>> = ::std::cell::Cell::new(None);
         }}
+        #[allow(non_snake_case)]
         #[no_mangle]
         pub fn __zngur_detect_panic() -> u8 {{
             PANIC_PAYLOAD.with(|p| {{
@@ -731,6 +740,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
             }})
         }}
 
+        #[allow(non_snake_case)]
         #[no_mangle]
         pub fn __zngur_take_panic() {{
             PANIC_PAYLOAD.with(|p| {{
@@ -772,16 +782,19 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 wln!(
                     self,
                     r#"
+                #[allow(non_snake_case)]
                 #[no_mangle]
                 pub fn {size_fn}() -> usize {{
                     ::std::mem::size_of::<{ty}>()
                 }}
         
+                #[allow(non_snake_case)]
                 #[no_mangle]
                 pub fn {alloc_fn}() -> *mut u8 {{
                     unsafe {{ ::std::alloc::alloc(::std::alloc::Layout::new::<{ty}>()) }}
                 }}
 
+                #[allow(non_snake_case)]
                 #[no_mangle]
                 pub fn {free_fn}(p: *mut u8) {{
                     unsafe {{ ::std::alloc::dealloc(p, ::std::alloc::Layout::new::<{ty}>()) }}
