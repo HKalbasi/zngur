@@ -109,7 +109,10 @@ impl IntoCpp for RustType {
                 if v.is_empty() {
                     return CppType::from("rust::Unit");
                 }
-                todo!()
+                CppType {
+                    path: CppPath::from("rust::Tuple"),
+                    generic_args: v.into_iter().map(|x| x.into_cpp()).collect(),
+                }
             }
             RustType::Dyn(tr, marker_bounds) => {
                 let tr_as_cpp_type = tr.into_cpp();
