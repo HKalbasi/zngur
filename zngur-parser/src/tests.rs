@@ -46,7 +46,6 @@ type (i8, u8) {
     );
 }
 
-
 #[test]
 fn typo_in_wellknown_trait() {
     check_fail(
