@@ -97,6 +97,16 @@ impl ZngurGenerator {
                     }
                 }
             }
+            if let RustType::Tuple(fields) = &ty_def.ty {
+                if !fields.is_empty() {
+                    let rust_link_name = rust_file.add_tuple_constructor(&fields);
+                    constructors.push(CppFnSig {
+                        rust_link_name,
+                        inputs: fields.iter().map(|x| x.into_cpp()).collect(),
+                        output: ty_def.ty.into_cpp(),
+                    });
+                }
+            }
             for wellknown_trait in ty_def.wellknown_traits {
                 let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
                 wellknown_traits.push(data);
