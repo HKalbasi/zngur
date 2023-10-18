@@ -1,19 +1,14 @@
+#include <cstdint>
 #include <iostream>
 #include <vector>
 
 #include "./generated.h"
 
-// Rust values are available in the `::rust` namespace from their absolute path
-// in Rust
 template <typename T> using Vec = rust::std::vec::Vec<T>;
 template <typename T> using Option = rust::std::option::Option<T>;
 template <typename T> using BoxDyn = rust::Box<rust::Dyn<T>>;
 template <typename T> using RmDyn = rust::RefMut<rust::Dyn<T>>;
-using rust::crate::consume_and_panic;
-using rust::crate::consume_n_times;
-using rust::crate::PrintOnDrop;
-using rust::crate::PrintOnDropConsumer;
-using rust::crate::PrintOnDropPair;
+using namespace rust::crate;
 
 class CppPrintOnDropHolder : public PrintOnDropConsumer {
   rust::Unit consume(PrintOnDrop p) override {
@@ -139,8 +134,7 @@ int main() {
     const char *elems[3] = {"elem1", "elem2", "elem3"};
     int i = 0;
     auto iter = rust::std::iter::from_fn(
-        ::rust::Box<::rust::Dyn<::rust::Fn<::rust::std::option::Option<
-            ::rust::crate::PrintOnDrop>>>>::make_box([&] {
+        rust::Box<rust::Dyn<rust::Fn<Option<PrintOnDrop>>>>::make_box([&] {
           if (i == 3) {
             return Option<PrintOnDrop>::None();
           }
@@ -149,12 +143,18 @@ int main() {
         }));
     std::cout << "Checkpoint 41" << std::endl;
     iter.for_each(
-        ::rust::Box<
-            ::rust::Dyn<::rust::Fn<::rust::crate::PrintOnDrop, rust::Unit>>>::
-            make_box([](PrintOnDrop p) -> rust::Unit {
+        rust::Box<rust::Dyn<rust::Fn<PrintOnDrop, rust::Unit>>>::make_box(
+            [](PrintOnDrop p) -> rust::Unit {
               std::cout << "Checkpoint 42" << std::endl;
               return {};
             }));
   }
   std::cout << "Checkpoint 43" << std::endl;
+  {
+    auto tuple = rust::Tuple<PrintOnDrop, int32_t, PrintOnDrop>(
+        PrintOnDrop(rust::Str::from_char_star("field_0")), 5,
+        PrintOnDrop(rust::Str::from_char_star("field_2")));
+    std::cout << "Checkpoint 44" << std::endl;
+  }
+  std::cout << "Checkpoint 45" << std::endl;
 }

@@ -5,6 +5,10 @@ type () {
     wellknown_traits(Copy);
 }
 
+type (crate::PrintOnDrop, i32, crate::PrintOnDrop) {
+    #layout(size = 40, align = 8);
+}
+
 type bool {
     #layout(size = 1, align = 1);
     wellknown_traits(Copy);

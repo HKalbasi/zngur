@@ -725,6 +725,13 @@ fn rust_type<'a>(
         let unit = just(Token::ParenOpen)
             .then(just(Token::ParenClose))
             .map(|_| ParsedRustType::Tuple(vec![]));
+        let tuple = parser
+            .clone()
+            .separated_by(just(Token::Comma))
+            .allow_trailing()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+            .map(|xs| ParsedRustType::Tuple(xs));
         let slice = parser
             .clone()
             .map(|x| ParsedRustType::Slice(Box::new(x)))
@@ -748,6 +755,7 @@ fn rust_type<'a>(
         scalar
             .or(boxed)
             .or(unit)
+            .or(tuple)
             .or(slice)
             .or(adt)
             .or(reference)

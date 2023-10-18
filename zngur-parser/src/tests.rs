@@ -36,6 +36,17 @@ type () {
 }
 
 #[test]
+fn parse_tuple() {
+    check_success(
+        r#"
+type (i8, u8) {
+    #layout(size = 0, align = 1);
+}
+    "#,
+    );
+}
+
+#[test]
 fn typo_in_wellknown_trait() {
     check_fail(
         r#"

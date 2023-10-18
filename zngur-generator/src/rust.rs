@@ -109,7 +109,10 @@ impl IntoCpp for RustType {
                 if v.is_empty() {
                     return CppType::from("rust::Unit");
                 }
-                todo!()
+                CppType {
+                    path: CppPath::from("rust::Tuple"),
+                    generic_args: v.into_iter().map(|x| x.into_cpp()).collect(),
+                }
             }
             RustType::Dyn(tr, marker_bounds) => {
                 let tr_as_cpp_type = tr.into_cpp();
@@ -471,6 +474,30 @@ pub extern "C" fn {mangled_name}(
 }}"#
         );
         mangled_name
+    }
+
+    pub fn add_tuple_constructor(&mut self, fields: &[RustType]) -> String {
+        let constructor = mangle_name(&fields.iter().join("&"));
+        w!(
+            self,
+            r#"
+#[allow(non_snake_case)]
+#[no_mangle]
+pub extern "C" fn {constructor}("#
+        );
+        for name in 0..fields.len() {
+            w!(self, "f_{name}: *mut u8, ");
+        }
+        w!(
+            self,
+            r#"o: *mut u8) {{ unsafe {{
+    ::std::ptr::write(o as *mut _, ("#
+        );
+        for (name, ty) in fields.iter().enumerate() {
+            w!(self, "::std::ptr::read(f_{name} as *mut {ty}), ");
+        }
+        wln!(self, ")) }} }}");
+        constructor
     }
 
     pub fn add_constructor(
