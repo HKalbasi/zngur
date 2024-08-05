@@ -171,9 +171,9 @@ mod zngur_types {
     }
 }
 
-#[allow(unused_import)]
+#[allow(unused_imports)]
 pub use zngur_types::ZngurCppOpaqueOwnedObject;
-#[allow(unused_import)]
+#[allow(unused_imports)]
 pub use zngur_types::ZngurCppOpaqueBorrowedObject;
 "#
             .to_owned(),
