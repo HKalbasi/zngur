@@ -2,11 +2,11 @@
 name = "zngur"
 description = "A Rust/C++ interoperability tool"
 readme = "../README.md"
-version = "0.4.0"
+version = "0.5.0"
 edition.workspace = true
 license.workspace = true
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-zngur-generator = { version = "=0.4.0", path = "../zngur-generator" }
+zngur-generator = { version = "=0.5.0", path = "../zngur-generator" }
