@@ -12,7 +12,7 @@ To start, install Zngur:
 cargo install zngur-cli
 ```
 
-Then generate a new `staticlib` crate using `cargo init` and appending this to the `Cargo.toml`:
+Then generate a new `staticlib` crate using `cargo init --lib` and appending this to the `Cargo.toml`:
 
 ```Toml
 [lib]
