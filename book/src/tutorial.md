@@ -409,7 +409,7 @@ where cargo is the boss, using build script is better. Add `zngur` and `cc` to y
 [build-dependencies]
 cc = "1.0"
 build-rs = "0.1.2" # This one is optional
-zngur = "latest-version"
+zngur = "0.5.0" # Or whatever the latest version is
 ```
 
 Then fill the `build.rs` file:
