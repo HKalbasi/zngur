@@ -8,6 +8,6 @@ publish = false
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-xshell = "0.2.5"
+xshell = "0.2.7"
 anyhow = "1.0"
 clap = { version = "4.3.12", features = ["derive"] }
