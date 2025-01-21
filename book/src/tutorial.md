@@ -374,6 +374,15 @@ Create a new cargo project, this time a binary one since we want to write the ma
 the `inventory.h` file. Then create a `main.zng` file with the following content:
 
 ```
+#cpp_additional_includes "
+    #include <inventory.h>
+"
+
+type () {
+    #layout(size = 0, align = 1);
+    wellknown_traits(Copy);
+}
+
 type crate::Inventory {
     #layout(size = 16, align = 8);
 
