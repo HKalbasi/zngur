@@ -145,6 +145,7 @@ impl Inventory {
 ```
 type () {
     #layout(size = 0, align = 1);
+    wellknown_traits(Copy);
 }
 
 type crate::Inventory {
