@@ -423,8 +423,8 @@ fn main() {
     build::rerun_if_changed("main.zng");
     build::rerun_if_changed("impls.cpp");
 
-    let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
-    let out_dir = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let crate_dir = build::cargo_manifest_dir();
+    let out_dir = build::out_dir();
 
     Zngur::from_zng_file(crate_dir.join("main.zng"))
         .with_cpp_file(out_dir.join("generated.cpp"))
