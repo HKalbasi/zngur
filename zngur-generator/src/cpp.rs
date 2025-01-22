@@ -93,7 +93,7 @@ impl CppType {
         } else {
             write!(
                 state,
-                "template<> struct {}<{}>",
+                "template<> struct {}< {} >",
                 self.path.name(),
                 self.generic_args.iter().join(", ")
             )?;
@@ -121,7 +121,7 @@ impl Display for CppType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.path)?;
         if !self.generic_args.is_empty() {
-            write!(f, "<{}>", self.generic_args.iter().join(", "))?;
+            write!(f, "< {} >", self.generic_args.iter().join(", "))?;
         }
         Ok(())
     }
@@ -443,7 +443,7 @@ impl CppTraitDefinition {
                             .iter()
                             .enumerate()
                             .map(|(n, ty)| {
-                                format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                                format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
                             })
                             .join(", ")
                     )?;
@@ -510,13 +510,13 @@ impl CppTypeDefinition {
                     r#"
 namespace rust {{
 template<>
-struct {ref_kind}<{ty}> {{
+struct {ref_kind}< {ty} > {{
     {ref_kind}() {{
         data = {{0, 0}};
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}<{ty}>>(const ::rust::{ref_kind}<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} >>(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -526,17 +526,17 @@ private:
                     r#"
 namespace rust {{
 template<>
-struct {ref_kind}<{ty}> {{
+struct {ref_kind}< {ty} > {{
     {ref_kind}() {{
         data = 0;
     }}
     {ref_kind}(const {ty}& t) {{
-        ::rust::__zngur_internal_check_init<{ty}>(t);
+        ::rust::__zngur_internal_check_init< {ty} >(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}<{ty}>>(const ::rust::{ref_kind}<{ty}>& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} >>(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -546,7 +546,7 @@ private:
                 writeln!(
                     state,
                     r#"
-    Ref(RefMut<{ty}> rm) {{
+    Ref(RefMut< {ty} > rm) {{
         data = rm.data;
     }}
     "#,
@@ -556,7 +556,7 @@ private:
                 writeln!(
                     state,
                     r#"
-    friend Ref<{ty}>;
+    friend Ref< {ty} >;
     "#,
                     ty = self.ty,
                 )?;
@@ -592,7 +592,7 @@ inline {ty}({as_std_function} f);
                     state,
                     r#"
                 inline {cpp_ty}& cpp() {{
-                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp<{cpp_ty}>();
+                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp< {cpp_ty} >();
                 }}"#
                 )?;
             }
@@ -654,24 +654,24 @@ inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
                 state,
                 r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr<{ref_kind}<{ty}>>(const {ref_kind}<{ty}>& t) {{
+inline uint8_t* __zngur_internal_data_ptr<{ref_kind}< {ty} >>(const {ref_kind}< {ty} >& t) {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init<{ref_kind}<{ty}>>({ref_kind}<{ty}>&) {{
+inline void __zngur_internal_assume_init<{ref_kind}< {ty} >>({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_check_init<{ref_kind}<{ty}>>(const {ref_kind}<{ty}>&) {{
+inline void __zngur_internal_check_init<{ref_kind}< {ty} >>(const {ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit<{ref_kind}<{ty}>>({ref_kind}<{ty}>&) {{
+inline void __zngur_internal_assume_deinit<{ref_kind}< {ty} >>({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of<{ref_kind}<{ty}>>() {{
+inline size_t __zngur_internal_size_of<{ref_kind}< {ty} >>() {{
     return {size};
 }}
 }}"#,
@@ -691,15 +691,15 @@ inline size_t __zngur_internal_size_of<{ref_kind}<{ty}>>() {{
             r#"
 namespace rust {{
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>(const {ty}& t);
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t);
     template<>
-    inline void __zngur_internal_check_init<{ty}>(const {ty}& t);
+    inline void __zngur_internal_check_init< {ty} >(const {ty}& t);
     template<>
-    inline void __zngur_internal_assume_init<{ty}>({ty}& t);
+    inline void __zngur_internal_assume_init< {ty} >({ty}& t);
     template<>
-    inline void __zngur_internal_assume_deinit<{ty}>({ty}& t);
+    inline void __zngur_internal_assume_deinit< {ty} >({ty}& t);
     template<>
-    inline size_t __zngur_internal_size_of<{ty}>();
+    inline size_t __zngur_internal_size_of< {ty} >();
 }}"#,
             ty = self.ty,
         )?;
@@ -760,11 +760,11 @@ private:
                     writeln!(
                         state,
                         r#"
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<{ty}>(const {ty}& t);
-    friend void ::rust::__zngur_internal_check_init<{ty}>(const {ty}& t);
-    friend void ::rust::__zngur_internal_assume_init<{ty}>({ty}& t);
-    friend void ::rust::__zngur_internal_assume_deinit<{ty}>({ty}& t);
-    friend void ::rust::zngur_pretty_print<{ty}>({ty} const& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< {ty} >(const {ty}& t);
+    friend void ::rust::__zngur_internal_check_init< {ty} >(const {ty}& t);
+    friend void ::rust::__zngur_internal_assume_init< {ty} >({ty}& t);
+    friend void ::rust::__zngur_internal_assume_deinit< {ty} >({ty}& t);
+    friend void ::rust::zngur_pretty_print< {ty} >({ty} const& t);
 "#,
                         ty = self.ty,
                     )?;
@@ -911,7 +911,7 @@ private:
                     state,
                     r#"
                     inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}(&data[0])).as_cpp<{cpp_ty}>();
+                        return (*{rust_link_name}(&data[0])).as_cpp< {cpp_ty} >();
                     }}"#
                 )?;
             }
@@ -966,7 +966,7 @@ private:
                         r#"
 namespace rust {{
     template<>
-    inline size_t __zngur_internal_size_of<{ty}>() {{
+    inline size_t __zngur_internal_size_of< {ty} >() {{
         return {size};
     }}
         "#,
@@ -978,7 +978,7 @@ namespace rust {{
                         r#"
 namespace rust {{
     template<>
-    inline size_t __zngur_internal_size_of<{ty}>() {{
+    inline size_t __zngur_internal_size_of< {ty} >() {{
         return {size_fn}();
     }}
         "#,
@@ -992,15 +992,15 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init<{ty}>(const {ty}&) {{
+        inline void __zngur_internal_check_init< {ty} >(const {ty}&) {{
         }}
 
         template<>
-        inline void __zngur_internal_assume_init<{ty}>({ty}&) {{
+        inline void __zngur_internal_assume_init< {ty} >({ty}&) {{
         }}
     
         template<>
-        inline void __zngur_internal_assume_deinit<{ty}>({ty}&) {{
+        inline void __zngur_internal_assume_deinit< {ty} >({ty}&) {{
         }}
 "#,
                 )?;
@@ -1009,7 +1009,7 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init<{ty}>(const {ty}& t) {{
+        inline void __zngur_internal_check_init< {ty} >(const {ty}& t) {{
             if (!t.drop_flag) {{
                 ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type {ty}" << ::std::endl;
                 while (true) raise(SIGSEGV);
@@ -1017,13 +1017,13 @@ namespace rust {{
         }}
 
         template<>
-        inline void __zngur_internal_assume_init<{ty}>({ty}& t) {{
+        inline void __zngur_internal_assume_init< {ty} >({ty}& t) {{
             t.drop_flag = true;
         }}
     
         template<>
-        inline void __zngur_internal_assume_deinit<{ty}>({ty}& t) {{
-            ::rust::__zngur_internal_check_init<{ty}>(t);
+        inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) {{
+            ::rust::__zngur_internal_check_init< {ty} >(t);
             t.drop_flag = false;
         }}
 "#,
@@ -1033,7 +1033,7 @@ namespace rust {{
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>({ty} const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >({ty} const & t) {{
         return const_cast<uint8_t*>(&t.data[0]);
     }}
 }}
@@ -1092,7 +1092,7 @@ namespace rust {{
                     .inputs
                     .iter()
                     .enumerate()
-                    .map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust<{x}>(i{n})"))
+                    .map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust< {x} >(i{n})"))
                     .join(", ");
                 let uint8_t_ix = sig
                     .inputs
@@ -1114,7 +1114,7 @@ reinterpret_cast<uint8_t*>(data),
 [](uint8_t *d, {uint8_t_ix} uint8_t *o) {{
 auto dd = reinterpret_cast<{as_std_function} *>(d);
 {out_ty} oo = (*dd)({ii_names});
-::rust::__zngur_internal_move_to_rust<{out_ty}>(o, oo);
+::rust::__zngur_internal_move_to_rust< {out_ty} >(o, oo);
 }},
 ::rust::__zngur_internal_data_ptr(o));
 return o;
@@ -1168,7 +1168,7 @@ return o;
                     writeln!(
                         state,
                         r#"
-rust::{ref_kind}<{my_name}>::{ref_kind}({as_ty}& args) {{
+rust::{ref_kind}< {my_name} >::{ref_kind}({as_ty}& args) {{
 auto data_as_impl = &args;
 ::rust::__zngur_internal_assume_init(*this);
 {link_name_ref}(
@@ -1202,7 +1202,7 @@ auto data_as_impl = &args;
                     } = &method.sig;
                     writeln!(
                         state,
-                        "inline {output} rust::{ref_kind}<{ty}>::{method_name}({input_defs}) const
+                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const
                 {{
                     return {fn_name}(*this{input_args});
                 }}",
@@ -1265,8 +1265,8 @@ auto data_as_impl = &args;
                         r#"
             namespace rust {{
                 template<>
-                inline void zngur_pretty_print<{ty}>({ty} const& t) {{
-                    ::rust::__zngur_internal_check_init<{ty}>(t);
+                inline void zngur_pretty_print< {ty} >({ty} const& t) {{
+                    ::rust::__zngur_internal_check_init< {ty} >(t);
                     {pretty_print}(&t.data[0]);
                 }}
             }}"#,
@@ -1463,17 +1463,17 @@ namespace rust {
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}>(const {ty}& t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t) {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init<{ty}>({ty}&) {{}}
+    inline void __zngur_internal_assume_init< {ty} >({ty}&) {{}}
     template<>
-    inline void __zngur_internal_assume_deinit<{ty}>({ty}&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty} >({ty}&) {{}}
 
     template<>
-    inline size_t __zngur_internal_size_of<{ty}>() {{
+    inline size_t __zngur_internal_size_of< {ty} >() {{
         return sizeof({ty});
     }}
 
@@ -1498,7 +1498,7 @@ namespace rust {
     inline void __zngur_internal_assume_deinit<{ty} const*>({ty} const*&) {{}}
 
     template<>
-    struct Ref<{ty}> {{
+    struct Ref< {ty} > {{
         Ref() {{
             data = 0;
         }}
@@ -1511,11 +1511,11 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref<{ty}>>(const ::rust::Ref<{ty}>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} >>(const ::rust::Ref< {ty} >& t);
     }};
 
     template<>
-    struct RefMut<{ty}> {{
+    struct RefMut< {ty} > {{
         RefMut() {{
             data = 0;
         }}
@@ -1528,7 +1528,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut<{ty}>>(const ::rust::RefMut<{ty}>& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} >>(const ::rust::RefMut< {ty} >& t);
     }};
 "#
             )?;
@@ -1581,7 +1581,7 @@ namespace rust {
         for imp in &self.exported_impls {
             writeln!(
                 state,
-                "namespace rust {{ template<> class Impl<{}, {}> {{ public:",
+                "namespace rust {{ template<> class Impl< {}, {} > {{ public:",
                 imp.ty,
                 match &imp.tr {
                     Some(x) => format!("{x}"),
@@ -1624,7 +1624,7 @@ namespace rust {
                     .iter()
                     .enumerate()
                     .map(|(n, ty)| {
-                        format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                        format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
                     })
                     .join(", "),
             )?;
@@ -1638,7 +1638,7 @@ namespace rust {
                 writeln!(state, "{{")?;
                 writeln!(
                     state,
-                    "   {} oo = ::rust::Impl<{}, {}>::{}({});",
+                    "   {} oo = ::rust::Impl< {}, {} >::{}({});",
                     sig.output,
                     imp.ty,
                     match &imp.tr {
@@ -1650,7 +1650,7 @@ namespace rust {
                         .iter()
                         .enumerate()
                         .map(|(n, ty)| {
-                            format!("::rust::__zngur_internal_move_from_rust<{ty}>(i{n})")
+                            format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
                         })
                         .join(", "),
                 )?;
