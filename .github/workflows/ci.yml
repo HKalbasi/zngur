@@ -10,17 +10,25 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
+  build-mac:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+    env:
+      CXX: clang++
+    steps:
+      - uses: actions/checkout@v3
+      - name: Install Rust nightly
+        run: rustup toolchain install nightly
+      - run: cargo xtask ci
   build:
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - macos-latest
-          - ubuntu-latest
         cpp_compiler:
           - clang++
           - g++
-    runs-on: ${{ matrix.os }}
     env:
       CXX: ${{ matrix.cpp_compiler }}
     steps:
