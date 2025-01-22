@@ -17,6 +17,7 @@ fn check_examples(sh: &Shell) -> Result<()> {
         sh.change_dir(example);
         if example == "osmium" {
             if cfg!(target_os = "macos") {
+                sh.change_dir("..");
                 continue;
             }
             if !sh.path_exists("map.osm") {
