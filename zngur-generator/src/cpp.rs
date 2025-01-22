@@ -516,7 +516,7 @@ struct {ref_kind}< {ty} > {{
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -536,7 +536,7 @@ struct {ref_kind}< {ty} > {{
     }}
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -639,7 +639,7 @@ inline {ty}({as_std_function} f);
                     r#"
     friend Str;
 }};
-inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
+inline Ref< ::rust::Str> Str::from_char_star(const char* s) {{
     Ref<Str> o;
     o.data[0] = reinterpret_cast<size_t>(s);
     o.data[1] = strlen(s);
@@ -707,7 +707,7 @@ namespace rust {{
             if self.ty.path.0 == ["rust", "Unit"] {
                 write!(
                     state,
-                    "template<> struct Tuple<> {{ ::std::array<::uint8_t, 1> data; }};"
+                    "template<> struct Tuple<> {{ ::std::array< ::uint8_t, 1> data; }};"
                 )?;
                 return Ok(());
             } else {
@@ -728,7 +728,7 @@ public:
                         writeln!(
                             state,
                             r#"
-    static inline ::rust::Ref<::rust::Str> from_char_star(const char* s);
+    static inline ::rust::Ref< ::rust::Str> from_char_star(const char* s);
     "#,
                         )?;
                     }
