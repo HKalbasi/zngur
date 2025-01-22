@@ -15,7 +15,7 @@ jobs:
     strategy:
       fail-fast: false
     env:
-      CXX: $(brew --prefix llvm@15)/bin/clang
+      CXX: clang++
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust nightly
