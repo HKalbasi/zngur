@@ -1457,6 +1457,7 @@ namespace rust {
                 "::rust::ZngurCppOpaqueOwnedObject".to_string(),
                 "::double_t".to_string(),
                 "::float_t".to_string(),
+                "::size_t".to_string(),
             ])
         {
             writeln!(
