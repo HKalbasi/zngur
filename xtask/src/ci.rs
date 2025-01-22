@@ -14,15 +14,15 @@ fn check_examples(sh: &Shell) -> Result<()> {
     sh.change_dir("examples");
     let examples = cmd!(sh, "ls").read()?;
     for example in examples.lines() {
+        sh.change_dir(example);
         if example == "osmium" {
             if cfg!(target_os = "macos") {
                 continue;
             }
-            if !sh.path_exists("examples/osmium/map.osm") {
-                cmd!(sh, "wget -O examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
+            if !sh.path_exists("map.osm") {
+                cmd!(sh, "wget -O map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
             }
         }
-        sh.change_dir(example);
         if CARGO_PROJECTS.contains(&example) {
             cmd!(sh, "cargo build")
                 .run()
