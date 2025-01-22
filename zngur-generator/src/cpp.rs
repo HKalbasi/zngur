@@ -516,7 +516,7 @@ struct {ref_kind}< {ty} > {{
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} >>(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -536,7 +536,7 @@ struct {ref_kind}< {ty} > {{
     }}
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} >>(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -654,24 +654,24 @@ inline Ref<::rust::Str> Str::from_char_star(const char* s) {{
                 state,
                 r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr<{ref_kind}< {ty} >>(const {ref_kind}< {ty} >& t) {{
+inline uint8_t* __zngur_internal_data_ptr<{ref_kind}< {ty} > >(const {ref_kind}< {ty} >& t) {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init<{ref_kind}< {ty} >>({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_init<{ref_kind}< {ty} > >({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_check_init<{ref_kind}< {ty} >>(const {ref_kind}< {ty} >&) {{
+inline void __zngur_internal_check_init<{ref_kind}< {ty} > >(const {ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit<{ref_kind}< {ty} >>({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_deinit<{ref_kind}< {ty} > >({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of<{ref_kind}< {ty} >>() {{
+inline size_t __zngur_internal_size_of<{ref_kind}< {ty} > >() {{
     return {size};
 }}
 }}"#,
@@ -1511,7 +1511,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} >>(const ::rust::Ref< {ty} >& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} > >(const ::rust::Ref< {ty} >& t);
     }};
 
     template<>
@@ -1528,7 +1528,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} >>(const ::rust::RefMut< {ty} >& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} > >(const ::rust::RefMut< {ty} >& t);
     }};
 "#
             )?;
