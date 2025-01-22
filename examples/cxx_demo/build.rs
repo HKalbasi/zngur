@@ -1,4 +1,4 @@
-use std::{env, path::PathBuf};
+use std::env;
 
 use zngur::Zngur;
 
@@ -9,7 +9,7 @@ fn main() {
 
     let cxx = env::var("CXX").unwrap_or("c++".to_owned());
 
-    let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
+    let crate_dir = build::cargo_manifest_dir();
 
     Zngur::from_zng_file(crate_dir.join("main.zng"))
         .with_cpp_file(crate_dir.join("generated.cpp"))
