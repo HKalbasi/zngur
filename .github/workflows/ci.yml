@@ -11,13 +11,16 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
+        os:
+          - macos-latest
+          - ubuntu-latest
         cpp_compiler:
           - clang++
           - g++
+    runs-on: ${{ matrix.os }}
     env:
       CXX: ${{ matrix.cpp_compiler }}
     steps:
