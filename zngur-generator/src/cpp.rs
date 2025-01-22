@@ -431,7 +431,7 @@ impl CppTraitDefinition {
                     writeln!(state, ", uint8_t* o) {{")?;
                     writeln!(
                         state,
-                        "   {as_ty}* data_typed = reinterpret_cast<{as_ty}*>(data);"
+                        "   {as_ty}* data_typed = reinterpret_cast< {as_ty}* >(data);"
                     )?;
                     write!(
                         state,
@@ -564,7 +564,7 @@ private:
             match &self.from_trait_ref {
                 Some(RustTrait::Fn { inputs, output, .. }) => {
                     let as_std_function = format!(
-                        "::std::function<{}({})>",
+                        "::std::function< {}({})>",
                         output.into_cpp(),
                         inputs.iter().map(|x| x.into_cpp()).join(", ")
                     );
@@ -601,7 +601,7 @@ inline {ty}({as_std_function} f);
                     state,
                     r#"
                 inline {cpp_ty}& cpp() {{
-                    return *reinterpret_cast<{cpp_ty}*>(data);
+                    return *reinterpret_cast< {cpp_ty}* >(data);
                 }}"#
                 )?;
                 writeln!(
@@ -654,24 +654,24 @@ inline Ref< ::rust::Str> Str::from_char_star(const char* s) {{
                 state,
                 r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr<{ref_kind}< {ty} > >(const {ref_kind}< {ty} >& t) {{
+inline uint8_t* __zngur_internal_data_ptr< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >& t) {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init<{ref_kind}< {ty} > >({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_init< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_check_init<{ref_kind}< {ty} > >(const {ref_kind}< {ty} >&) {{
+inline void __zngur_internal_check_init< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit<{ref_kind}< {ty} > >({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_deinit< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of<{ref_kind}< {ty} > >() {{
+inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() {{
     return {size};
 }}
 }}"#,
@@ -880,7 +880,7 @@ private:
                     match &self.from_trait {
                         Some(RustTrait::Fn { inputs, output, .. }) => {
                             let as_std_function = format!(
-                                "::std::function<{}({})>",
+                                "::std::function< {}({})>",
                                 output.into_cpp(),
                                 inputs.iter().map(|x| x.into_cpp()).join(", ")
                             );
@@ -1084,7 +1084,7 @@ namespace rust {{
         match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
             Some(CppTraitDefinition::Fn { sig }) => {
                 let as_std_function = format!(
-                    "::std::function<{}({})>",
+                    "::std::function< {}({})>",
                     sig.output,
                     sig.inputs.iter().join(", ")
                 );
@@ -1110,9 +1110,9 @@ auto data = new {as_std_function}(f);
 ::rust::__zngur_internal_assume_init(o);
 {link_name}(
 reinterpret_cast<uint8_t*>(data),
-[](uint8_t *d) {{ delete reinterpret_cast<{as_std_function}*>(d); }},
+[](uint8_t *d) {{ delete reinterpret_cast< {as_std_function}*>(d); }},
 [](uint8_t *d, {uint8_t_ix} uint8_t *o) {{
-auto dd = reinterpret_cast<{as_std_function} *>(d);
+auto dd = reinterpret_cast< {as_std_function} *>(d);
 {out_ty} oo = (*dd)({ii_names});
 ::rust::__zngur_internal_move_to_rust< {out_ty} >(o, oo);
 }},
@@ -1135,12 +1135,12 @@ return o;
 template<typename T, typename... Args>
 {my_name} {my_name}::make_box(Args&&... args) {{
 auto data = new T(::std::forward<Args>(args)...);
-auto data_as_impl = dynamic_cast<{as_ty}*>(data);
+auto data_as_impl = dynamic_cast< {as_ty}*>(data);
 {my_name} o;
 ::rust::__zngur_internal_assume_init(o);
 {link_name}(
 reinterpret_cast<uint8_t*>(data_as_impl),
-[](uint8_t *d) {{ delete reinterpret_cast<{as_ty} *>(d); }},
+[](uint8_t *d) {{ delete reinterpret_cast< {as_ty} *>(d); }},
 "#,
                 )?;
                 writeln!(
@@ -1478,24 +1478,24 @@ namespace rust {
     }}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty}*>({ty}* const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty}*>({ty}* const & t) {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init<{ty}*>({ty}*&) {{}}
+    inline void __zngur_internal_assume_init< {ty}*>({ty}*&) {{}}
     template<>
-    inline void __zngur_internal_assume_deinit<{ty}*>({ty}*&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty}*>({ty}*&) {{}}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr<{ty} const*>({ty} const* const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} const*>({ty} const* const & t) {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init<{ty} const*>({ty} const*&) {{}}
+    inline void __zngur_internal_assume_init< {ty} const*>({ty} const*&) {{}}
     template<>
-    inline void __zngur_internal_assume_deinit<{ty} const*>({ty} const*&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty} const*>({ty} const*&) {{}}
 
     template<>
     struct Ref< {ty} > {{
@@ -1507,7 +1507,7 @@ namespace rust {
         }}
 
         {ty}& operator*() {{
-            return *reinterpret_cast<{ty}*>(data);
+            return *reinterpret_cast< {ty}*>(data);
         }}
         private:
             size_t data;
@@ -1524,7 +1524,7 @@ namespace rust {
         }}
 
         {ty}& operator*() {{
-            return *reinterpret_cast<{ty}*>(data);
+            return *reinterpret_cast< {ty}*>(data);
         }}
         private:
             size_t data;
