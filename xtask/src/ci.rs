@@ -38,6 +38,8 @@ fn check_examples(sh: &Shell) -> Result<()> {
 pub fn main() -> Result<()> {
     let sh = &Shell::new()?;
     println!("Cargo version = {}", cmd!(sh, "cargo --version").read()?);
+    let cxx = std::env::var("CXX")?;
+    println!("CXX version = {}", cmd!(sh, "{cxx} --version").read()?);
     sh.set_var("RUSTFLAGS", "-D warnings");
     for dir in cmd!(sh, "ls").read()?.lines() {
         if sh.path_exists(format!("{dir}/Cargo.toml")) {
