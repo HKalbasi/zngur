@@ -14,6 +14,14 @@ fn check_examples(sh: &Shell) -> Result<()> {
     sh.change_dir("examples");
     let examples = cmd!(sh, "ls").read()?;
     for example in examples.lines() {
+        if example == "osmium" {
+            if cfg!(target_os = "macos") {
+                continue;
+            }
+            if !sh.path_exists("examples/osmium/map.osm") {
+                cmd!(sh, "wget -O examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
+            }
+        }
         sh.change_dir(example);
         if CARGO_PROJECTS.contains(&example) {
             cmd!(sh, "cargo build")
@@ -47,9 +55,6 @@ pub fn main() -> Result<()> {
             check_crate(sh).with_context(|| format!("Checking crate {dir} failed"))?;
             sh.change_dir("..")
         }
-    }
-    if !sh.path_exists("examples/osmium/map.osm") {
-        cmd!(sh, "wget -O examples/osmium/map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
     }
     check_examples(sh).with_context(|| "Checking examples failed")?;
     Ok(())

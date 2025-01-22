@@ -1460,6 +1460,9 @@ namespace rust {
                 "::size_t".to_string(),
             ])
         {
+            if ty == "::size_t" {
+                writeln!(state, "#ifdef __APPLE__")?;
+            }
             writeln!(
                 state,
                 r#"
@@ -1533,6 +1536,9 @@ namespace rust {
     }};
 "#
             )?;
+            if ty == "::size_t" {
+                writeln!(state, "#endif")?;
+            }
         }
         writeln!(state, "}}")?;
         writeln!(state, "extern \"C\" {{")?;
