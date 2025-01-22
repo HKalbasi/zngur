@@ -415,8 +415,6 @@ zngur = "latest-version"
 Then fill the `build.rs` file:
 
 ```Rust
-use std::{env, path::PathBuf};
-
 use zngur::Zngur;
 
 fn main() {
