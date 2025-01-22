@@ -11,14 +11,16 @@ env:
 
 jobs:
   build-mac:
-    runs-on: macos-latest
+    runs-on: macos-14
     strategy:
       fail-fast: false
+    env:
+      CXX: clang++
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust nightly
         run: rustup toolchain install nightly
-      - run: CXX=$(brew --prefix llvm@18)/bin/clang++ cargo xtask ci
+      - run: cargo xtask ci
   build:
     runs-on: ubuntu-latest
     strategy:
