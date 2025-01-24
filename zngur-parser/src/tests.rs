@@ -25,13 +25,22 @@ fn check_fail(zng: &str, error: Expect) {
 
 #[test]
 fn parse_unit() {
-    check_success(
+    check_fail(
         r#"
 type () {
     #layout(size = 0, align = 1);
     wellknown_traits(Copy);
 }
     "#,
+        expect![[r#"
+            Error: Unit type is declared implicitly. Remove this entirely.
+               ╭─[main.zng:2:6]
+               │
+             2 │ type () {
+               │      ─┬  
+               │       ╰── Unit type is declared implicitly. Remove this entirely.
+            ───╯
+        "#]],
     );
 }
 

@@ -30,7 +30,18 @@ impl ZngurGenerator {
     }
 
     pub fn render(self) -> (String, String, Option<String>) {
-        let zng = self.0;
+        let mut zng = self.0;
+
+        // Unit type is a bit special, and almost everyone needs it, so we add it ourself.
+        zng.types.push(ZngurType {
+            ty: RustType::UNIT,
+            layout: LayoutPolicy::StackAllocated { size: 0, align: 1 },
+            wellknown_traits: vec![ZngurWellknownTrait::Copy],
+            methods: vec![],
+            constructors: vec![],
+            cpp_value: None,
+            cpp_ref: None,
+        });
         let mut cpp_file = CppFile::default();
         cpp_file.additional_includes = zng.additional_includes;
         let mut rust_file = RustFile::default();

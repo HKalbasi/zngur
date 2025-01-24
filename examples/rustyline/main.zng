@@ -1,10 +1,4 @@
 // This example uses various layout policies to demonstrate them. See https://hkalbasi.github.io/zngur/call_rust_from_cpp/layout_policy.html
-
-type () {
-    #layout(size = 0, align = 1); // Unit type has stable layout
-    wellknown_traits(Copy);
-}
-
 type str {
     wellknown_traits(?Sized); // Unsized types don't need layout policy
 

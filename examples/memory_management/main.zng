@@ -1,10 +1,5 @@
 #convert_panic_to_exception
 
-type () {
-    #layout(size = 0, align = 1);
-    wellknown_traits(Copy);
-}
-
 type (crate::PrintOnDrop, i32, crate::PrintOnDrop) {
     #layout(size = 40, align = 8);
 }
