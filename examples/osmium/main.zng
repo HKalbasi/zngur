@@ -8,11 +8,6 @@
     #include <osmium/visitor.hpp>
 "
 
-type () {
-    #layout(size = 0, align = 1);
-    wellknown_traits(Copy);
-}
-
 type str {
     wellknown_traits(?Sized);
 

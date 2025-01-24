@@ -160,6 +160,14 @@ impl ParsedItem<'_> {
                 }
             }
             ParsedItem::Type { ty, items } => {
+                if ty.inner == ParsedRustType::Tuple(vec![]) {
+                    // We add unit type implicitly.
+                    create_and_emit_error(
+                        "Unit type is declared implicitly. Remove this entirely.",
+                        ty.span,
+                    );
+                }
+
                 let mut methods = vec![];
                 let mut constructors = vec![];
                 let mut wellknown_traits = vec![];

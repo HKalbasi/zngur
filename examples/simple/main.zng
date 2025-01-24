@@ -1,10 +1,5 @@
 #convert_panic_to_exception
 
-type () {
-    #layout(size = 0, align = 1);
-    wellknown_traits(Copy);
-}
-
 type Box<dyn Fn(i32) -> i32> {
     #layout(size = 16, align = 8);
 }

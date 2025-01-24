@@ -143,10 +143,6 @@ impl Inventory {
 ```
 
 ```
-type () {
-    #layout(size = 0, align = 1);
-}
-
 type crate::Inventory {
     #layout(size = 32, align = 8);
     wellknown_traits(Debug);
@@ -156,7 +152,7 @@ type crate::Inventory {
 }
 ```
 
-Note that the return type of `add_banana` is the `()` type, so we need to add it as well. Now we can use it in the C++ file:
+Now we can use it in the C++ file:
 
 ```C++
 #include "./generated.h"
@@ -377,11 +373,6 @@ the `inventory.h` file. Then create a `main.zng` file with the following content
 #cpp_additional_includes "
     #include <inventory.h>
 "
-
-type () {
-    #layout(size = 0, align = 1);
-    wellknown_traits(Copy);
-}
 
 type crate::Inventory {
     #layout(size = 16, align = 8);
