@@ -2,7 +2,7 @@
 
 ## Inherent `impl`
 
-You can write inherent `impl` blocks for type defined in your crate (this is not a Zngur restriction, it's the orphan rule) in C++. First, you need to
+You can write inherent `impl` blocks for types defined in your crate (this is not a Zngur restriction, it's the orphan rule) in C++. First, you need to
 declare the functions of that block in the `main.zng` file:
 
 ```Rust
@@ -38,7 +38,7 @@ rust::Impl<TagList>::get_value_by_key(rust::Ref<TagList> self,
 
 ## Implementing Rust traits for Rust types
 
-You can write `impl Trait for Type` blocks for type defined in your crate or traits defined in your
+You can write `impl Trait for Type` blocks for types defined in your crate or traits defined in your
 crate (this is not a Zngur restriction, it's the orphan rule) in C++. First, you need to
 declare the functions of that block in the `main.zng` file:
 
