@@ -56,19 +56,19 @@ the type, but in the stack of the owner, and the compiler generates them only if
 
 For exposing a function or method from Rust to C++, an `extern "C"` function is generated that takes all arguments as `*mut u8`, and
 takes output as an output parameter `o: *mut u8`. It then reads arguments using `ptr::read`, calls the underlying function, and write
-the result in `o` using `ptr::write`. So for example for `Option<i32>::unwrap` some code like this will be generated:
+the result in `o` using `ptr::write`. So for example for `rustyline::Result<String>::unwrap` some code like this will be generated:
 
 ```Rust
 #[no_mangle]
-pub extern "C" fn __zngur___std_option_Option_i32__unwrap___x8s9s13s20m27y31n32m39y40(
+pub extern "C" fn __zngur___rustyline_Result__std_string_String__unwrap___x8s9s19m26s27s31s38y45n46m53y54(
     i0: *mut u8,
     o: *mut u8,
 ) {
     unsafe {
         ::std::ptr::write(
-            o as *mut i32,
-            <::std::option::Option<i32>>::unwrap(::std::ptr::read(
-                i0 as *mut ::std::option::Option<i32>,
+            o as *mut ::std::string::String,
+            <::rustyline::Result<::std::string::String>>::unwrap(::std::ptr::read(
+                i0 as *mut ::rustyline::Result<::std::string::String>,
             )),
         )
     }
