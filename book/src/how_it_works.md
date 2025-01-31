@@ -5,13 +5,13 @@ be taken in transferring Rust types between Rust and C++.
 
 ## How a Rust type is represented in C++
 
-A normal rust type ABI is undefined, so passing it directly in a cross language function call is undefined behavior. The
+A normal rust type ABI is undefined, so passing it directly in a cross-language function call is undefined behavior. The
 thing that is guaranteed is that the size and alignment of a type won't change during a compile session. By adding static assertions
-against the user provided size and align in the `main.zng` file, Zngur ensures that it knows the correct size and align of the
-type for this compile session. Knowing the size and align of a type enables `std::ptr::read` and `std::ptr::write`. These functions
+against the user provided size and alignment in the `main.zng` file, Zngur ensures that it knows the correct size and alignment of the
+type for this compile session. Knowing the size and alignment of a type enables `std::ptr::read` and `std::ptr::write`. These functions
 only need the pointer to be valid (which basically means `ptr..ptr+size` should belong to a single live chunk of memory,
 [read more](https://doc.rust-lang.org/std/ptr/index.html#safety)) and
-aligned. So Zngur can use the pointer to the below `data` in those functions:
+aligned. So Zngur can use a pointer to `data`, as defined below, in those functions:
 
 ```C++
 alignas(align_value) mutable ::std::array<uint8_t, size_value> data;
