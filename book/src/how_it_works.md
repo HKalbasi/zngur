@@ -11,7 +11,7 @@ against the user provided size and alignment in the `main.zng` file, Zngur ensur
 type for this compile session. Knowing the size and alignment of a type enables `std::ptr::read` and `std::ptr::write`. These functions
 only need the pointer to be valid (which basically means `ptr..ptr+size` should belong to a single live chunk of memory,
 [read more](https://doc.rust-lang.org/std/ptr/index.html#safety)) and
-aligned. So Zngur can use the pointer to the underlying `data` in those functions:
+aligned. So Zngur can use a pointer to `data`, as defined below, in those functions:
 
 ```C++
 alignas(align_value) mutable ::std::array<uint8_t, size_value> data;
