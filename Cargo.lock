@@ -287,6 +287,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-regression-test1"
+version = "0.5.0"
+
+[[package]]
 name = "example-rustyline"
 version = "0.5.0"
 dependencies = [

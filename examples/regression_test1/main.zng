@@ -1,0 +1,16 @@
+#convert_panic_to_exception
+
+type str {
+    wellknown_traits(?Sized, Debug);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+
+    fn push_str(&mut self, &str);
+}
