@@ -517,6 +517,7 @@ struct {ref_kind}< {ty} > {{
 private:
     ::std::array<size_t, 2> data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend void ::rust::zngur_pretty_print< ::rust::{ref_kind}< {ty} > >(::rust::{ref_kind}< {ty} > const& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -537,6 +538,7 @@ struct {ref_kind}< {ty} > {{
 private:
     size_t data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend void ::rust::zngur_pretty_print< ::rust::{ref_kind}< {ty} > >(::rust::{ref_kind}< {ty} > const& t);
 "#,
                     ty = self.ty,
                 )?;
@@ -1254,24 +1256,60 @@ auto data_as_impl = &args;
                 )?;
             }
         }
+        let is_unsized = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Unsized);
         for tr in &self.wellknown_traits {
             match tr {
                 ZngurWellknownTraitData::Debug {
                     pretty_print,
                     debug_print: _, // TODO: use it
                 } => {
-                    writeln!(
-                        state,
-                        r#"
+                    if !is_unsized {
+                        writeln!(
+                            state,
+                            r#"
             namespace rust {{
                 template<>
                 inline void zngur_pretty_print< {ty} >({ty} const& t) {{
                     ::rust::__zngur_internal_check_init< {ty} >(t);
                     {pretty_print}(&t.data[0]);
                 }}
+
+                template<>
+                inline void zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t) {{
+                    ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
+                    {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
+                }}
+
+                template<>
+                inline void zngur_pretty_print< RefMut< {ty} > >(RefMut< {ty} > const& t) {{
+                    ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
+                    {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
+                }}
             }}"#,
-                        ty = self.ty,
-                    )?;
+                            ty = self.ty,
+                        )?;
+                    } else {
+                        writeln!(
+                            state,
+                            r#"
+            namespace rust {{
+                template<>
+                inline void zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t) {{
+                    ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
+                    {pretty_print}(::rust::__zngur_internal_data_ptr< Ref< {ty} > >(t));
+                }}
+
+                template<>
+                inline void zngur_pretty_print< RefMut< {ty} > >(RefMut< {ty} > const& t) {{
+                    ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
+                    {pretty_print}(::rust::__zngur_internal_data_ptr< RefMut< {ty} > >(t));
+                }}
+            }}"#,
+                            ty = self.ty,
+                        )?;
+                    }
                 }
                 ZngurWellknownTraitData::Unsized
                 | ZngurWellknownTraitData::Copy
@@ -1516,6 +1554,7 @@ namespace rust {
         private:
             size_t data;
         friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} > >(const ::rust::Ref< {ty} >& t);
+        friend void ::rust::zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t);
     }};
 
     template<>
@@ -1533,6 +1572,7 @@ namespace rust {
         private:
             size_t data;
         friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} > >(const ::rust::RefMut< {ty} >& t);
+        friend void ::rust::zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t);
     }};
 "#
             )?;

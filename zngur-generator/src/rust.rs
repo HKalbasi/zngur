@@ -706,6 +706,7 @@ pub extern "C" fn {mangled_name}("#
         &mut self,
         ty: &RustType,
         wellknown_trait: ZngurWellknownTrait,
+        is_unsized: bool,
     ) -> ZngurWellknownTraitData {
         match wellknown_trait {
             ZngurWellknownTrait::Unsized => ZngurWellknownTraitData::Unsized,
@@ -726,13 +727,18 @@ pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
             ZngurWellknownTrait::Debug => {
                 let pretty_print = mangle_name(&format!("{ty}=debug_pretty"));
                 let debug_print = mangle_name(&format!("{ty}=debug_print"));
+                let dbg_ty = if !is_unsized {
+                    format!("{ty}")
+                } else {
+                    format!("&{ty}")
+                };
                 wln!(
                     self,
                     r#"
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {pretty_print}(v: *mut u8) {{
-    eprintln!("{{:#?}}", unsafe {{ &*(v as *mut {ty}) }});
+    eprintln!("{{:#?}}", unsafe {{ &*(v as *mut {dbg_ty}) }});
 }}"#
                 );
                 wln!(
@@ -741,7 +747,7 @@ pub extern "C" fn {pretty_print}(v: *mut u8) {{
 #[allow(non_snake_case)]
 #[no_mangle]
 pub extern "C" fn {debug_print}(v: *mut u8) {{
-    eprintln!("{{:?}}", unsafe {{ &*(v as *mut {ty}) }});
+    eprintln!("{{:?}}", unsafe {{ &*(v as *mut {dbg_ty}) }});
 }}"#
                 );
                 ZngurWellknownTraitData::Debug {

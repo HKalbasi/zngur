@@ -118,8 +118,11 @@ impl ZngurGenerator {
                     });
                 }
             }
+            let is_unsized = ty_def
+                .wellknown_traits
+                .contains(&ZngurWellknownTrait::Unsized);
             for wellknown_trait in ty_def.wellknown_traits {
-                let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait);
+                let data = rust_file.add_wellknown_trait(&ty_def.ty, wellknown_trait, is_unsized);
                 wellknown_traits.push(data);
             }
             for method_details in ty_def.methods {
