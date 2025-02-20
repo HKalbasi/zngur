@@ -7,7 +7,7 @@ use std::{
 use itertools::Itertools;
 use zngur_def::{Mutability, RustTrait, ZngurMethodReceiver};
 
-use crate::{rust::IntoCpp, ZngurWellknownTraitData};
+use crate::{ZngurWellknownTraitData, rust::IntoCpp};
 
 #[derive(Debug)]
 pub struct CppPath(pub Vec<String>);

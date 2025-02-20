@@ -1,6 +1,6 @@
 use std::{fmt::Display, process::exit, sync::Mutex};
 
-use ariadne::{sources, Color, Label, Report, ReportKind};
+use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
 use itertools::{Either, Itertools};
 
@@ -644,8 +644,8 @@ impl Display for Token<'_> {
     }
 }
 
-fn lexer<'src>(
-) -> impl Parser<'src, &'src str, Vec<(Token<'src>, Span)>, extra::Err<Rich<'src, char, Span>>> {
+fn lexer<'src>()
+-> impl Parser<'src, &'src str, Vec<(Token<'src>, Span)>, extra::Err<Rich<'src, char, Span>>> {
     let token = choice([
         just("->").to(Token::Arrow),
         just("<").to(Token::AngleOpen),
@@ -685,14 +685,14 @@ fn lexer<'src>(
         .collect()
 }
 
-fn file_parser<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedZngFile<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+fn file_parser<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedZngFile<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
     item().repeated().collect::<Vec<_>>().map(ParsedZngFile)
 }
 
-fn rust_type<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+fn rust_type<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
     let as_scalar = |s: &str, head: char| -> Option<u32> {
         let s = s.strip_prefix(head)?;
@@ -773,8 +773,12 @@ fn rust_type<'a>(
 }
 
 fn rust_generics<'a>(
-    rust_type: impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-        + Clone,
+    rust_type: impl Parser<
+        'a,
+        ParserInput<'a>,
+        ParsedRustType<'a>,
+        extra::Err<Rich<'a, Token<'a>, Span>>,
+    > + Clone,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -798,8 +802,12 @@ fn rust_generics<'a>(
 }
 
 fn rust_path_and_generics<'a>(
-    rust_type: impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-        + Clone,
+    rust_type: impl Parser<
+        'a,
+        ParserInput<'a>,
+        ParsedRustType<'a>,
+        extra::Err<Rich<'a, Token<'a>, Span>>,
+    > + Clone,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -821,8 +829,12 @@ fn rust_path_and_generics<'a>(
 }
 
 fn fn_args<'a>(
-    rust_type: impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-        + Clone,
+    rust_type: impl Parser<
+        'a,
+        ParserInput<'a>,
+        ParsedRustType<'a>,
+        extra::Err<Rich<'a, Token<'a>, Span>>,
+    > + Clone,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -849,8 +861,12 @@ fn spanned<'a, T>(
 }
 
 fn rust_trait<'a>(
-    rust_type: impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-        + Clone,
+    rust_type: impl Parser<
+        'a,
+        ParserInput<'a>,
+        ParsedRustType<'a>,
+        extra::Err<Rich<'a, Token<'a>, Span>>,
+    > + Clone,
 ) -> impl Parser<'a, ParserInput<'a>, ParsedRustTrait<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
     let fn_trait = select! {
@@ -859,16 +875,16 @@ fn rust_trait<'a>(
     .then(fn_args(rust_type.clone()))
     .map(|x| ParsedRustTrait::Fn {
         name: x.0,
-        inputs: x.1 .0,
-        output: Box::new(x.1 .1),
+        inputs: x.1.0,
+        output: Box::new(x.1.1),
     });
 
     let rust_trait = fn_trait.or(rust_path_and_generics(rust_type).map(ParsedRustTrait::Normal));
     rust_trait
 }
 
-fn method<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+fn method<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
     just(Token::KwFn)
         .ignore_then(select! {
@@ -909,12 +925,11 @@ fn method<'a>(
         })
 }
 
-fn type_item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
-    fn inner_item<'a>(
-    ) -> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-           + Clone {
+fn type_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+    fn inner_item<'a>()
+    -> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
+    + Clone {
         let property_item = (spanned(select! {
             Token::Ident(c) => c,
         }))
@@ -1026,9 +1041,8 @@ fn type_item<'a>(
         .map(|(ty, items)| ParsedItem::Type { ty, items })
 }
 
-fn trait_item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn trait_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     just(Token::KwTrait)
         .ignore_then(rust_trait(rust_type()))
         .then(
@@ -1041,17 +1055,15 @@ fn trait_item<'a>(
         .map(|(tr, methods)| ParsedItem::Trait { tr, methods })
 }
 
-fn fn_item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn fn_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     method()
         .then_ignore(just(Token::Semicolon))
         .map(ParsedItem::Fn)
 }
 
-fn additional_include_item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn additional_include_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     just(Token::Sharp).ignore_then(
         just(Token::Ident("cpp_additional_includes"))
             .ignore_then(select! {
@@ -1062,9 +1074,8 @@ fn additional_include_item<'a>(
     )
 }
 
-fn extern_cpp_item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn extern_cpp_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     let function = method()
         .then_ignore(just(Token::Semicolon))
         .map(ParsedExternCppItem::Function);
@@ -1096,9 +1107,8 @@ fn extern_cpp_item<'a>(
         .map(ParsedItem::ExternCpp)
 }
 
-fn item<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     recursive(|item| {
         just(Token::KwMod)
             .ignore_then(path())
@@ -1116,9 +1126,8 @@ fn item<'a>(
     })
 }
 
-fn path<'a>(
-) -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn path<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     let start = just(Token::ColonColon)
         .to(ParsedPathStart::Absolute)
         .or(just(Token::KwCrate)

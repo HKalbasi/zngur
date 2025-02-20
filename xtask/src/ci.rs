@@ -1,5 +1,5 @@
 use anyhow::{Context, Result};
-use xshell::{cmd, Shell};
+use xshell::{Shell, cmd};
 
 fn check_crate(sh: &Shell) -> Result<()> {
     cmd!(sh, "cargo check").run()?;
@@ -31,6 +31,9 @@ fn check_examples(sh: &Shell) -> Result<()> {
             cmd!(sh, "cargo run")
                 .run()
                 .with_context(|| format!("Running example `{example}` failed"))?;
+            cmd!(sh, "cargo fmt --check").run().with_context(|| {
+                format!("Example `{example}` is not formatted. Run `cargo fmt`")
+            })?;
         } else {
             cmd!(sh, "make")
                 .run()
@@ -38,6 +41,9 @@ fn check_examples(sh: &Shell) -> Result<()> {
             cmd!(sh, "./a.out")
                 .run()
                 .with_context(|| format!("Running example `{example}` failed"))?;
+            cmd!(sh, "cargo fmt --check").run().with_context(|| {
+                format!("Example `{example}` is not formatted. Run `cargo fmt`")
+            })?;
         }
         sh.change_dir("..");
     }

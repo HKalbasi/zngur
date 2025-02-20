@@ -1,3 +1,4 @@
+#[rustfmt::skip]
 mod generated;
 
 #[derive(Debug, Clone)]

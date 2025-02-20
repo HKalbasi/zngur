@@ -1,6 +1,6 @@
 use std::panic::catch_unwind;
 
-use expect_test::{expect, Expect};
+use expect_test::{Expect, expect};
 
 use crate::ParsedZngFile;
 
