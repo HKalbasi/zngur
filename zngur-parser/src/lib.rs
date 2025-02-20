@@ -21,7 +21,16 @@ struct Spanned<T> {
     span: Span,
 }
 
-type ParserInput<'a> = chumsky::input::SpannedInput<Token<'a>, Span, &'a [(Token<'a>, Span)]>;
+type ParserInput<'a> = chumsky::input::MappedInput<
+    Token<'a>,
+    Span,
+    &'a [(Token<'a>, Span)],
+    Box<
+        dyn for<'x> Fn(
+            &'x (Token<'_>, chumsky::span::SimpleSpan),
+        ) -> (&'x Token<'x>, &'x SimpleSpan),
+    >,
+>;
 
 #[derive(Debug)]
 pub struct ParsedZngFile<'a>(Vec<ParsedItem<'a>>);
@@ -474,9 +483,12 @@ impl ParsedZngFile<'_> {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
             emit_error(errs);
         };
+        let tokens: ParserInput<'_> = tokens
+            .as_slice()
+            .map((text.len()..text.len()).into(), Box::new(|(t, s)| (t, s)));
         let (ast, errs) = file_parser()
-            .map_with_span(|ast, span| (ast, span))
-            .parse(tokens.as_slice().spanned((text.len()..text.len()).into()))
+            .map_with(|ast, extra| (ast, extra.span()))
+            .parse(tokens)
             .into_output_errors();
         let Some(ast) = ast else {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
@@ -646,39 +658,41 @@ impl Display for Token<'_> {
 
 fn lexer<'src>()
 -> impl Parser<'src, &'src str, Vec<(Token<'src>, Span)>, extra::Err<Rich<'src, char, Span>>> {
-    let token = choice([
-        just("->").to(Token::Arrow),
-        just("<").to(Token::AngleOpen),
-        just(">").to(Token::AngleClose),
-        just("[").to(Token::BracketOpen),
-        just("]").to(Token::BracketClose),
-        just("(").to(Token::ParenOpen),
-        just(")").to(Token::ParenClose),
-        just("{").to(Token::BraceOpen),
-        just("}").to(Token::BraceClose),
-        just("::").to(Token::ColonColon),
-        just(":").to(Token::Colon),
-        just("&").to(Token::And),
-        just("*").to(Token::Star),
-        just("#").to(Token::Sharp),
-        just("+").to(Token::Plus),
-        just("=").to(Token::Eq),
-        just("?").to(Token::Question),
-        just(",").to(Token::Comma),
-        just(";").to(Token::Semicolon),
-    ])
-    .or(text::ident().map(Token::ident_or_kw))
-    .or(text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())))
-    .or(just('"')
-        .ignore_then(none_of('"').repeated().map_slice(Token::Str))
-        .then_ignore(just('"')));
+    let token = choice((
+        choice([
+            just("->").to(Token::Arrow),
+            just("<").to(Token::AngleOpen),
+            just(">").to(Token::AngleClose),
+            just("[").to(Token::BracketOpen),
+            just("]").to(Token::BracketClose),
+            just("(").to(Token::ParenOpen),
+            just(")").to(Token::ParenClose),
+            just("{").to(Token::BraceOpen),
+            just("}").to(Token::BraceClose),
+            just("::").to(Token::ColonColon),
+            just(":").to(Token::Colon),
+            just("&").to(Token::And),
+            just("*").to(Token::Star),
+            just("#").to(Token::Sharp),
+            just("+").to(Token::Plus),
+            just("=").to(Token::Eq),
+            just("?").to(Token::Question),
+            just(",").to(Token::Comma),
+            just(";").to(Token::Semicolon),
+        ]),
+        text::ident().map(Token::ident_or_kw),
+        text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
+        just('"')
+            .ignore_then(none_of('"').repeated().to_slice().map(Token::Str))
+            .then_ignore(just('"')),
+    ));
 
     let comment = just("//")
         .then(any().and_is(just('\n').not()).repeated())
         .padded();
 
     token
-        .map_with_span(|tok, span| (tok, span))
+        .map_with(|tok, extra| (tok, extra.span()))
         .padded_by(comment.repeated())
         .padded()
         .repeated()
@@ -692,8 +706,7 @@ fn file_parser<'a>()
 }
 
 fn rust_type<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+-> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> {
     let as_scalar = |s: &str, head: char| -> Option<u32> {
         let s = s.strip_prefix(head)?;
         s.parse().ok()
@@ -710,6 +723,7 @@ fn rust_type<'a>()
     }.map(ParsedRustType::Primitive);
 
     recursive(|parser| {
+        let parser = parser.boxed();
         let pg = rust_path_and_generics(parser.clone());
         let adt = pg.clone().map(ParsedRustType::Adt);
 
@@ -760,25 +774,21 @@ fn rust_type<'a>()
             )
             .then(parser)
             .map(|(m, x)| ParsedRustType::Raw(m, Box::new(x)));
-        scalar
-            .or(boxed)
-            .or(unit)
-            .or(tuple)
-            .or(slice)
-            .or(adt)
-            .or(reference)
-            .or(raw_ptr)
-            .or(dyn_trait)
+        choice((
+            scalar, boxed, unit, tuple, slice, adt, reference, raw_ptr, dyn_trait,
+        ))
     })
+    .boxed()
 }
 
 fn rust_generics<'a>(
-    rust_type: impl Parser<
+    rust_type: Boxed<
+        'a,
         'a,
         ParserInput<'a>,
         ParsedRustType<'a>,
         extra::Err<Rich<'a, Token<'a>, Span>>,
-    > + Clone,
+    >,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -802,12 +812,13 @@ fn rust_generics<'a>(
 }
 
 fn rust_path_and_generics<'a>(
-    rust_type: impl Parser<
+    rust_type: Boxed<
+        'a,
         'a,
         ParserInput<'a>,
         ParsedRustType<'a>,
         extra::Err<Rich<'a, Token<'a>, Span>>,
-    > + Clone,
+    >,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -829,12 +840,13 @@ fn rust_path_and_generics<'a>(
 }
 
 fn fn_args<'a>(
-    rust_type: impl Parser<
+    rust_type: Boxed<
+        'a,
         'a,
         ParserInput<'a>,
         ParsedRustType<'a>,
         extra::Err<Rich<'a, Token<'a>, Span>>,
-    > + Clone,
+    >,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
@@ -852,21 +864,26 @@ fn fn_args<'a>(
                 .ignore_then(rust_type)
                 .or(empty().to(ParsedRustType::Tuple(vec![]))),
         )
+        .boxed()
 }
 
 fn spanned<'a, T>(
     parser: impl Parser<'a, ParserInput<'a>, T, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone,
 ) -> impl Parser<'a, ParserInput<'a>, Spanned<T>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    parser.map_with_span(|inner, span| Spanned { inner, span })
+    parser.map_with(|inner, extra| Spanned {
+        inner,
+        span: extra.span(),
+    })
 }
 
 fn rust_trait<'a>(
-    rust_type: impl Parser<
+    rust_type: Boxed<
+        'a,
         'a,
         ParserInput<'a>,
         ParsedRustType<'a>,
         extra::Err<Rich<'a, Token<'a>, Span>>,
-    > + Clone,
+    >,
 ) -> impl Parser<'a, ParserInput<'a>, ParsedRustTrait<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
     let fn_trait = select! {
@@ -909,8 +926,8 @@ fn method<'a>()
                 }
             };
             let (inputs, receiver) = match args.0.get(0) {
-                Some(x) if is_self(x) => (args.0[1..].to_vec(), ZngurMethodReceiver::Move),
-                Some(ParsedRustType::Ref(m, x)) if is_self(x) => {
+                Some(x) if is_self(&x) => (args.0[1..].to_vec(), ZngurMethodReceiver::Move),
+                Some(ParsedRustType::Ref(m, x)) if is_self(&x) => {
                     (args.0[1..].to_vec(), ZngurMethodReceiver::Ref(*m))
                 }
                 _ => (args.0, ZngurMethodReceiver::Static),
@@ -948,7 +965,8 @@ fn type_item<'a>()
             .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
             .or(just([Token::Sharp, Token::Ident("heap_allocated")])
                 .to(ParsedLayoutPolicy::HeapAllocated))
-            .map_with_span(|x, span| ParsedTypeItem::Layout(span, x));
+            .map_with(|x, extra| ParsedTypeItem::Layout(extra.span(), x))
+            .boxed();
         let trait_item = select! {
             Token::Ident("Debug") => ZngurWellknownTrait::Debug,
             Token::Ident("Copy") => ZngurWellknownTrait::Copy,
@@ -963,7 +981,8 @@ fn type_item<'a>()
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
             )
-            .map(ParsedTypeItem::Traits);
+            .map(ParsedTypeItem::Traits)
+            .boxed();
         let constructor_args = rust_type()
             .separated_by(just(Token::Comma))
             .collect::<Vec<_>>()
@@ -972,13 +991,15 @@ fn type_item<'a>()
             .or((select! {
                 Token::Ident(c) => c,
             })
+            .boxed()
             .then_ignore(just(Token::Colon))
             .then(rust_type())
             .separated_by(just(Token::Comma))
             .collect::<Vec<_>>()
             .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
             .map(ParsedConstructorArgs::Named))
-            .or(empty().to(ParsedConstructorArgs::Unit));
+            .or(empty().to(ParsedConstructorArgs::Unit))
+            .boxed();
         let constructor = just(Token::Ident("constructor")).ignore_then(
             (select! {
                 Token::Ident(c) => Some(c),
@@ -1005,12 +1026,13 @@ fn type_item<'a>()
                 Token::Str(c) => c,
             })
             .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-        layout
-            .or(traits)
-            .or(constructor)
-            .or(cpp_value)
-            .or(cpp_ref)
-            .or(method()
+        choice((
+            layout,
+            traits,
+            constructor,
+            cpp_value,
+            cpp_ref,
+            method()
                 .then(
                     just(Token::KwUse)
                         .ignore_then(path())
@@ -1027,8 +1049,9 @@ fn type_item<'a>()
                     deref,
                     use_path,
                     data,
-                }))
-            .then_ignore(just(Token::Semicolon))
+                }),
+        ))
+        .then_ignore(just(Token::Semicolon))
     }
     just(Token::KwType)
         .ignore_then(spanned(rust_type()))
@@ -1039,6 +1062,7 @@ fn type_item<'a>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
         .map(|(ty, items)| ParsedItem::Type { ty, items })
+        .boxed()
 }
 
 fn trait_item<'a>()
@@ -1053,6 +1077,7 @@ fn trait_item<'a>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
         .map(|(tr, methods)| ParsedItem::Trait { tr, methods })
+        .boxed()
 }
 
 fn fn_item<'a>()
@@ -1064,14 +1089,16 @@ fn fn_item<'a>()
 
 fn additional_include_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    just(Token::Sharp).ignore_then(
-        just(Token::Ident("cpp_additional_includes"))
-            .ignore_then(select! {
-                Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
-            })
-            .or(just(Token::Ident("convert_panic_to_exception"))
-                .to(ParsedItem::ConvertPanicToException)),
-    )
+    just(Token::Sharp)
+        .ignore_then(
+            just(Token::Ident("cpp_additional_includes"))
+                .ignore_then(select! {
+                    Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+                })
+                .or(just(Token::Ident("convert_panic_to_exception"))
+                    .to(ParsedItem::ConvertPanicToException)),
+        )
+        .boxed()
 }
 
 fn extern_cpp_item<'a>()
@@ -1102,38 +1129,44 @@ fn extern_cpp_item<'a>()
                 .or(impl_block)
                 .repeated()
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                .boxed(),
         )
         .map(ParsedItem::ExternCpp)
+        .boxed()
 }
 
 fn item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     recursive(|item| {
-        just(Token::KwMod)
-            .ignore_then(path())
-            .then(
-                item.repeated()
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
-            )
-            .map(|(path, items)| ParsedItem::Mod { path, items })
-            .or(type_item())
-            .or(trait_item())
-            .or(extern_cpp_item())
-            .or(fn_item())
-            .or(additional_include_item())
+        choice((
+            just(Token::KwMod)
+                .ignore_then(path())
+                .then(
+                    item.repeated()
+                        .collect::<Vec<_>>()
+                        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                )
+                .map(|(path, items)| ParsedItem::Mod { path, items }),
+            type_item(),
+            trait_item(),
+            extern_cpp_item(),
+            fn_item(),
+            additional_include_item(),
+        ))
     })
+    .boxed()
 }
 
 fn path<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    let start = just(Token::ColonColon)
-        .to(ParsedPathStart::Absolute)
-        .or(just(Token::KwCrate)
+    let start = choice((
+        just(Token::ColonColon).to(ParsedPathStart::Absolute),
+        just(Token::KwCrate)
             .then(just(Token::ColonColon))
-            .to(ParsedPathStart::Crate))
-        .or(empty().to(ParsedPathStart::Relative));
+            .to(ParsedPathStart::Crate),
+        empty().to(ParsedPathStart::Relative),
+    ));
     start
         .then(
             (select! {
@@ -1144,9 +1177,10 @@ fn path<'a>()
             .collect::<Vec<_>>(),
         )
         .or(just(Token::KwCrate).to((ParsedPathStart::Crate, vec![])))
-        .map_with_span(|(start, segments), span| ParsedPath {
+        .map_with(|(start, segments), extra| ParsedPath {
             start,
             segments,
-            span,
+            span: extra.span(),
         })
+        .boxed()
 }
