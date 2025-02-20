@@ -1,3 +1,4 @@
+#[rustfmt::skip]
 mod generated;
 
 use generated::new_blob_store_client;

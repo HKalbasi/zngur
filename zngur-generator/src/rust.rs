@@ -3,8 +3,8 @@ use std::fmt::Write;
 use itertools::Itertools;
 
 use crate::{
-    cpp::{CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
+    cpp::{CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
 };
 
 use zngur_def::*;
@@ -275,7 +275,7 @@ impl RustFile {
     pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &ZngurTrait) -> CppTraitDefinition {
         assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
-        wln!(self, r#"extern "C" {{"#);
+        wln!(self, r#"unsafe extern "C" {{"#);
         for method in &tr.methods {
             let name = mangle_name(&tr.tr.to_string()) + "_" + &method.name;
             wln!(
@@ -324,7 +324,7 @@ impl RustFile {
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
@@ -385,7 +385,7 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     o: *mut u8,
@@ -444,7 +444,7 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),
@@ -484,7 +484,7 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {constructor}("#
         );
         for name in 0..fields.len() {
@@ -513,7 +513,7 @@ pub extern "C" fn {constructor}("#
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {constructor}("#
         );
         for (name, _) in args {
@@ -532,7 +532,7 @@ pub extern "C" fn {constructor}("#
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
     *o = matches!(&*(i as *mut &_), {rust_name} {{ .. }}) as u8;
 }} }}"#
@@ -550,7 +550,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         methods: &[ZngurMethod],
     ) -> Vec<String> {
         let mut mangled_names = vec![];
-        w!(self, r#"extern "C" {{"#);
+        w!(self, r#"unsafe extern "C" {{"#);
         for method in methods {
             let mn = mangle_name(&format!("{}_extern_method_{}", owner, method.name));
             w!(
@@ -620,7 +620,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         w!(
             self,
             r#"
-extern "C" {{ fn {mangled_name}("#
+unsafe extern "C" {{ fn {mangled_name}("#
         );
         for (n, _) in inputs.iter().enumerate() {
             w!(self, "i{n}: *mut u8, ");
@@ -646,7 +646,7 @@ pub(crate) fn {rust_name}("#
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {{
     unsafe {{ &mut (*(d as *mut {ty})).{field} }}
 }}"#
@@ -671,7 +671,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
             self,
             r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}("#
         );
         for n in 0..inputs.len() {
@@ -717,7 +717,7 @@ pub extern "C" fn {mangled_name}("#
                     self,
                     r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
     ::std::ptr::drop_in_place(v as *mut {ty});
 }} }}"#
@@ -736,7 +736,7 @@ pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
                     self,
                     r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {pretty_print}(v: *mut u8) {{
     eprintln!("{{:#?}}", unsafe {{ &*(v as *mut {dbg_ty}) }});
 }}"#
@@ -745,7 +745,7 @@ pub extern "C" fn {pretty_print}(v: *mut u8) {{
                     self,
                     r#"
 #[allow(non_snake_case)]
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn {debug_print}(v: *mut u8) {{
     eprintln!("{{:?}}", unsafe {{ &*(v as *mut {dbg_ty}) }});
 }}"#
@@ -765,7 +765,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
             pub static PANIC_PAYLOAD: ::std::cell::Cell<Option<()>> = ::std::cell::Cell::new(None);
         }}
         #[allow(non_snake_case)]
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub fn __zngur_detect_panic() -> u8 {{
             PANIC_PAYLOAD.with(|p| {{
                 let pp = p.take();
@@ -776,7 +776,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
         }}
 
         #[allow(non_snake_case)]
-        #[no_mangle]
+        #[unsafe(no_mangle)]
         pub fn __zngur_take_panic() {{
             PANIC_PAYLOAD.with(|p| {{
                 p.take();
@@ -818,19 +818,19 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                     self,
                     r#"
                 #[allow(non_snake_case)]
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub fn {size_fn}() -> usize {{
                     ::std::mem::size_of::<{ty}>()
                 }}
         
                 #[allow(non_snake_case)]
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub fn {alloc_fn}() -> *mut u8 {{
                     unsafe {{ ::std::alloc::alloc(::std::alloc::Layout::new::<{ty}>()) }}
                 }}
 
                 #[allow(non_snake_case)]
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub fn {free_fn}(p: *mut u8) {{
                     unsafe {{ ::std::alloc::dealloc(p, ::std::alloc::Layout::new::<{ty}>()) }}
                 }}

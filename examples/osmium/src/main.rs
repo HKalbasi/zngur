@@ -3,6 +3,7 @@ use std::f64::consts::PI;
 use bitflags::bitflags;
 use itertools::iproduct;
 
+#[rustfmt::skip]
 mod generated;
 
 struct Reader(generated::ZngurCppOpaqueOwnedObject);

@@ -59,7 +59,7 @@ takes output as an output parameter `o: *mut u8`. It then reads arguments using 
 the result in `o` using `ptr::write`. So for example for `rustyline::Result<String>::unwrap` some code like this will be generated:
 
 ```Rust
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn __zngur___rustyline_Result__std_string_String__unwrap___x8s9s19m26s27s31s38y45n46m53y54(
     i0: *mut u8,
     o: *mut u8,
@@ -164,7 +164,7 @@ extern "C" {
     fn __zngur_crate_BlobStoreTrait_s13_metadata(data: *mut u8, i0: *mut u8, o: *mut u8);
 }
 
-#[no_mangle]
+#[unsafe(no_mangle)]
 pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
     data: *mut u8,
     destructor: extern "C" fn(*mut u8),

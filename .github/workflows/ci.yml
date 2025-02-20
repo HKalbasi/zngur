@@ -17,7 +17,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust nightly
-        run: rustup toolchain install nightly
+        run: |
+          rustup toolchain install nightly
+          rustup default nightly
+          rustup component add rustfmt
       - name: Install Clang 19
         run: brew install llvm@19
       - run: CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
@@ -34,7 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - name: Install Rust nightly
-        run: rustup toolchain install nightly
+        run: |
+          rustup toolchain install nightly
+          rustup default nightly
+          rustup component add rustfmt
       - name: Install osmium
         run: sudo apt install libosmium2-dev
       - run: cargo xtask ci

@@ -1,1 +1,2 @@
+#[rustfmt::skip]
 mod generated;
