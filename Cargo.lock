@@ -270,7 +270,7 @@ dependencies = [
 
 [[package]]
 name = "example-cxx_demo"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -279,11 +279,11 @@ dependencies = [
 
 [[package]]
 name = "example-memory_management"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "example-osmium"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "bitflags 2.4.0",
  "build-rs",
@@ -294,33 +294,33 @@ dependencies = [
 
 [[package]]
 name = "example-rayon"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "example-regression-test1"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "example-rustyline"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "rustyline",
 ]
 
 [[package]]
 name = "example-simple"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "example-tutorial"
-version = "0.5.0"
+version = "0.6.0"
 
 [[package]]
 name = "example-tutorial_cpp"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -881,7 +881,7 @@ checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
 
 [[package]]
 name = "xtask"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -896,14 +896,14 @@ checksum = "09041cd90cf85f7f8b2df60c646f853b7f535ce68f85244eb6731cf89fa498ec"
 
 [[package]]
 name = "zngur"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "zngur-generator",
 ]
 
 [[package]]
 name = "zngur-autozng"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -911,7 +911,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-cli"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "clap",
  "zngur",
@@ -919,14 +919,14 @@ dependencies = [
 
 [[package]]
 name = "zngur-def"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "itertools",
 ]
 
 [[package]]
 name = "zngur-generator"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "itertools",
  "zngur-def",
@@ -935,7 +935,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-parser"
-version = "0.5.0"
+version = "0.6.0"
 dependencies = [
  "ariadne",
  "chumsky",
