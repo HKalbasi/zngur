@@ -264,7 +264,7 @@ impl CppFnSig {
             state,
             "inline {output} {fn_name}({input_defs})
         {{
-            {output} o;
+            {output} o{{}};
             {deinits}
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
             {panic_handler}
@@ -311,6 +311,7 @@ impl CppFnDefinition {
     }
 }
 
+#[derive(Debug)]
 pub struct CppMethod {
     pub name: String,
     pub kind: ZngurMethodReceiver,
@@ -470,6 +471,7 @@ pub enum CppLayoutPolicy {
     OnlyByRef,
 }
 
+#[derive(Debug)]
 pub struct CppTypeDefinition {
     pub ty: CppType,
     pub layout: CppLayoutPolicy,
@@ -531,10 +533,24 @@ struct {ref_kind}< {ty} > {{
     {ref_kind}() {{
         data = 0;
     }}
+"#,
+                    ty = self.ty,
+                )?;
+                if !matches!(self.layout, CppLayoutPolicy::OnlyByRef) {
+                    writeln!(
+                        state,
+                        r#"
     {ref_kind}(const {ty}& t) {{
         ::rust::__zngur_internal_check_init< {ty} >(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
+"#,
+                        ty = self.ty,
+                    )?;
+                }
+                writeln!(
+                    state,
+                    r#"
 private:
     size_t data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
@@ -1222,7 +1238,10 @@ auto data_as_impl = &args;
                     )?;
                 }
             }
-            if !is_unsized && method.kind != ZngurMethodReceiver::Static {
+            if !is_unsized
+                && !matches!(self.layout, CppLayoutPolicy::OnlyByRef)
+                && method.kind != ZngurMethodReceiver::Static
+            {
                 let CppFnSig {
                     rust_link_name: _,
                     inputs,
@@ -1430,7 +1449,7 @@ namespace rust {
     }
 
     template<typename T>
-    inline void __zngur_internal_check_init(const T& t) {
+    inline void __zngur_internal_check_init(const T&) {
     }
 
     class ZngurCppOpaqueOwnedObject {
