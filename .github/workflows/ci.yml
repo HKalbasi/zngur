@@ -30,8 +30,8 @@ jobs:
       fail-fast: false
       matrix:
         cpp_compiler:
-          - clang++
-          - g++
+          - clang++ -Werror
+          - g++ -Werror
     env:
       CXX: ${{ matrix.cpp_compiler }}
     steps:
