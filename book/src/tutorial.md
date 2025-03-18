@@ -531,7 +531,7 @@ type ::std::fmt::Result {
 }
 
 type ::std::fmt::Formatter {
-    #layout(size = 64, align = 8);
+    #only_by_ref;
 
     fn write_str(&mut self, &str) -> ::std::fmt::Result;
 }
