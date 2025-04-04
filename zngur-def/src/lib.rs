@@ -86,7 +86,7 @@ pub struct ZngurMethodDetails {
 
 pub struct ZngurType {
     pub ty: RustType,
-    pub layout: LayoutPolicy,
+    pub layout: Option<LayoutPolicy>,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
@@ -102,6 +102,7 @@ pub struct ZngurTrait {
 #[derive(Default)]
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
+    pub impls: Vec<ZngurType>,
     pub traits: HashMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
@@ -158,6 +159,7 @@ pub enum RustType {
     Dyn(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
+    TypeVar(String),
 }
 
 impl RustType {
@@ -240,6 +242,7 @@ impl Display for RustType {
                 Ok(())
             }
             RustType::Slice(s) => write!(f, "[{s}]"),
+            RustType::TypeVar(s) => write!(f, "{s}"),
         }
     }
 }

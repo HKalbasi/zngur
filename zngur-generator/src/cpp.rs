@@ -484,22 +484,6 @@ pub struct CppTypeDefinition {
     pub cpp_ref: Option<String>,
 }
 
-impl Default for CppTypeDefinition {
-    fn default() -> Self {
-        Self {
-            ty: CppType::from("fill::me::you::forgot::it"),
-            layout: CppLayoutPolicy::OnlyByRef,
-            methods: vec![],
-            constructors: vec![],
-            wellknown_traits: vec![],
-            from_trait: None,
-            from_trait_ref: None,
-            cpp_value: None,
-            cpp_ref: None,
-        }
-    }
-}
-
 impl CppTypeDefinition {
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
         for ref_kind in ["RefMut", "Ref"] {

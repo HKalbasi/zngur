@@ -128,6 +128,7 @@ impl IntoCpp for RustType {
                         .collect(),
                 }
             }
+            RustType::TypeVar(_) => unreachable!(),
         }
     }
 }
