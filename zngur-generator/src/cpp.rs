@@ -853,7 +853,7 @@ private:
     {ty}() : drop_flag(false) {{ {alloc_heap} }}
     ~{ty}() {{
         if (drop_flag) {{
-            {drop_in_place}(&data[0]);
+            {drop_in_place}(data.data());
         }}
         {free_heap}
     }}
@@ -867,7 +867,7 @@ private:
         if (this != &other)
         {{
             if (drop_flag) {{
-                {drop_in_place}(&data[0]);
+                {drop_in_place}(data.data());
             }}
             this->drop_flag = other.drop_flag;
             {copy_data}
@@ -913,7 +913,7 @@ private:
                     state,
                     r#"
                     inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}(&data[0])).as_cpp< {cpp_ty} >();
+                        return (*{rust_link_name}(data.data())).as_cpp< {cpp_ty} >();
                     }}"#
                 )?;
             }
@@ -1036,7 +1036,7 @@ namespace rust {{
                 r#"
     template<>
     inline uint8_t* __zngur_internal_data_ptr< {ty} >({ty} const & t) {{
-        return const_cast<uint8_t*>(&t.data[0]);
+        return const_cast<uint8_t*>(t.data.data());
     }}
 }}
 "#,
@@ -1276,7 +1276,7 @@ auto data_as_impl = &args;
                 template<>
                 inline void zngur_pretty_print< {ty} >({ty} const& t) {{
                     ::rust::__zngur_internal_check_init< {ty} >(t);
-                    {pretty_print}(&t.data[0]);
+                    {pretty_print}(t.data.data());
                 }}
 
                 template<>
