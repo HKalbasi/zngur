@@ -1,0 +1,11 @@
+type ::std::vec::Vec<u64> {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+
+    fn new() -> ::std::vec::Vec<u64>;
+    fn push(&mut self, u64);
+}
+
+extern "C++" {
+    fn build_vec_by_push_cpp(u64) -> ::std::vec::Vec<u64>;
+}
