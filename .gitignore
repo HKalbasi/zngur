@@ -3,3 +3,5 @@ a.out
 .vscode
 compile_commands.json
 zngur-autozng/doc.json
+perf.data
+perf.data.old
