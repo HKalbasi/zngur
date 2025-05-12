@@ -3,6 +3,7 @@ use zngur::Zngur;
 fn main() {
     build::rerun_if_changed("main.zng");
     build::rerun_if_changed("impls.cpp");
+    build::rerun_if_env_changed("CXX");
 
     let cxx = std::env::var("CXX").unwrap_or("c++".to_owned());
 

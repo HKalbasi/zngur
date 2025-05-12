@@ -1,4 +1,4 @@
-use std::fmt::Write;
+use std::{collections::HashSet, fmt::Write};
 
 use itertools::Itertools;
 
@@ -22,6 +22,7 @@ impl IntoCpp for RustPathAndGenerics {
         } = self;
         let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {
+            rust_equivalent: None,
             path: CppPath::from_rust_path(path),
             generic_args: generics
                 .iter()
@@ -41,6 +42,7 @@ impl IntoCpp for RustTrait {
                 inputs,
                 output,
             } => CppType {
+                rust_equivalent: None,
                 path: CppPath::from(&*format!("rust::{name}")),
                 generic_args: inputs
                     .iter()
@@ -79,110 +81,77 @@ impl IntoCpp for RustType {
                 _ => None,
             }
         }
-        if let Some(builtin) = for_builtin(self) {
-            return builtin;
-        }
-        match self {
-            RustType::Primitive(s) => match s {
-                PrimitiveRustType::Bool => CppType::from("rust::Bool"),
-                PrimitiveRustType::Str => CppType::from("rust::Str"),
-                _ => unreachable!(),
-            },
-            RustType::Boxed(t) => CppType {
-                path: CppPath::from("rust::Box"),
-                generic_args: vec![t.into_cpp()],
-            },
-            RustType::Ref(m, t) => CppType {
-                path: match m {
-                    Mutability::Mut => CppPath::from("rust::RefMut"),
-                    Mutability::Not => CppPath::from("rust::Ref"),
+
+        fn inner(this: &RustType) -> CppType {
+            if let Some(builtin) = for_builtin(this) {
+                return builtin;
+            }
+            match this {
+                RustType::Primitive(s) => match s {
+                    PrimitiveRustType::Bool => CppType::from("rust::Bool"),
+                    PrimitiveRustType::Str => CppType::from("rust::Str"),
+                    _ => unreachable!(),
                 },
-                generic_args: vec![t.into_cpp()],
-            },
-            RustType::Slice(s) => CppType {
-                path: CppPath::from("rust::Slice"),
-                generic_args: vec![s.into_cpp()],
-            },
-            RustType::Raw(_, _) => todo!(),
-            RustType::Adt(pg) => pg.into_cpp(),
-            RustType::Tuple(v) => {
-                if v.is_empty() {
-                    return CppType::from("rust::Unit");
+                RustType::Boxed(t) => CppType {
+                    rust_equivalent: None,
+                    path: CppPath::from("rust::Box"),
+                    generic_args: vec![t.into_cpp()],
+                },
+                RustType::Ref(m, t) => CppType {
+                    rust_equivalent: None,
+                    path: match m {
+                        Mutability::Mut => CppPath::from("rust::RefMut"),
+                        Mutability::Not => CppPath::from("rust::Ref"),
+                    },
+                    generic_args: vec![t.into_cpp()],
+                },
+                RustType::Slice(s) => CppType {
+                    rust_equivalent: None,
+                    path: CppPath::from("rust::Slice"),
+                    generic_args: vec![s.into_cpp()],
+                },
+                RustType::Raw(_, _) => todo!(),
+                RustType::Adt(pg) => pg.into_cpp(),
+                RustType::Tuple(v) => {
+                    if v.is_empty() {
+                        return CppType::from("rust::Unit");
+                    }
+                    CppType {
+                        rust_equivalent: None,
+                        path: CppPath::from("rust::Tuple"),
+                        generic_args: v.into_iter().map(|x| x.into_cpp()).collect(),
+                    }
                 }
-                CppType {
-                    path: CppPath::from("rust::Tuple"),
-                    generic_args: v.into_iter().map(|x| x.into_cpp()).collect(),
-                }
-            }
-            RustType::Dyn(tr, marker_bounds) => {
-                let tr_as_cpp_type = tr.into_cpp();
-                CppType {
-                    path: CppPath::from("rust::Dyn"),
-                    generic_args: [tr_as_cpp_type]
-                        .into_iter()
-                        .chain(
-                            marker_bounds
-                                .iter()
-                                .map(|x| CppType::from(&*format!("rust::{x}"))),
-                        )
-                        .collect(),
+                RustType::Dyn(tr, marker_bounds) => {
+                    let tr_as_cpp_type = tr.into_cpp();
+                    CppType {
+                        rust_equivalent: None,
+                        path: CppPath::from("rust::Dyn"),
+                        generic_args: [tr_as_cpp_type]
+                            .into_iter()
+                            .chain(
+                                marker_bounds
+                                    .iter()
+                                    .map(|x| CppType::from(&*format!("rust::{x}"))),
+                            )
+                            .collect(),
+                    }
                 }
             }
         }
+        let mut r = inner(self);
+        r.rust_equivalent = Some(self.clone());
+        r
     }
 }
 
-pub struct RustFile {
+pub struct RustFile<'a> {
+    unsized_types: &'a HashSet<RustType>,
     pub text: String,
     pub panic_to_exception: bool,
 }
 
-impl Default for RustFile {
-    fn default() -> Self {
-        Self {
-            text: r#"
-#[allow(dead_code)]
-mod zngur_types {
-    pub struct ZngurCppOpaqueBorrowedObject(());
-
-    #[repr(C)]
-    pub struct ZngurCppOpaqueOwnedObject {
-        data: *mut u8,
-        destructor: extern "C" fn(*mut u8),
-    }
-
-    impl ZngurCppOpaqueOwnedObject {
-        pub unsafe fn new(
-            data: *mut u8,
-            destructor: extern "C" fn(*mut u8),            
-        ) -> Self {
-            Self { data, destructor }
-        }
-
-        pub fn ptr(&self) -> *mut u8 {
-            self.data
-        }
-    }
-
-    impl Drop for ZngurCppOpaqueOwnedObject {
-        fn drop(&mut self) {
-            (self.destructor)(self.data)
-        }
-    }
-}
-
-#[allow(unused_imports)]
-pub use zngur_types::ZngurCppOpaqueOwnedObject;
-#[allow(unused_imports)]
-pub use zngur_types::ZngurCppOpaqueBorrowedObject;
-"#
-            .to_owned(),
-            panic_to_exception: false,
-        }
-    }
-}
-
-impl Write for RustFile {
+impl Write for RustFile<'_> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.text.write_str(s)
     }
@@ -234,15 +203,65 @@ pub struct ConstructorMangledNames {
     pub match_check: String,
 }
 
-impl RustFile {
-    fn call_cpp_function(&mut self, name: &str, inputs: usize) {
-        for n in 0..inputs {
-            wln!(self, "let mut i{n} = ::core::mem::MaybeUninit::new(i{n});")
+impl RustFile<'_> {
+    pub fn new<'a>(unsized_types: &'a HashSet<RustType>) -> RustFile<'a> {
+        RustFile {
+            unsized_types,
+            text: r#"
+    #[allow(dead_code)]
+    mod zngur_types {
+        pub struct ZngurCppOpaqueBorrowedObject(());
+    
+        #[repr(C)]
+        pub struct ZngurCppOpaqueOwnedObject {
+            data: *mut u8,
+            destructor: extern "C" fn(*mut u8),
+        }
+    
+        impl ZngurCppOpaqueOwnedObject {
+            pub unsafe fn new(
+                data: *mut u8,
+                destructor: extern "C" fn(*mut u8),            
+            ) -> Self {
+                Self { data, destructor }
+            }
+    
+            pub fn ptr(&self) -> *mut u8 {
+                self.data
+            }
+        }
+    
+        impl Drop for ZngurCppOpaqueOwnedObject {
+            fn drop(&mut self) {
+                (self.destructor)(self.data)
+            }
+        }
+    }
+    
+    #[allow(unused_imports)]
+    pub use zngur_types::ZngurCppOpaqueOwnedObject;
+    #[allow(unused_imports)]
+    pub use zngur_types::ZngurCppOpaqueBorrowedObject;
+    "#
+            .to_owned(),
+            panic_to_exception: false,
+        }
+    }
+
+    fn call_cpp_function(&mut self, name: &str, inputs: &[RustType]) {
+        for (n, ty) in inputs.iter().enumerate() {
+            match ty {
+                RustType::Primitive(_) => (),
+                _ => wln!(self, "let mut i{n} = ::core::mem::MaybeUninit::new(i{n});"),
+            }
         }
         wln!(self, "let mut r = ::core::mem::MaybeUninit::uninit();");
         w!(self, "{name}");
-        for n in 0..inputs {
-            w!(self, "i{n}.as_mut_ptr() as *mut u8, ");
+        for (n, ty) in inputs.iter().enumerate() {
+            match ty {
+                RustType::Primitive(_) => w!(self, "i{n}, "),
+                _ => w!(self, "i{n}.as_mut_ptr() as *mut u8, "),
+            }
         }
         wln!(self, "r.as_mut_ptr() as *mut u8);");
         wln!(self, "r.assume_init()");
@@ -278,16 +297,13 @@ impl RustFile {
         wln!(self, r#"unsafe extern "C" {{"#);
         for method in &tr.methods {
             let name = mangle_name(&tr.tr.to_string()) + "_" + &method.name;
-            wln!(
-                self,
-                r#"fn {name}(data: *mut u8, {} o: *mut u8);"#,
-                method
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, _)| format!("i{n}: *mut u8,"))
-                    .join(" ")
-            );
+            let inputs = method
+                .inputs
+                .iter()
+                .enumerate()
+                .map(|(n, ty)| self.generate_rust_call_type(n, ty))
+                .join(" ");
+            wln!(self, r#"fn {name}(data: *mut u8, {inputs} o: *mut u8);"#,);
             method_mangled_name.push(name);
         }
         wln!(self, "}}");
@@ -354,7 +370,7 @@ pub extern "C" fn {mangled_name}(
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
             wln!(self, "            let data = self.value.ptr();");
-            self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
+            self.call_cpp_function(&format!("{rust_link_name}(data, "), &method.inputs);
             wln!(self, "        }} }}");
         }
         wln!(
@@ -415,7 +431,7 @@ pub extern "C" fn {mangled_name}(
                 self,
                 "            let data = ::std::mem::transmute::<_, *mut u8>(self);"
             );
-            self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
+            self.call_cpp_function(&format!("{rust_link_name}(data, "), &method.inputs);
             wln!(self, "        }} }}");
         }
         wln!(
@@ -467,7 +483,7 @@ pub extern "C" fn {mangled_name}(
                 .map(|(n, ty)| format!("i{n}: {ty}"))
                 .join(", "),
         );
-        self.call_cpp_function("call(data, ", inputs.len());
+        self.call_cpp_function("call(data, ", &inputs);
         wln!(
             self,
             r#"
@@ -487,8 +503,8 @@ pub extern "C" fn {mangled_name}(
 #[unsafe(no_mangle)]
 pub extern "C" fn {constructor}("#
         );
-        for name in 0..fields.len() {
-            w!(self, "f_{name}: *mut u8, ");
+        for (name, ty) in fields.iter().enumerate() {
+            self.generate_rust_call_type(name, ty);
         }
         w!(
             self,
@@ -496,7 +512,7 @@ pub extern "C" fn {constructor}("#
     ::std::ptr::write(o as *mut _, ("#
         );
         for (name, ty) in fields.iter().enumerate() {
-            w!(self, "::std::ptr::read(f_{name} as *mut {ty}), ");
+            self.generate_rust_call_value_from_argument(name, ty);
         }
         wln!(self, ")) }} }}");
         constructor
@@ -595,7 +611,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             }
             None => w!(self, r#"impl {owner} {{"#),
         }
-        for (mn, method) in mangled_names.iter().zip(methods) {
+        for (_mn, method) in mangled_names.iter().zip(methods) {
             if tr.is_none() {
                 w!(self, "pub ");
             }
@@ -606,20 +622,20 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
                 ZngurMethodReceiver::Ref(Mutability::Not) => w!(self, "&self, "),
                 ZngurMethodReceiver::Move => w!(self, "self, "),
             }
-            let input_offset = if method.receiver == ZngurMethodReceiver::Static {
-                0
-            } else {
-                1
-            };
-            for (ty, n) in method.inputs.iter().zip(input_offset..) {
-                w!(self, "i{n}: {ty}, ");
-            }
-            wln!(self, ") -> {} {{ unsafe {{", method.output);
-            if method.receiver != ZngurMethodReceiver::Static {
-                wln!(self, "let i0 = self;");
-            }
-            self.call_cpp_function(&format!("{mn}("), method.inputs.len() + input_offset);
-            wln!(self, "}} }}");
+            // let input_offset = if method.receiver == ZngurMethodReceiver::Static {
+            //     0
+            // } else {
+            //     1
+            // };
+            // for (ty, n) in method.inputs.iter().zip(input_offset..) {
+            //     w!(self, "i{n}: {ty}, ");
+            // }
+            // wln!(self, ") -> {} {{ unsafe {{", method.output);
+            // if method.receiver != ZngurMethodReceiver::Static {
+            //     wln!(self, "let i0 = self;");
+            // }
+            // self.call_cpp_function(&format!("{mn}("), method.inputs.len() + input_offset);
+            // wln!(self, "}} }}");
         }
         w!(self, r#"}}"#);
         mangled_names
@@ -637,8 +653,9 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             r#"
 unsafe extern "C" {{ fn {mangled_name}("#
         );
-        for (n, _) in inputs.iter().enumerate() {
-            w!(self, "i{n}: *mut u8, ");
+        for (n, ty) in inputs.iter().enumerate() {
+            let gty = self.generate_rust_call_type(n, ty);
+            w!(self, "{gty}");
         }
         wln!(self, r#"o: *mut u8); }}"#);
         w!(
@@ -650,7 +667,7 @@ pub(crate) fn {rust_name}("#
             w!(self, "i{n}: {ty}, ");
         }
         wln!(self, ") -> {output} {{ unsafe {{");
-        self.call_cpp_function(&format!("{mangled_name}("), inputs.len());
+        self.call_cpp_function(&format!("{mangled_name}("), &inputs);
         wln!(self, "}} }}");
         mangled_name
     }
@@ -689,8 +706,9 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
 #[unsafe(no_mangle)]
 pub extern "C" fn {mangled_name}("#
         );
-        for n in 0..inputs.len() {
-            w!(self, "i{n}: *mut u8, ");
+        for (n, ty) in inputs.iter().enumerate() {
+            let gty = self.generate_rust_call_type(n, ty);
+            w!(self, "{gty}");
         }
         wln!(self, "o: *mut u8) {{ unsafe {{");
         self.wrap_in_catch_unwind(|this| {
@@ -709,7 +727,7 @@ pub extern "C" fn {mangled_name}("#
                 w!(this, "&");
             }
             for (n, ty) in inputs.iter().enumerate() {
-                w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");
+                this.generate_rust_call_value_from_argument(n, ty);
             }
             wln!(this, "));");
         });
@@ -858,6 +876,26 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 }
             }
             LayoutPolicy::OnlyByRef => CppLayoutPolicy::OnlyByRef,
+        }
+    }
+
+    fn generate_rust_call_value_from_argument(&mut self, name: usize, ty: &RustType) {
+        match ty {
+            RustType::Primitive(_) => w!(self, "i{name},"),
+            RustType::Ref(_, inner) if !self.unsized_types.contains(inner) => {
+                w!(self, "::std::mem::transmute::<_, {ty}>(i{name}),")
+            }
+            _ => w!(self, "::std::ptr::read(i{name} as *mut {ty}), "),
+        }
+    }
+
+    fn generate_rust_call_type(&mut self, name: usize, ty: &RustType) -> String {
+        match ty {
+            RustType::Primitive(_) => format!("i{name}: {ty},"),
+            RustType::Ref(_, inner) if !self.unsized_types.contains(inner) => {
+                format!("i{name}: *mut ::std::ffi::c_void,")
+            }
+            _ => format!("i{name}: *mut u8, "),
         }
     }
 }

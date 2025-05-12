@@ -1,11 +1,11 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fmt::{Display, Write},
     iter,
 };
 
 use itertools::Itertools;
-use zngur_def::{Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
+use zngur_def::{Mutability, RustTrait, RustType, ZngurField, ZngurMethodReceiver};
 
 use crate::{ZngurWellknownTraitData, rust::IntoCpp};
 
@@ -75,6 +75,7 @@ impl Display for CppPath {
 
 #[derive(Debug)]
 pub struct CppType {
+    pub rust_equivalent: Option<RustType>,
     pub path: CppPath,
     pub generic_args: Vec<CppType>,
 }
@@ -82,6 +83,10 @@ pub struct CppType {
 impl CppType {
     pub fn into_ref(self) -> CppType {
         CppType {
+            rust_equivalent: self
+                .rust_equivalent
+                .clone()
+                .map(|r| RustType::Ref(Mutability::Not, Box::new(r))),
             path: CppPath::from("rust::Ref"),
             generic_args: vec![self],
         }
@@ -114,6 +119,57 @@ impl CppType {
             }
             writeln!(state, "struct {};", self.path.name())
         })
+    }
+
+    fn generate_rust_call_argument_type(&self, state: &mut State, n: usize) -> std::fmt::Result {
+        match self
+            .rust_equivalent
+            .as_ref()
+            .expect("Missing rust type in rust call")
+        {
+            RustType::Primitive(_) => write!(state, "{self} i{n},")?,
+            RustType::Ref(_, inner) if !state.unsized_types.contains(inner) => {
+                write!(state, "void* i{n},")?
+            }
+            _ => write!(state, "uint8_t* i{n},")?,
+        }
+        Ok(())
+    }
+
+    fn generate_rust_call_argument_move_from_rust(
+        &self,
+        n: usize,
+        unsized_types: &HashSet<RustType>,
+    ) -> String {
+        match self
+            .rust_equivalent
+            .as_ref()
+            .expect("Missing rust type in rust call")
+        {
+            RustType::Primitive(_) => format!("i{n}"),
+            RustType::Ref(_, inner) if !unsized_types.contains(inner) => {
+                format!("reinterpret_cast<void*>(i{n}.data)")
+            }
+            _ => format!("::rust::__zngur_internal_move_from_rust< {self} >(i{n})"),
+        }
+    }
+
+    fn generate_rust_call_argument_pass_to_rust(
+        &self,
+        n: usize,
+        unsized_types: &HashSet<RustType>,
+    ) -> String {
+        match self
+            .rust_equivalent
+            .as_ref()
+            .expect("Missing rust type in rust call")
+        {
+            RustType::Primitive(_) => format!("i{n}, "),
+            RustType::Ref(_, inner) if !unsized_types.contains(inner) => {
+                format!("reinterpret_cast<void*>(i{n}.data), ")
+            }
+            _ => format!("::rust::__zngur_internal_data_ptr(i{n}), "),
+        }
     }
 }
 
@@ -164,12 +220,14 @@ impl From<&str> for CppType {
         let value = value.trim();
         match value.split_once('<') {
             None => CppType {
+                rust_equivalent: None,
                 path: CppPath::from(value),
                 generic_args: vec![],
             },
             Some((path, generics)) => {
                 let generics = generics.strip_suffix('>').unwrap();
                 CppType {
+                    rust_equivalent: None,
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
                 }
@@ -178,12 +236,13 @@ impl From<&str> for CppType {
     }
 }
 
-struct State {
+struct State<'a> {
+    unsized_types: &'a HashSet<RustType>,
     text: String,
     panic_to_exception: bool,
 }
 
-impl State {
+impl State<'_> {
     fn panic_handler(&self) -> String {
         if self.panic_to_exception {
             r#"
@@ -199,7 +258,7 @@ impl State {
     }
 }
 
-impl Write for State {
+impl Write for State<'_> {
     fn write_str(&mut self, s: &str) -> std::fmt::Result {
         self.text += s;
         Ok(())
@@ -224,8 +283,8 @@ pub struct CppFnSig {
 impl CppFnSig {
     fn emit_rust_link(&self, state: &mut State) -> std::fmt::Result {
         write!(state, "void {}(", self.rust_link_name)?;
-        for n in 0..self.inputs.len() {
-            write!(state, "uint8_t* i{n},")?;
+        for (n, ty) in self.inputs.iter().enumerate() {
+            ty.generate_rust_call_argument_type(state, n)?;
         }
         write!(state, "uint8_t* o)")?;
         Ok(())
@@ -276,8 +335,10 @@ impl CppFnSig {
                 .enumerate()
                 .map(|(n, ty)| format!("{ty} i{n}"))
                 .join(", "),
-            input_args = (0..inputs.len())
-                .map(|n| format!("::rust::__zngur_internal_data_ptr(i{n}), "))
+            input_args = inputs
+                .iter()
+                .enumerate()
+                .map(|(n, ty)| ty.generate_rust_call_argument_pass_to_rust(n, state.unsized_types))
                 .join(""),
             panic_handler = state.panic_handler(),
             deinits = (0..inputs.len())
@@ -444,7 +505,10 @@ impl CppTraitDefinition {
                             .iter()
                             .enumerate()
                             .map(|(n, ty)| {
-                                format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
+                                ty.generate_rust_call_argument_move_from_rust(
+                                    n,
+                                    state.unsized_types,
+                                )
                             })
                             .join(", ")
                     )?;
@@ -610,7 +674,7 @@ struct {ref_kind}< {ty} > {{
                 writeln!(
                     state,
                     r#"
-private:
+public:
     size_t data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
     friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
@@ -1219,7 +1283,9 @@ namespace rust {{
                     .inputs
                     .iter()
                     .enumerate()
-                    .map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust< {x} >(i{n})"))
+                    .map(|(n, ty)| {
+                        ty.generate_rust_call_argument_move_from_rust(n, state.unsized_types)
+                    })
                     .join(", ");
                 let uint8_t_ix = sig
                     .inputs
@@ -1887,7 +1953,7 @@ namespace rust {
                     .iter()
                     .enumerate()
                     .map(|(n, ty)| {
-                        format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
+                        ty.generate_rust_call_argument_move_from_rust(n, state.unsized_types)
                     })
                     .join(", "),
             )?;
@@ -1912,9 +1978,8 @@ namespace rust {
                     sig.inputs
                         .iter()
                         .enumerate()
-                        .map(|(n, ty)| {
-                            format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
-                        })
+                        .map(|(n, ty)| ty
+                            .generate_rust_call_argument_move_from_rust(n, state.unsized_types))
                         .join(", "),
                 )?;
                 writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
@@ -1925,12 +1990,14 @@ namespace rust {
         Ok(())
     }
 
-    pub fn render(self) -> (String, Option<String>) {
+    pub fn render(self, unsized_types: &HashSet<RustType>) -> (String, Option<String>) {
         let mut h_file = State {
+            unsized_types,
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
         };
         let mut cpp_file = State {
+            unsized_types,
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
         };
