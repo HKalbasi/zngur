@@ -139,14 +139,11 @@ impl RustTrait {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum PrimitiveRustType {
+pub enum CommonPrimitiveType {
     Uint(u32),
     Int(u32),
     Float(u32),
     Usize,
-    Bool,
-    Str,
-    ZngurCppOpaqueOwnedObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -158,7 +155,10 @@ pub struct RustPathAndGenerics {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustType {
-    Primitive(PrimitiveRustType),
+    Primitive(CommonPrimitiveType),
+    Bool,
+    Str,
+    ZngurCppOpaqueOwnedObject,
     Ref(Mutability, Box<RustType>),
     Raw(Mutability, Box<RustType>),
     Boxed(Box<RustType>),
@@ -223,16 +223,16 @@ impl Display for RustType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RustType::Primitive(s) => match s {
-                PrimitiveRustType::Uint(s) => write!(f, "u{s}"),
-                PrimitiveRustType::Int(s) => write!(f, "i{s}"),
-                PrimitiveRustType::Float(s) => write!(f, "f{s}"),
-                PrimitiveRustType::Usize => write!(f, "usize"),
-                PrimitiveRustType::Bool => write!(f, "bool"),
-                PrimitiveRustType::Str => write!(f, "str"),
-                PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
-                    write!(f, "ZngurCppOpaqueOwnedObject")
-                }
+                CommonPrimitiveType::Uint(s) => write!(f, "u{s}"),
+                CommonPrimitiveType::Int(s) => write!(f, "i{s}"),
+                CommonPrimitiveType::Float(s) => write!(f, "f{s}"),
+                CommonPrimitiveType::Usize => write!(f, "usize"),
             },
+            RustType::Bool => write!(f, "bool"),
+            RustType::Str => write!(f, "str"),
+            RustType::ZngurCppOpaqueOwnedObject => {
+                write!(f, "ZngurCppOpaqueOwnedObject")
+            }
             RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
             RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),
             RustType::Raw(Mutability::Not, ty) => write!(f, "*const {ty}"),

@@ -45,7 +45,13 @@ impl ZngurGenerator {
         });
         let mut cpp_file = CppFile::default();
         cpp_file.additional_includes = zng.additional_includes;
-        let mut rust_file = RustFile::default();
+        let unsized_types = zng
+            .types
+            .iter()
+            .filter(|x| x.wellknown_traits.contains(&ZngurWellknownTrait::Unsized))
+            .map(|x| x.ty.clone())
+            .collect();
+        let mut rust_file = RustFile::new(&unsized_types);
         cpp_file.trait_defs = zng
             .traits
             .iter()
@@ -262,7 +268,7 @@ impl ZngurGenerator {
                     .collect(),
             });
         }
-        let (h, cpp) = cpp_file.render();
+        let (h, cpp) = cpp_file.render(&unsized_types);
         (rust_file.text, h, cpp)
     }
 }
