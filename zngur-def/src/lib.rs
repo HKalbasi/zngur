@@ -50,6 +50,13 @@ pub struct ZngurConstructor {
     pub inputs: Vec<(String, RustType)>,
 }
 
+#[derive(Debug)]
+pub struct ZngurField {
+    pub name: String,
+    pub ty: RustType,
+    pub offset: usize,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZngurWellknownTrait {
     Debug,
@@ -90,6 +97,7 @@ pub struct ZngurType {
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
+    pub fields: Vec<ZngurField>,
     pub cpp_value: Option<(String, String)>,
     pub cpp_ref: Option<String>,
 }

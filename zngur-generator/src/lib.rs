@@ -39,6 +39,7 @@ impl ZngurGenerator {
             wellknown_traits: vec![ZngurWellknownTrait::Copy],
             methods: vec![],
             constructors: vec![],
+            fields: vec![],
             cpp_value: None,
             cpp_ref: None,
         });
@@ -69,6 +70,7 @@ impl ZngurGenerator {
             }
             let mut cpp_methods = vec![];
             let mut constructors = vec![];
+            let mut fields = vec![];
             let mut wellknown_traits = vec![];
             for constructor in ty_def.constructors {
                 match constructor.name {
@@ -107,6 +109,10 @@ impl ZngurGenerator {
                         });
                     }
                 }
+            }
+            for field in ty_def.fields {
+                rust_file.add_field_assertions(&field, &ty_def.ty);
+                fields.push(field);
             }
             if let RustType::Tuple(fields) = &ty_def.ty {
                 if !fields.is_empty() {
@@ -158,6 +164,7 @@ impl ZngurGenerator {
                 ty: ty_def.ty.into_cpp(),
                 layout: rust_file.add_layout_policy_shim(&ty_def.ty, ty_def.layout),
                 constructors,
+                fields,
                 methods: cpp_methods,
                 wellknown_traits,
                 cpp_value: ty_def.cpp_value.map(|(field, cpp_type)| {

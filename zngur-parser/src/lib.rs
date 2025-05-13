@@ -6,8 +6,9 @@ use itertools::{Either, Itertools};
 
 use zngur_def::{
     LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
-    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurFile, ZngurFn, ZngurMethod,
-    ZngurMethodDetails, ZngurMethodReceiver, ZngurTrait, ZngurType, ZngurWellknownTrait,
+    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFile, ZngurFn,
+    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurTrait, ZngurType,
+    ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -120,6 +121,11 @@ enum ParsedTypeItem<'a> {
         name: Option<&'a str>,
         args: ParsedConstructorArgs<'a>,
     },
+    Field {
+        name: String,
+        ty: ParsedRustType<'a>,
+        offset: usize,
+    },
     Method {
         data: ParsedMethod<'a>,
         use_path: Option<ParsedPath<'a>>,
@@ -179,6 +185,7 @@ impl ParsedItem<'_> {
 
                 let mut methods = vec![];
                 let mut constructors = vec![];
+                let mut fields = vec![];
                 let mut wellknown_traits = vec![];
                 let mut layout = None;
                 let mut layout_span = None;
@@ -245,6 +252,13 @@ impl ParsedItem<'_> {
                                         .collect(),
                                 },
                             })
+                        }
+                        ParsedTypeItem::Field { name, ty, offset } => {
+                            fields.push(ZngurField {
+                                name: name.to_owned(),
+                                ty: ty.to_zngur(base),
+                                offset,
+                            });
                         }
                         ParsedTypeItem::Method {
                             data,
@@ -330,6 +344,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                     methods,
                     wellknown_traits: wt,
                     constructors,
+                    fields,
                     cpp_value,
                     cpp_ref,
                 });
@@ -1008,6 +1023,27 @@ fn type_item<'a>()
             .then(constructor_args)
             .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
         );
+        let field = just(Token::Ident("field")).ignore_then(
+            (select! {
+                Token::Ident(c) => c.to_owned(),
+                Token::Number(c) => c.to_string(),
+            })
+            .then(
+                just(Token::Ident("offset"))
+                    .then(just(Token::Eq))
+                    .ignore_then(select! {
+                        Token::Number(c) => c,
+                    })
+                    .then(
+                        just(Token::Comma)
+                            .then(just(Token::KwType))
+                            .then(just(Token::Eq))
+                            .ignore_then(rust_type()),
+                    )
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+            )
+            .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
+        );
         let cpp_value = just(Token::Sharp)
             .then(just(Token::Ident("cpp_value")))
             .ignore_then(select! {
@@ -1030,6 +1066,7 @@ fn type_item<'a>()
             layout,
             traits,
             constructor,
+            field,
             cpp_value,
             cpp_ref,
             method()

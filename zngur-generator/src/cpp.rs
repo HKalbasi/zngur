@@ -5,7 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use zngur_def::{Mutability, RustTrait, ZngurMethodReceiver};
+use zngur_def::{Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
 
 use crate::{ZngurWellknownTraitData, rust::IntoCpp};
 
@@ -477,6 +477,7 @@ pub struct CppTypeDefinition {
     pub layout: CppLayoutPolicy,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
+    pub fields: Vec<ZngurField>,
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
@@ -491,6 +492,7 @@ impl Default for CppTypeDefinition {
             layout: CppLayoutPolicy::OnlyByRef,
             methods: vec![],
             constructors: vec![],
+            fields: vec![],
             wellknown_traits: vec![],
             from_trait: None,
             from_trait_ref: None,
@@ -501,6 +503,54 @@ impl Default for CppTypeDefinition {
 }
 
 impl CppTypeDefinition {
+    fn emit_field_specialization(&self, state: &mut State) -> std::fmt::Result {
+        for field_kind in ["FieldOwned", "FieldRef", "FieldRefMut"] {
+            writeln!(
+                state,
+                r#"
+    namespace rust {{
+    template<size_t OFFSET>
+    struct {field_kind}< {ty}, OFFSET > {{
+                "#,
+                ty = self.ty,
+            )?;
+            for field in &self.fields {
+                writeln!(
+                    state,
+                    "[[no_unique_address]] {field_kind}<{}, OFFSET + {}> {};",
+                    field.ty.into_cpp(),
+                    field.offset,
+                    cpp_handle_field_name(&field.name),
+                )?;
+            }
+            for method in &self.methods {
+                if let ZngurMethodReceiver::Ref(m) = method.kind {
+                    if m == Mutability::Mut && field_kind == "FieldRef" {
+                        continue;
+                    }
+                    let CppFnSig {
+                        rust_link_name: _,
+                        inputs,
+                        output,
+                    } = &method.sig;
+                    writeln!(
+                        state,
+                        "{output} {fn_name}({input_defs}) const;",
+                        fn_name = &method.name,
+                        input_defs = inputs
+                            .iter()
+                            .skip(1)
+                            .enumerate()
+                            .map(|(n, ty)| format!("{ty} i{n}"))
+                            .join(", "),
+                    )?;
+                }
+            }
+            writeln!(state, "}};\n}}")?;
+        }
+        Ok(())
+    }
+
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
         for ref_kind in ["RefMut", "Ref"] {
             let is_unsized = self
@@ -519,7 +569,7 @@ struct {ref_kind}< {ty} > {{
 private:
     ::std::array<size_t, 2> data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
-    friend void ::rust::zngur_pretty_print< ::rust::{ref_kind}< {ty} > >(::rust::{ref_kind}< {ty} > const& t);
+    friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
 "#,
                     ty = self.ty,
                 )?;
@@ -548,13 +598,22 @@ struct {ref_kind}< {ty} > {{
                         ty = self.ty,
                     )?;
                 }
+                for field in &self.fields {
+                    writeln!(
+                        state,
+                        "[[no_unique_address]] ::rust::Field{ref_kind}<{}, {}> {};",
+                        field.ty.into_cpp(),
+                        field.offset,
+                        cpp_handle_field_name(&field.name),
+                    )?;
+                }
                 writeln!(
                     state,
                     r#"
 private:
     size_t data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
-    friend void ::rust::zngur_pretty_print< ::rust::{ref_kind}< {ty} > >(::rust::{ref_kind}< {ty} > const& t);
+    friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
 "#,
                     ty = self.ty,
                 )?;
@@ -570,6 +629,28 @@ private:
     "#,
                     ty = self.ty,
                 )?;
+                if !is_unsized {
+                    writeln!(
+                        state,
+                        r#"
+    template<size_t OFFSET>
+    Ref(const FieldOwned< {ty}, OFFSET >& f) {{
+        data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }}
+
+    template<size_t OFFSET>
+    Ref(const FieldRef< {ty}, OFFSET >& f) {{
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }}
+
+    template<size_t OFFSET>
+    Ref(const FieldRefMut< {ty}, OFFSET >& f) {{
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }}
+    "#,
+                        ty = self.ty,
+                    )?;
+                }
             } else {
                 writeln!(
                     state,
@@ -578,6 +659,23 @@ private:
     "#,
                     ty = self.ty,
                 )?;
+                if !is_unsized {
+                    writeln!(
+                        state,
+                        r#"
+    template<size_t OFFSET>
+    RefMut(const FieldOwned< {ty}, OFFSET >& f) {{
+        data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }}
+
+    template<size_t OFFSET>
+    RefMut(const FieldRefMut< {ty}, OFFSET >& f) {{
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }}
+    "#,
+                        ty = self.ty,
+                    )?;
+                }
             }
             match &self.from_trait_ref {
                 Some(RustTrait::Fn { inputs, output, .. }) => {
@@ -782,7 +880,7 @@ private:
     friend void ::rust::__zngur_internal_check_init< {ty} >(const {ty}& t);
     friend void ::rust::__zngur_internal_assume_init< {ty} >({ty}& t);
     friend void ::rust::__zngur_internal_assume_deinit< {ty} >({ty}& t);
-    friend void ::rust::zngur_pretty_print< {ty} >({ty} const& t);
+    friend ::rust::ZngurPrettyPrinter< {ty} >;
 "#,
                         ty = self.ty,
                     )?;
@@ -973,6 +1071,15 @@ private:
                         .join(", "),
                 )?;
             }
+            for field in &self.fields {
+                writeln!(
+                    state,
+                    "[[no_unique_address]] ::rust::FieldOwned<{}, {}> {};",
+                    field.ty.into_cpp(),
+                    field.offset,
+                    cpp_handle_field_name(&field.name),
+                )?;
+            }
             writeln!(state, "}};")
         })?;
         let ty = &self.ty;
@@ -1058,7 +1165,9 @@ namespace rust {{
 "#,
             )?;
         }
-        self.emit_ref_specialization(state)
+        self.emit_ref_specialization(state)?;
+        self.emit_field_specialization(state)?;
+        Ok(())
     }
 
     fn emit_cpp_fn_defs(
@@ -1212,6 +1321,36 @@ auto data_as_impl = &args;
                     Mutability::Mut => &["RefMut"],
                     Mutability::Not => &["Ref", "RefMut"],
                 };
+                let field_kinds: &[&str] = match m {
+                    Mutability::Mut => &["FieldOwned", "FieldRefMut"],
+                    Mutability::Not => &["FieldOwned", "FieldRefMut", "FieldRef"],
+                };
+                for field_kind in field_kinds {
+                    let CppFnSig {
+                        rust_link_name: _,
+                        inputs,
+                        output,
+                    } = &method.sig;
+                    writeln!(
+                        state,
+                        "template<size_t OFFSET>
+                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const
+                {{
+                    return {fn_name}(*this{input_args});
+                }}",
+                        ty = &self.ty,
+                        method_name = &method.name,
+                        input_defs = inputs
+                            .iter()
+                            .skip(1)
+                            .enumerate()
+                            .map(|(n, ty)| format!("{ty} i{n}"))
+                            .join(", "),
+                        input_args = (0..inputs.len() - 1)
+                            .map(|n| format!(", ::std::move(i{n})"))
+                            .join("")
+                    )?;
+                }
                 for ref_kind in ref_kinds {
                     let CppFnSig {
                         rust_link_name: _,
@@ -1290,22 +1429,49 @@ auto data_as_impl = &args;
                             r#"
             namespace rust {{
                 template<>
-                inline void zngur_pretty_print< {ty} >({ty} const& t) {{
-                    ::rust::__zngur_internal_check_init< {ty} >(t);
-                    {pretty_print}(&t.data[0]);
-                }}
+                struct ZngurPrettyPrinter< {ty} > {{
+                    static inline void print({ty} const& t) {{
+                        ::rust::__zngur_internal_check_init< {ty} >(t);
+                        {pretty_print}(&t.data[0]);
+                    }}
+                }};
 
                 template<>
-                inline void zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t) {{
-                    ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
-                    {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
-                }}
+                struct ZngurPrettyPrinter< Ref< {ty} > > {{
+                    static inline void print(Ref< {ty} > const& t) {{
+                        ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
+                        {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
+                    }}
+                }};
 
                 template<>
-                inline void zngur_pretty_print< RefMut< {ty} > >(RefMut< {ty} > const& t) {{
-                    ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
-                    {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
-                }}
+                struct ZngurPrettyPrinter< RefMut< {ty} > > {{
+                    static inline void print(RefMut< {ty} > const& t) {{
+                        ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
+                        {pretty_print}(reinterpret_cast<uint8_t*>(t.data));
+                    }}
+                }};
+
+                template<size_t OFFSET>
+                struct ZngurPrettyPrinter< FieldOwned< {ty}, OFFSET > > {{
+                    static inline void print(FieldOwned< {ty}, OFFSET > const& t) {{
+                        ZngurPrettyPrinter< Ref< {ty} > >::print(t);
+                    }}
+                }};
+
+                template<size_t OFFSET>
+                struct ZngurPrettyPrinter< FieldRef< {ty}, OFFSET > > {{
+                    static inline void print(FieldRef< {ty}, OFFSET > const& t) {{
+                        ZngurPrettyPrinter< Ref< {ty} > >::print(t);
+                    }}
+                }};
+
+                template<size_t OFFSET>
+                struct ZngurPrettyPrinter< FieldRefMut< {ty}, OFFSET > > {{
+                    static inline void print(FieldRefMut< {ty}, OFFSET > const& t) {{
+                        ZngurPrettyPrinter< Ref< {ty} > >::print(t);
+                    }}
+                }};
             }}"#,
                             ty = self.ty,
                         )?;
@@ -1315,16 +1481,20 @@ auto data_as_impl = &args;
                             r#"
             namespace rust {{
                 template<>
-                inline void zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t) {{
-                    ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
-                    {pretty_print}(::rust::__zngur_internal_data_ptr< Ref< {ty} > >(t));
-                }}
+                struct ZngurPrettyPrinter< Ref< {ty} > > {{
+                    static inline void print(Ref< {ty} > const& t) {{
+                        ::rust::__zngur_internal_check_init< Ref< {ty} > >(t);
+                        {pretty_print}(::rust::__zngur_internal_data_ptr< Ref< {ty} > >(t));
+                    }}
+                }};
 
                 template<>
-                inline void zngur_pretty_print< RefMut< {ty} > >(RefMut< {ty} > const& t) {{
-                    ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
-                    {pretty_print}(::rust::__zngur_internal_data_ptr< RefMut< {ty} > >(t));
-                }}
+                struct ZngurPrettyPrinter< RefMut< {ty} > > {{
+                    static inline void print(RefMut< {ty} > const& t) {{
+                        ::rust::__zngur_internal_check_init< RefMut< {ty} > >(t);
+                        {pretty_print}(::rust::__zngur_internal_data_ptr< RefMut< {ty} > >(t));
+                    }}
+                }};
             }}"#,
                             ty = self.ty,
                         )?;
@@ -1479,13 +1649,22 @@ namespace rust {
     template<typename T>
     struct RefMut;
 
+    template<typename T, size_t OFFSET>
+    struct FieldOwned;
+
+    template<typename T, size_t OFFSET>
+    struct FieldRef;
+
+    template<typename T, size_t OFFSET>
+    struct FieldRefMut;
+
     template<typename... T>
     struct Tuple;
 
     using Unit = Tuple<>;
 
     template<typename T>
-    void zngur_pretty_print(const T&);
+    struct ZngurPrettyPrinter;
 
     class Inherent;
 
@@ -1495,7 +1674,7 @@ namespace rust {
     template<typename T>
     T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
         ::std::cerr << "[" << file_name << ":" << line_number << "] " << exp << " = ";
-        zngur_pretty_print<typename ::std::remove_reference<T>::type>(input);
+        ZngurPrettyPrinter<typename ::std::remove_reference<T>::type>::print(input);
         return ::std::forward<T>(input);
     }
 "#;
@@ -1573,7 +1752,7 @@ namespace rust {
         private:
             size_t data;
         friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} > >(const ::rust::Ref< {ty} >& t);
-        friend void ::rust::zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t);
+        friend ::rust::ZngurPrettyPrinter< Ref< {ty} > >;
     }};
 
     template<>
@@ -1591,10 +1770,28 @@ namespace rust {
         private:
             size_t data;
         friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} > >(const ::rust::RefMut< {ty} >& t);
-        friend void ::rust::zngur_pretty_print< Ref< {ty} > >(Ref< {ty} > const& t);
+        friend ::rust::ZngurPrettyPrinter< Ref< {ty} > >;
     }};
 "#
             )?;
+            if ty.starts_with("int")
+                || ty.starts_with("uint")
+                || ty.starts_with("::size_t")
+                || ty.starts_with("::double")
+                || ty.starts_with("::float")
+            {
+                writeln!(
+                    state,
+                    r#"
+    template<>
+    struct ZngurPrettyPrinter<{ty}> {{
+        static inline void print({ty} const& t) {{
+            ::std::cerr << t << ::std::endl;
+        }}
+    }};
+                    "#
+                )?;
+            }
             if ty == "::size_t" {
                 writeln!(state, "#endif")?;
             }
@@ -1751,4 +1948,11 @@ pub fn cpp_handle_keyword(name: &str) -> &str {
         "default" => "default_",
         x => x,
     }
+}
+
+pub fn cpp_handle_field_name(name: &str) -> String {
+    if name.parse::<u32>().is_ok() {
+        return format!("f{name}");
+    }
+    cpp_handle_keyword(name).to_owned()
 }
