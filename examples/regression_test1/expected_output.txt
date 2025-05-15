@@ -1,0 +1,51 @@
+Test dbg works for Ref and RefMut -- started
+[main.cpp:10] v1 = "foo"
+[main.cpp:12] v2 = "foo"
+[main.cpp:14] v3 = "foo"
+[main.cpp:15] v2 = "foo"
+[main.cpp:16] v4 = "foo"
+[main.cpp:18] v5 = "foo"
+[main.cpp:19] rust::Str::from_char_star("bar") = "bar"
+[main.cpp:20] v4 = "foobar"
+Test dbg works for Ref and RefMut -- finished
+
+Test fields and constructor work -- started
+[main.cpp:33] v1 = Foo {
+    field1: 1,
+    field2: "bar",
+}
+[main.cpp:34] v1.field2 = "bar"
+[main.cpp:35] v1.field2.len() = 3
+[main.cpp:37] v1 = Foo {
+    field1: 1,
+    field2: "barbaz",
+}
+[main.cpp:40] v2 = (
+    "kkk",
+    Foo {
+        field1: 1,
+        field2: "barbaz",
+    },
+)
+[main.cpp:41] v2.f0 = "kkk"
+[main.cpp:42] v2.f1 = Foo {
+    field1: 1,
+    field2: "barbaz",
+}
+[main.cpp:43] v2.f1.field2 = "barbaz"
+[main.cpp:47] v3.f0 = "kkk"
+[main.cpp:48] v3.f1 = Foo {
+    field1: 1,
+    field2: "barbazxxx",
+}
+[main.cpp:49] v3.f1.field2 = "barbazxxx"
+[main.cpp:52] v3.f1.field2.len() = 9
+[main.cpp:55] v4.f0 = "kkk"
+[main.cpp:56] v4.f1 = Foo {
+    field1: 1,
+    field2: "barbazxxx",
+}
+[main.cpp:57] v4.f1.field2 = "barbazxxx"
+[main.cpp:59] v4.f1.field2.len() = 12
+Test fields and constructor work -- finished
+

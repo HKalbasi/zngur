@@ -1,0 +1,2 @@
+Sum = 50000005000000
+Count of primes = 664579

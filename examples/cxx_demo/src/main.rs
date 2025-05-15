@@ -51,7 +51,6 @@ fn main() {
     let chunks = vec![b"fearless".to_vec(), b"concurrency".to_vec()];
     let mut buf = MultiBuf { chunks, pos: 0 };
     let blob_id = client.put(&mut buf);
-    println!("blob_id = {}", blob_id);
 
     // Add a tag.
     client.tag(blob_id, "rust");
