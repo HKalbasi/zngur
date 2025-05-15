@@ -38,6 +38,7 @@ int main() {
     vec1.emplace_back(rust::Str::from_char_star("cpp_V3"));
     std::cout << "Checkpoint 5" << std::endl;
     vec1.pop_back();
+    vec1.pop_back();
     std::cout << "Checkpoint 6" << std::endl;
   }
   {
