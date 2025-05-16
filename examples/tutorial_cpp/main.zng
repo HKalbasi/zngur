@@ -9,6 +9,19 @@ type str {
     fn len(&self) -> usize;
 }
 
+type ::std::ffi::CStr {
+    wellknown_traits(?Sized);
+
+    fn from_ptr(*const i8) -> &::std::ffi::CStr;
+    fn to_str(&self) -> ::std::result::Result<&str, ::std::str::Utf8Error>;
+}
+
+type ::std::result::Result<&str, ::std::str::Utf8Error> {
+    #layout(size = 24, align = 8);
+
+    fn expect(self, &str) -> &str;
+}
+
 type crate::Inventory {
     #layout(size = 16, align = 8);
 

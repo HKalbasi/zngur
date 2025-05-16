@@ -556,6 +556,14 @@ impl CppTypeDefinition {
             let is_unsized = self
                 .wellknown_traits
                 .contains(&ZngurWellknownTraitData::Unsized);
+            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
+                writeln!(
+                    state,
+                    r#"
+    auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+"#,
+                )?;
+            }
             if is_unsized {
                 writeln!(
                     state,
@@ -753,14 +761,8 @@ inline {ty}({as_std_function} f);
                 writeln!(
                     state,
                     r#"
-    friend Str;
+    friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
 }};
-inline Ref< ::rust::Str> Str::from_char_star(const char* s) {{
-    Ref<Str> o;
-    o.data[0] = reinterpret_cast<size_t>(s);
-    o.data[1] = strlen(s);
-    return o;
-}}
 "#,
                 )?;
             } else {
@@ -794,6 +796,19 @@ inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() {{
                 ty = self.ty,
                 size = if is_unsized { 16 } else { 8 },
             )?;
+            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
+                writeln!(
+                    state,
+                    r#"
+inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
+    ::rust::Ref<::rust::Str> o;
+    o.data[0] = reinterpret_cast<size_t>(input);
+    o.data[1] = len;
+    return o;
+}}
+                    "#,
+                )?;
+            }
         }
         Ok(())
     }
@@ -840,14 +855,6 @@ public:
     "#,
                         ty = self.ty.path.name(),
                     )?;
-                    if self.ty.path.to_string() == "::rust::Str" {
-                        writeln!(
-                            state,
-                            r#"
-    static inline ::rust::Ref< ::rust::Str> from_char_star(const char* s);
-    "#,
-                        )?;
-                    }
                 }
                 CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => {
                     match self.layout {

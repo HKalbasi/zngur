@@ -60,7 +60,7 @@ Checkpoint 30
 PrintOnDrop(elem1) has been dropped
 PrintOnDrop(elem2) has been dropped
 Checkpoint 31
-[main.cpp:113] PrintOnDrop(rust::Str::from_char_star("dbg_A")) = PrintOnDrop(
+[main.cpp:113] PrintOnDrop("dbg_A"_rs) = PrintOnDrop(
     "dbg_A",
 )
 Checkpoint 32

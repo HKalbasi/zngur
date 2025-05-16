@@ -231,8 +231,9 @@ of `#layout(size = X, align = Y)` which tells Zngur that this type is unsized an
 by value.
 
 Now you may wonder how we can obtain a `&str` to make a `String` from it? Fortunately, Zngur has some special support for primitive types and it
-has a `rust::Str::from_char_star` function that creates a `&str` from a zero terminated, valid UTF8 `char*` with the same lifetime. If Zngur didn't
-have this, we could create a `&[u8]` by exporting its `from_raw_parts` and then converting it to a `&str`, `from_char_star` exists just for convenience.
+has a `operator""_rs` that creates a `&str` from a zero terminated, valid UTF8 `char*` with the static lifetime. If Zngur didn't
+have this, we could create a `&[u8]` by exporting its `from_raw_parts` and then converting it to a `&str`, but Zngur tries to mimic Rust
+language features in C++ with a similar syntax.
 
 So now we can finally use the `add_item` method:
 
@@ -240,8 +241,7 @@ So now we can finally use the `add_item` method:
 int main() {
   auto inventory = rust::crate::Inventory::new_empty(1000);
   inventory.add_banana(3);
-  rust::Ref<rust::Str> name = rust::Str::from_char_star("apple");
-  inventory.add_item(rust::crate::Item(name.to_owned(), 5));
+  inventory.add_item(rust::crate::Item("apple"_rs.to_owned(), 5));
   zngur_dbg(inventory);
 }
 ```
@@ -523,6 +523,18 @@ the `Debug` trait for `crate::Inventory`. Add this to the `main.zng`:
 
 ```
 // ...
+type ::std::ffi::CStr {
+    wellknown_traits(?Sized);
+
+    fn from_ptr(*const i8) -> &::std::ffi::CStr;
+    fn to_str(&self) -> ::std::result::Result<&str, ::std::str::Utf8Error>;
+}
+
+type ::std::result::Result<&str, ::std::str::Utf8Error> {
+    #layout(size = 24, align = 8);
+
+    fn expect(self, &str) -> &str;
+}
 
 type ::std::fmt::Result {
     #layout(size = 1, align = 1);
@@ -548,6 +560,10 @@ extern "C++" {
 and this code to the `impls.cpp`:
 
 ```C++
+rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
+  return rust::std::ffi::CStr::from_ptr(reinterpret_cast<const int8_t*>(input)).to_str().expect("invalid_utf8"_rs);
+}
+
 rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
     rust::Ref<::rust::crate::Inventory> self,
     rust::RefMut<::rust::std::fmt::Formatter> f) {
@@ -568,7 +584,7 @@ rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
     result += " }";
   }
   result += "] }";
-  return f.write_str(rust::Str::from_char_star(result.c_str()));
+  return f.write_str(rust_str_from_c_str(result.c_str()));
 }
 ```
 

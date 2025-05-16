@@ -20,9 +20,9 @@ class CppPrintOnDropHolder : public PrintOnDropConsumer {
 };
 
 int main() {
-  auto p1 = PrintOnDrop(rust::Str::from_char_star("A"));
-  auto p2 = PrintOnDrop(rust::Str::from_char_star("B"));
-  auto p3 = PrintOnDrop(rust::Str::from_char_star("C"));
+  auto p1 = PrintOnDrop("A"_rs);
+  auto p2 = PrintOnDrop("B"_rs);
+  auto p3 = PrintOnDrop("C"_rs);
   std::cout << "Checkpoint 1" << std::endl;
   p2 = std::move(p1);
   std::cout << "Checkpoint 2" << std::endl;
@@ -33,9 +33,9 @@ int main() {
   }
   {
     std::vector<PrintOnDrop> vec1;
-    vec1.emplace_back(rust::Str::from_char_star("cpp_V1"));
-    vec1.emplace_back(rust::Str::from_char_star("cpp_V2"));
-    vec1.emplace_back(rust::Str::from_char_star("cpp_V3"));
+    vec1.emplace_back("cpp_V1"_rs);
+    vec1.emplace_back("cpp_V2"_rs);
+    vec1.emplace_back("cpp_V3"_rs);
     std::cout << "Checkpoint 5" << std::endl;
     vec1.pop_back();
     vec1.pop_back();
@@ -44,8 +44,8 @@ int main() {
   {
     std::cout << "Checkpoint 7" << std::endl;
     Vec<PrintOnDrop> vec2 = Vec<PrintOnDrop>::new_();
-    vec2.push(PrintOnDrop(rust::Str::from_char_star("rust_V1")));
-    vec2.push(PrintOnDrop(rust::Str::from_char_star("rust_V2")));
+    vec2.push(PrintOnDrop("rust_V1"_rs));
+    vec2.push(PrintOnDrop("rust_V2"_rs));
     std::cout << "Checkpoint 8" << std::endl;
     vec2.clone(); // Clone and drop immediately
     std::cout << "Checkpoint 9" << std::endl;
@@ -57,9 +57,9 @@ int main() {
       auto holder = BoxDyn<PrintOnDropConsumer>::make_box<CppPrintOnDropHolder>(
           std::move(c));
       std::cout << "Checkpoint 11" << std::endl;
-      consume_n_times(holder.deref_mut(), rust::Str::from_char_star("P"), 3);
+      consume_n_times(holder.deref_mut(), "P"_rs, 3);
       std::cout << "Checkpoint 12" << std::endl;
-      consume_n_times(holder.deref_mut(), rust::Str::from_char_star("Q"), 2);
+      consume_n_times(holder.deref_mut(), "Q"_rs, 2);
       std::cout << "Checkpoint 13" << std::endl;
     }
     std::cout << "Checkpoint 14" << std::endl;
@@ -70,35 +70,35 @@ int main() {
       std::cout << "Checkpoint 15" << std::endl;
       auto holder = RmDyn<PrintOnDropConsumer>(c);
       std::cout << "Checkpoint 16" << std::endl;
-      consume_n_times(holder, rust::Str::from_char_star("P2"), 3);
+      consume_n_times(holder, "P2"_rs, 3);
       std::cout << "Checkpoint 17" << std::endl;
-      consume_n_times(holder, rust::Str::from_char_star("Q2"), 2);
+      consume_n_times(holder, "Q2"_rs, 2);
       std::cout << "Checkpoint 18" << std::endl;
     }
     std::cout << "Checkpoint 19" << std::endl;
   }
   std::cout << "Checkpoint 20" << std::endl;
   try {
-    PrintOnDrop a{rust::Str::from_char_star("A")};
+    PrintOnDrop a{"A"_rs};
     std::cout << "Checkpoint 21" << std::endl;
     consume_and_panic(a.clone(), false);
     std::cout << "Checkpoint 22" << std::endl;
-    consume_and_panic(rust::Str::from_char_star("B"), true);
+    consume_and_panic("B"_rs, true);
     std::cout << "Checkpoint 23" << std::endl;
   } catch (rust::Panic e) {
     std::cout << "Checkpoint 24" << std::endl;
   }
   {
     std::cout << "Checkpoint 25" << std::endl;
-    PrintOnDropPair p{rust::Str::from_char_star("first"),
-                      rust::Str::from_char_star("second")};
+    PrintOnDropPair p{"first"_rs,
+                      "second"_rs};
     std::cout << "Checkpoint 26" << std::endl;
   }
   {
     std::cout << "Checkpoint 27" << std::endl;
     Vec<PrintOnDrop> vec2 = Vec<PrintOnDrop>::new_();
-    vec2.push(PrintOnDrop(rust::Str::from_char_star("elem1")));
-    vec2.push(PrintOnDrop(rust::Str::from_char_star("elem2")));
+    vec2.push(PrintOnDrop("elem1"_rs));
+    vec2.push(PrintOnDrop("elem2"_rs));
     std::cout << "Checkpoint 28" << std::endl;
     vec2.get(0).unwrap().clone();
     {
@@ -110,7 +110,7 @@ int main() {
   }
   std::cout << "Checkpoint 31" << std::endl;
   {
-    auto p1 = zngur_dbg(PrintOnDrop(rust::Str::from_char_star("dbg_A")));
+    auto p1 = zngur_dbg(PrintOnDrop("dbg_A"_rs));
     std::cout << "Checkpoint 32" << std::endl;
     auto p2 = zngur_dbg(std::move(p1));
     std::cout << "Checkpoint 33" << std::endl;
@@ -120,10 +120,10 @@ int main() {
   std::cout << "Checkpoint 35" << std::endl;
   {
     auto p1 = Option<PrintOnDrop>::Some(
-        PrintOnDrop(rust::Str::from_char_star("option_A")));
+        PrintOnDrop("option_A"_rs));
     std::cout << "Checkpoint 36" << std::endl;
     auto p2 = Option<PrintOnDrop>::Some(
-        PrintOnDrop(rust::Str::from_char_star("option_B")));
+        PrintOnDrop("option_B"_rs));
     std::cout << "Checkpoint 37" << std::endl;
     p2.take();
     std::cout << "Checkpoint 38" << std::endl;
@@ -132,7 +132,7 @@ int main() {
   }
   std::cout << "Checkpoint 40" << std::endl;
   {
-    const char *elems[3] = {"elem1", "elem2", "elem3"};
+    rust::Ref<rust::Str> elems[3] = {"elem1"_rs, "elem2"_rs, "elem3"_rs};
     int i = 0;
     auto iter = rust::std::iter::from_fn(
         rust::Box<rust::Dyn<rust::Fn<Option<PrintOnDrop>>>>::make_box([&] {
@@ -140,7 +140,7 @@ int main() {
             return Option<PrintOnDrop>::None();
           }
           return Option<PrintOnDrop>::Some(
-              PrintOnDrop(rust::Str::from_char_star(elems[i++])));
+              PrintOnDrop(elems[i++]));
         }));
     std::cout << "Checkpoint 41" << std::endl;
     iter.for_each(
@@ -153,8 +153,8 @@ int main() {
   std::cout << "Checkpoint 43" << std::endl;
   {
     auto tuple = rust::Tuple<PrintOnDrop, int32_t, PrintOnDrop>(
-        PrintOnDrop(rust::Str::from_char_star("field_0")), 5,
-        PrintOnDrop(rust::Str::from_char_star("field_2")));
+        PrintOnDrop("field_0"_rs), 5,
+        PrintOnDrop("field_2"_rs));
     std::cout << "Checkpoint 44" << std::endl;
   }
   std::cout << "Checkpoint 45" << std::endl;

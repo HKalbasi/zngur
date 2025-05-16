@@ -1,4 +1,4 @@
-[main.cpp:8] inventory = Inventory {
+[main.cpp:7] inventory = Inventory {
     items: [
         Item {
             name: "banana",
@@ -19,7 +19,7 @@
     ],
     remaining_space: 974,
 }
-[main.cpp:11] v = [
+[main.cpp:10] v = [
     Item {
         name: "banana",
         size: 7,
