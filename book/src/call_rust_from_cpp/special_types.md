@@ -5,15 +5,15 @@
 The `rust::Bool` type has an `operator bool()` so you can use this type directly in if statements and ternary expressions. This type
 also has a constructor from C++ `bool` so you can pass `true` and `false` to functions that take `rust::Bool` in input.
 
-## str
+## literals
 
-The `rust::Str` has an static method `from_char_star` which creates a non owning `rust::Ref<rust::Str>` from a `const char *` so
-you can create rust `str` from a string literal, `std::string` or other C strings in the C++ side. For example, for converting
-a C++ `std::string` into a Rust `String`, you can use `rust::Str::from_char_star(s.c_str()).to_string()`.
+In Rust there are many kind of literal expressions, some of them are natively supported in C++, like integer literals. For the rest, Zngur
+tries to support them using C++ feature called User-defined Literals.
 
-For the Rust to C++ side, no special function is provided. You can use `as_ptr` method for getting a pointer to the beginning and `len` method
-for the number of bytes. For example for converting a `&str` to a C++ `std::string` you can use `std::string((char*)s.as_ptr(), s.len())`. Note
-that Rust `&str`s are not NUL terminated and passing `as_ptr` pointer to functions that expect a C string is invalid.
-
-The `from_char_star` method is just a shortcut and is fairly limited. To fully control the process, consider using one of the more specialized
-Rust string types like `CStr` or `OsString`.
+| Syntax         | Rust Equivalent | Output Type                       | Status          | Enabled With        |
+| -------------- | --------------- | --------------------------------- | --------------- | ------------------- |
+| `'a'_rs`       | `'a'`           | `rust::Char`                      | Not Implemented | `char`              |
+| `"hello"_rs`   | `"hello"`       | `rust::Ref<rust::Str>`            | Implemented     | `str`               |
+| `'a'_rs_b`     | `b'a'`          | `uint8_t`                         | Not Implemented | unconditionally     |
+| `"hello"_rs_b` | `b"hello"`      | `rust::Ref<rust::Slice<uint8_t>>` | Not Implemented | `[u8]`              |
+| `"hello"_rs_c` | `c"hello"`      | `rust::Ref<rust::ffi::CStr>`      | Not Implemented | `::rust::ffi::CStr` |

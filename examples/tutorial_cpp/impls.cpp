@@ -6,6 +6,10 @@ using namespace rust::crate;
 template <typename T> using Ref = rust::Ref<T>;
 template <typename T> using RefMut = rust::RefMut<T>;
 
+rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
+  return rust::std::ffi::CStr::from_ptr(reinterpret_cast<const int8_t*>(input)).to_str().expect("invalid_utf8"_rs);
+}
+
 Inventory rust::Impl<Inventory>::new_empty(uint32_t space) {
   return Inventory(
       rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Inventory>(space));
@@ -49,5 +53,5 @@ rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
     result += " }";
   }
   result += "] }";
-  return f.write_str(rust::Str::from_char_star(result.c_str()));
+  return f.write_str(rust_str_from_c_str(result.c_str()));
 }

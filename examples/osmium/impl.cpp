@@ -18,6 +18,10 @@ template <typename T> using Option = rust::std::option::Option<T>;
 template <typename T> using Ref = rust::Ref<T>;
 using rust::std::string::String;
 
+rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
+  return rust::std::ffi::CStr::from_ptr(reinterpret_cast<const int8_t*>(input)).to_str().expect("invalid_utf8"_rs);
+}
+
 Result<Reader, String> rust::exported_functions::new_reader(Flags f) {
   try {
     Reader o(rust::ZngurCppOpaqueOwnedObject::build<osmium::io::Reader>(
@@ -25,7 +29,7 @@ Result<Reader, String> rust::exported_functions::new_reader(Flags f) {
     return Result<Reader, String>::Ok(move(o));
   } catch (const exception &ex) {
     return Result<Reader, String>::Err(
-        rust::Str::from_char_star(ex.what()).to_string());
+        rust_str_from_c_str(ex.what()).to_string());
   }
 }
 
@@ -64,7 +68,7 @@ rust::Impl<TagList>::get_value_by_key(Ref<TagList> self, Ref<rust::Str> key) {
   if (value == nullptr) {
     return Option<Ref<rust::Str>>::None();
   }
-  return Option<Ref<rust::Str>>::Some(rust::Str::from_char_star(value));
+  return Option<Ref<rust::Str>>::Some(rust_str_from_c_str(value));
 }
 
 size_t rust::Impl<WayNodeList>::len(Ref<WayNodeList> self) {
@@ -83,7 +87,7 @@ double rust::Impl<Node>::distance(Ref<Node> self, Ref<Node> other) {
 
 String rust::Impl<Node>::href(Ref<Node> self) {
   auto s = String::new_();
-  s.push_str(rust::Str::from_char_star("https://www.openstreetmap.org/node/"));
-  s.push_str(rust::Str::from_char_star(to_string(self.cpp().ref()).c_str()));
+  s.push_str("https://www.openstreetmap.org/node/"_rs);
+  s.push_str(rust_str_from_c_str(to_string(self.cpp().ref()).c_str()));
   return s;
 }

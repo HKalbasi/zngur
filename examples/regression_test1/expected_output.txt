@@ -5,7 +5,7 @@ Test dbg works for Ref and RefMut -- started
 [main.cpp:15] v2 = "foo"
 [main.cpp:16] v4 = "foo"
 [main.cpp:18] v5 = "foo"
-[main.cpp:19] rust::Str::from_char_star("bar") = "bar"
+[main.cpp:19] "bar"_rs = "bar"
 [main.cpp:20] v4 = "foobar"
 Test dbg works for Ref and RefMut -- finished
 
