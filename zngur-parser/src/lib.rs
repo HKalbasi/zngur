@@ -5,7 +5,7 @@ use chumsky::prelude::*;
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
+    CommonPrimitiveType, LayoutPolicy, Mutability, RustPathAndGenerics, RustTrait, RustType,
     ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFile, ZngurFn,
     ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurTrait, ZngurType,
     ZngurWellknownTrait,
@@ -404,7 +404,10 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedRustType<'a> {
-    Primitive(PrimitiveRustType),
+    Primitive(CommonPrimitiveType),
+    Bool,
+    Str,
+    ZngurCppOpaqueOwnedObject,
     Ref(Mutability, Box<ParsedRustType<'a>>),
     Raw(Mutability, Box<ParsedRustType<'a>>),
     Boxed(Box<ParsedRustType<'a>>),
@@ -418,6 +421,9 @@ impl ParsedRustType<'_> {
     fn to_zngur(self, base: &[String]) -> RustType {
         match self {
             ParsedRustType::Primitive(s) => RustType::Primitive(s),
+            ParsedRustType::Bool => RustType::Bool,
+            ParsedRustType::Str => RustType::Str,
+            ParsedRustType::ZngurCppOpaqueOwnedObject => RustType::ZngurCppOpaqueOwnedObject,
             ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(base))),
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(base))),
@@ -727,15 +733,18 @@ fn rust_type<'a>()
         s.parse().ok()
     };
 
-    let scalar = select! {
-        Token::Ident("bool") => PrimitiveRustType::Bool,
-        Token::Ident("str") => PrimitiveRustType::Str,
-        Token::Ident("ZngurCppOpaqueOwnedObject") => PrimitiveRustType::ZngurCppOpaqueOwnedObject,
-        Token::Ident("usize") => PrimitiveRustType::Usize,
-        Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
-        Token::Ident(c) if as_scalar(c, 'i').is_some() => PrimitiveRustType::Int(as_scalar(c, 'i').unwrap()),
-        Token::Ident(c) if as_scalar(c, 'f').is_some() => PrimitiveRustType::Float(as_scalar(c, 'f').unwrap()),
+    let primitive = select! {
+        Token::Ident("usize") => CommonPrimitiveType::Usize,
+        Token::Ident(c) if as_scalar(c, 'u').is_some() => CommonPrimitiveType::Uint(as_scalar(c, 'u').unwrap()),
+        Token::Ident(c) if as_scalar(c, 'i').is_some() => CommonPrimitiveType::Int(as_scalar(c, 'i').unwrap()),
+        Token::Ident(c) if as_scalar(c, 'f').is_some() => CommonPrimitiveType::Float(as_scalar(c, 'f').unwrap()),
     }.map(ParsedRustType::Primitive);
+
+    let other_primitive = select! {
+        Token::Ident("bool") => ParsedRustType::Bool,
+        Token::Ident("str") => ParsedRustType::Str,
+        Token::Ident("ZngurCppOpaqueOwnedObject") => ParsedRustType::ZngurCppOpaqueOwnedObject,
+    };
 
     recursive(|parser| {
         let parser = parser.boxed();
@@ -790,7 +799,16 @@ fn rust_type<'a>()
             .then(parser)
             .map(|(m, x)| ParsedRustType::Raw(m, Box::new(x)));
         choice((
-            scalar, boxed, unit, tuple, slice, adt, reference, raw_ptr, dyn_trait,
+            primitive,
+            other_primitive,
+            boxed,
+            unit,
+            tuple,
+            slice,
+            adt,
+            reference,
+            raw_ptr,
+            dyn_trait,
         ))
     })
     .boxed()

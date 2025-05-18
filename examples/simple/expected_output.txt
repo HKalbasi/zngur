@@ -1,7 +1,7 @@
 17
 s[2] = 7
 
-thread '<unnamed>' panicked at examples/simple/src/generated.rs:192:39:
+thread '<unnamed>' panicked at examples/simple/src/generated.rs:191:39:
 called `Option::unwrap()` on a `None` value
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 s[4] = Rust panic happened
