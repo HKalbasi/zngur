@@ -45,6 +45,7 @@ pub struct ZngurExternCppImpl {
     pub methods: Vec<ZngurMethod>,
 }
 
+#[derive(Debug)]
 pub struct ZngurConstructor {
     pub name: Option<String>,
     pub inputs: Vec<(String, RustType)>,
@@ -85,12 +86,14 @@ pub enum LayoutPolicy {
     OnlyByRef,
 }
 
+#[derive(Debug)]
 pub struct ZngurMethodDetails {
     pub data: ZngurMethod,
     pub use_path: Option<Vec<String>>,
     pub deref: Option<RustType>,
 }
 
+#[derive(Debug)]
 pub struct ZngurType {
     pub ty: RustType,
     pub layout: LayoutPolicy,
@@ -102,12 +105,13 @@ pub struct ZngurType {
     pub cpp_ref: Option<String>,
 }
 
+#[derive(Debug)]
 pub struct ZngurTrait {
     pub tr: RustTrait,
     pub methods: Vec<ZngurMethod>,
 }
 
-#[derive(Default)]
+#[derive(Debug, Default)]
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub traits: HashMap<RustTrait, ZngurTrait>,
