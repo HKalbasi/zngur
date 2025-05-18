@@ -1,6 +1,7 @@
 use std::panic::catch_unwind;
 
 use expect_test::{Expect, expect};
+use zngur_def::{RustPathAndGenerics, RustType};
 
 use crate::ParsedZngFile;
 
@@ -124,4 +125,43 @@ type crate::Way {
 }
     "#,
     );
+}
+
+#[test]
+fn alias_expands_correctly() {
+    let parsed = ParsedZngFile::parse(
+        "main.zng",
+        r#"
+use ::std::string::String as MyString;
+type MyString {
+    #layout(size = 24, align = 8);
+}
+    "#,
+    );
+    let ty = parsed.types.first().expect("no type parsed");
+    let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
+        panic!("no match?");
+    };
+    assert_eq!(p.as_slice(), ["std", "string", "String"]);
+}
+
+#[test]
+fn alias_expands_nearest_scope_first() {
+    let parsed = ParsedZngFile::parse(
+        "main.zng",
+        r#"
+use ::std::string::String as MyString;
+mod crate {
+    use MyLocalString as MyString;
+    type MyString {
+        #layout(size = 24, align = 8);
+    }
+}
+    "#,
+    );
+    let ty = parsed.types.first().expect("no type parsed");
+    let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
+        panic!("no match?");
+    };
+    assert_eq!(p.as_slice(), ["crate", "MyLocalString"]);
 }
