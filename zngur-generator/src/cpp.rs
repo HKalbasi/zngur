@@ -197,6 +197,12 @@ impl State {
             "".to_owned()
         }
     }
+
+    fn remove_no_except_in_panic(&mut self) {
+        if self.panic_to_exception {
+            self.text = self.text.replace(" noexcept ", " ");
+        }
+    }
 }
 
 impl Write for State {
@@ -233,7 +239,7 @@ impl CppFnSig {
 
     fn emit_rust_link_decl(&self, state: &mut State) -> std::fmt::Result {
         self.emit_rust_link(state)?;
-        writeln!(state, ";")?;
+        writeln!(state, " noexcept ;")?;
         Ok(())
     }
 
@@ -245,7 +251,7 @@ impl CppFnSig {
         } = self;
         writeln!(
             state,
-            "{output} {fn_name}({input_defs});",
+            "{output} {fn_name}({input_defs}) noexcept ;",
             input_defs = inputs
                 .iter()
                 .enumerate()
@@ -262,8 +268,7 @@ impl CppFnSig {
         } = self;
         writeln!(
             state,
-            "inline {output} {fn_name}({input_defs})
-        {{
+            "inline {output} {fn_name}({input_defs}) noexcept {{
             {output} o{{}};
             {deinits}
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
@@ -535,7 +540,7 @@ impl CppTypeDefinition {
                     } = &method.sig;
                     writeln!(
                         state,
-                        "{output} {fn_name}({input_defs}) const;",
+                        "{output} {fn_name}({input_defs}) const noexcept ;",
                         fn_name = &method.name,
                         input_defs = inputs
                             .iter()
@@ -576,7 +581,7 @@ struct {ref_kind}< {ty} > {{
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t) noexcept ;
     friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
 "#,
                     ty = self.ty,
@@ -620,7 +625,7 @@ struct {ref_kind}< {ty} > {{
                     r#"
 private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t) noexcept ;
     friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
 "#,
                     ty = self.ty,
@@ -746,7 +751,7 @@ inline {ty}({as_std_function} f);
                     } = &method.sig;
                     writeln!(
                         state,
-                        "{output} {fn_name}({input_defs}) const;",
+                        "{output} {fn_name}({input_defs}) const noexcept ;",
                         fn_name = &method.name,
                         input_defs = inputs
                             .iter()
@@ -772,24 +777,24 @@ inline {ty}({as_std_function} f);
                 state,
                 r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >& t) {{
+inline uint8_t* __zngur_internal_data_ptr< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >& t) noexcept {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_init< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) noexcept {{
 }}
 
 template<>
-inline void __zngur_internal_check_init< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >&) {{
+inline void __zngur_internal_check_init< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >&) noexcept {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) {{
+inline void __zngur_internal_assume_deinit< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) noexcept {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() {{
+inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() noexcept {{
     return {size};
 }}
 }}"#,
@@ -822,15 +827,15 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
             r#"
 namespace rust {{
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t);
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t) noexcept ;
     template<>
-    inline void __zngur_internal_check_init< {ty} >(const {ty}& t);
+    inline void __zngur_internal_check_init< {ty} >(const {ty}& t) noexcept ;
     template<>
-    inline void __zngur_internal_assume_init< {ty} >({ty}& t);
+    inline void __zngur_internal_assume_init< {ty} >({ty}& t) noexcept ;
     template<>
-    inline void __zngur_internal_assume_deinit< {ty} >({ty}& t);
+    inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept ;
     template<>
-    inline size_t __zngur_internal_size_of< {ty} >();
+    inline size_t __zngur_internal_size_of< {ty} >() noexcept ;
 }}"#,
             ty = self.ty,
         )?;
@@ -883,10 +888,10 @@ private:
                     writeln!(
                         state,
                         r#"
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< {ty} >(const {ty}& t);
-    friend void ::rust::__zngur_internal_check_init< {ty} >(const {ty}& t);
-    friend void ::rust::__zngur_internal_assume_init< {ty} >({ty}& t);
-    friend void ::rust::__zngur_internal_assume_deinit< {ty} >({ty}& t);
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< {ty} >(const {ty}& t) noexcept ;
+    friend void ::rust::__zngur_internal_check_init< {ty} >(const {ty}& t) noexcept ;
+    friend void ::rust::__zngur_internal_assume_init< {ty} >({ty}& t) noexcept ;
+    friend void ::rust::__zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept ;
     friend ::rust::ZngurPrettyPrinter< {ty} >;
 "#,
                         ty = self.ty,
@@ -1049,7 +1054,7 @@ private:
                     } = &method.sig;
                     writeln!(
                         state,
-                        "{output} {fn_name}({input_defs}) {const_kw};",
+                        "{output} {fn_name}({input_defs}) {const_kw} noexcept ;",
                         fn_name = &method.name,
                         input_defs = inputs
                             .iter()
@@ -1068,7 +1073,7 @@ private:
             for constructor in &self.constructors {
                 writeln!(
                     state,
-                    "{fn_name}({input_defs});",
+                    "{fn_name}({input_defs}) noexcept ;",
                     fn_name = &self.ty.path.0.last().unwrap(),
                     input_defs = constructor
                         .inputs
@@ -1098,7 +1103,7 @@ private:
                         r#"
 namespace rust {{
     template<>
-    inline size_t __zngur_internal_size_of< {ty} >() {{
+    inline size_t __zngur_internal_size_of< {ty} >() noexcept {{
         return {size};
     }}
         "#,
@@ -1110,7 +1115,7 @@ namespace rust {{
                         r#"
 namespace rust {{
     template<>
-    inline size_t __zngur_internal_size_of< {ty} >() {{
+    inline size_t __zngur_internal_size_of< {ty} >() noexcept {{
         return {size_fn}();
     }}
         "#,
@@ -1124,15 +1129,15 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init< {ty} >(const {ty}&) {{
+        inline void __zngur_internal_check_init< {ty} >(const {ty}&) noexcept {{
         }}
 
         template<>
-        inline void __zngur_internal_assume_init< {ty} >({ty}&) {{
+        inline void __zngur_internal_assume_init< {ty} >({ty}&) noexcept {{
         }}
     
         template<>
-        inline void __zngur_internal_assume_deinit< {ty} >({ty}&) {{
+        inline void __zngur_internal_assume_deinit< {ty} >({ty}&) noexcept {{
         }}
 "#,
                 )?;
@@ -1141,7 +1146,7 @@ namespace rust {{
                     state,
                     r#"
         template<>
-        inline void __zngur_internal_check_init< {ty} >(const {ty}& t) {{
+        inline void __zngur_internal_check_init< {ty} >(const {ty}& t) noexcept {{
             if (!t.drop_flag) {{
                 ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type {ty}" << ::std::endl;
                 while (true) raise(SIGSEGV);
@@ -1149,12 +1154,12 @@ namespace rust {{
         }}
 
         template<>
-        inline void __zngur_internal_assume_init< {ty} >({ty}& t) {{
+        inline void __zngur_internal_assume_init< {ty} >({ty}& t) noexcept {{
             t.drop_flag = true;
         }}
     
         template<>
-        inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) {{
+        inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept {{
             ::rust::__zngur_internal_check_init< {ty} >(t);
             t.drop_flag = false;
         }}
@@ -1165,7 +1170,7 @@ namespace rust {{
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} >({ty} const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >({ty} const & t) noexcept {{
         return const_cast<uint8_t*>(&t.data[0]);
     }}
 }}
@@ -1196,8 +1201,7 @@ namespace rust {{
             } = c;
             writeln!(
                 state,
-                "inline {fn_name}({input_defs})
-        {{
+                "inline {fn_name}({input_defs}) noexcept {{
             ::rust::__zngur_internal_assume_init(*this);
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(*this));
             {deinits}
@@ -1341,8 +1345,7 @@ auto data_as_impl = &args;
                     writeln!(
                         state,
                         "template<size_t OFFSET>
-                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const
-                {{
+                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const noexcept {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1366,8 +1369,7 @@ auto data_as_impl = &args;
                     } = &method.sig;
                     writeln!(
                         state,
-                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const
-                {{
+                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const noexcept {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1395,8 +1397,7 @@ auto data_as_impl = &args;
                 } = &method.sig;
                 writeln!(
                     state,
-                    "inline {output} {fn_name}({input_defs}) {const_kw}
-                {{
+                    "inline {output} {fn_name}({input_defs}) {const_kw} noexcept {{
                     return {fn_name}({this_arg}{input_args});
                 }}",
                     this_arg = match method.kind {
@@ -1600,25 +1601,25 @@ impl CppFile {
 
 namespace rust {
     template<typename T>
-    uint8_t* __zngur_internal_data_ptr(const T& t);
+    uint8_t* __zngur_internal_data_ptr(const T& t) noexcept ;
 
     template<typename T>
-    void __zngur_internal_assume_init(T& t);
+    void __zngur_internal_assume_init(T& t) noexcept ;
 
     template<typename T>
-    void __zngur_internal_assume_deinit(T& t);
+    void __zngur_internal_assume_deinit(T& t) noexcept ;
 
     template<typename T>
-    inline size_t __zngur_internal_size_of();
+    inline size_t __zngur_internal_size_of() noexcept ;
 
     template<typename T>
-    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) {
+    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
         memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
         ::rust::__zngur_internal_assume_deinit(t);
     }
 
     template<typename T>
-    inline T __zngur_internal_move_from_rust(uint8_t* src) {
+    inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
         T t;
         ::rust::__zngur_internal_assume_init(t);
         memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
@@ -1626,7 +1627,7 @@ namespace rust {
     }
 
     template<typename T>
-    inline void __zngur_internal_check_init(const T&) {
+    inline void __zngur_internal_check_init(const T&) noexcept {
     }
 
     class ZngurCppOpaqueOwnedObject {
@@ -1710,39 +1711,39 @@ namespace rust {
                 state,
                 r#"
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t) noexcept {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init< {ty} >({ty}&) {{}}
+    inline void __zngur_internal_assume_init< {ty} >({ty}&) noexcept {{}}
     template<>
-    inline void __zngur_internal_assume_deinit< {ty} >({ty}&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty} >({ty}&) noexcept {{}}
 
     template<>
-    inline size_t __zngur_internal_size_of< {ty} >() {{
+    inline size_t __zngur_internal_size_of< {ty} >() noexcept {{
         return sizeof({ty});
     }}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty}*>({ty}* const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty}*>({ty}* const & t) noexcept {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init< {ty}*>({ty}*&) {{}}
+    inline void __zngur_internal_assume_init< {ty}*>({ty}*&) noexcept {{}}
     template<>
-    inline void __zngur_internal_assume_deinit< {ty}*>({ty}*&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty}*>({ty}*&) noexcept {{}}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} const*>({ty} const* const & t) {{
+    inline uint8_t* __zngur_internal_data_ptr< {ty} const*>({ty} const* const & t) noexcept {{
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }}
 
     template<>
-    inline void __zngur_internal_assume_init< {ty} const*>({ty} const*&) {{}}
+    inline void __zngur_internal_assume_init< {ty} const*>({ty} const*&) noexcept {{}}
     template<>
-    inline void __zngur_internal_assume_deinit< {ty} const*>({ty} const*&) {{}}
+    inline void __zngur_internal_assume_deinit< {ty} const*>({ty} const*&) noexcept {{}}
 
     template<>
     struct Ref< {ty} > {{
@@ -1758,7 +1759,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} > >(const ::rust::Ref< {ty} >& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {ty} > >(const ::rust::Ref< {ty} >& t) noexcept ;
         friend ::rust::ZngurPrettyPrinter< Ref< {ty} > >;
     }};
 
@@ -1776,7 +1777,7 @@ namespace rust {
         }}
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} > >(const ::rust::RefMut< {ty} >& t);
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {ty} > >(const ::rust::RefMut< {ty} >& t) noexcept ;
         friend ::rust::ZngurPrettyPrinter< Ref< {ty} > >;
     }};
 "#
@@ -1945,6 +1946,7 @@ namespace rust {
         let mut is_cpp_needed = false;
         self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
             .unwrap();
+        h_file.remove_no_except_in_panic();
         (h_file.text, is_cpp_needed.then_some(cpp_file.text))
     }
 }
