@@ -92,6 +92,7 @@ pub struct ZngurType {
     pub constructors: Vec<ZngurConstructor>,
     pub cpp_value: Option<(String, String)>,
     pub cpp_ref: Option<String>,
+    pub is_copy_constructible_by_clone: bool,
 }
 
 pub struct ZngurTrait {

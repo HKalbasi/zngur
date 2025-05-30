@@ -482,6 +482,7 @@ pub struct CppTypeDefinition {
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
     pub cpp_value: Option<(String, String)>,
     pub cpp_ref: Option<String>,
+    pub is_copy_constructible_by_clone: bool,
 }
 
 impl CppTypeDefinition {
@@ -688,6 +689,7 @@ inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() {{
         let is_copy = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);
+        let is_copy_constructible_by_clone = self.is_copy_constructible_by_clone;
         writeln!(
             state,
             r#"
@@ -831,6 +833,54 @@ private:
     }}
     {ty}& operator=({ty}&& other) {{
         {copy_data}
+        return *this;
+    }}
+    "#,
+                            ty = self.ty.path.name(),
+                        )?;
+                    } else if is_copy_constructible_by_clone {
+                        let drop_in_place = self
+                            .wellknown_traits
+                            .iter()
+                            .find_map(|x| match x {
+                                ZngurWellknownTraitData::Drop { drop_in_place } => {
+                                    Some(drop_in_place)
+                                }
+                                _ => None,
+                            })
+                            .unwrap();
+                        writeln!(
+                            state,
+                            r#"
+    {ty}() : drop_flag(false) {{ {alloc_heap} }}
+    ~{ty}() {{
+        if (drop_flag) {{
+            {drop_in_place}(&data[0]);
+        }}
+        {free_heap}
+    }}
+    {ty}& operator=(const {ty}& other) {{
+        if (this != &other)
+        {{
+        return *this = other.clone();
+        }}
+        return *this;
+        }}
+    {ty}(const {ty}& other) : {ty}(other.clone()) {{ }}
+    {ty}({ty}&& other) : drop_flag(false) {{
+        {alloc_heap}
+        *this = ::std::move(other);
+    }}
+    {ty}& operator=({ty}&& other) {{
+        if (this != &other)
+        {{
+            if (drop_flag) {{
+                {drop_in_place}(&data[0]);
+            }}
+            this->drop_flag = other.drop_flag;
+            {copy_data}
+            other.drop_flag = false;
+        }}
         return *this;
     }}
     "#,
