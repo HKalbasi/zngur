@@ -157,7 +157,11 @@ impl ParsedMethod<'_> {
                 .map(|x| x.to_zngur(base, type_vars))
                 .collect(),
             receiver: self.receiver,
-            inputs: self.inputs.into_iter().map(|x| x.to_zngur(base, type_vars)).collect(),
+            inputs: self
+                .inputs
+                .into_iter()
+                .map(|x| x.to_zngur(base, type_vars))
+                .collect(),
             output: self.output.to_zngur(base, type_vars),
         }
     }
@@ -181,7 +185,8 @@ impl ParsedItem<'_> {
                     );
                 }
 
-                let type_vars: Vec<_> = vars.as_deref().unwrap_or(&[]).iter().map(|t| t.0).collect();
+                let type_vars: Vec<_> =
+                    vars.as_deref().unwrap_or(&[]).iter().map(|t| t.0).collect();
 
                 let mut methods = vec![];
                 let mut constructors = vec![];
@@ -368,7 +373,10 @@ impl ParsedItem<'_> {
                             r.extern_cpp_impls.push(ZngurExternCppImpl {
                                 tr: tr.map(|x| x.to_zngur(base, &[])),
                                 ty: ty.to_zngur(base, &[]),
-                                methods: methods.into_iter().map(|x| x.to_zngur(base, &[])).collect(),
+                                methods: methods
+                                    .into_iter()
+                                    .map(|x| x.to_zngur(base, &[]))
+                                    .collect(),
                             });
                         }
                     }
@@ -415,17 +423,17 @@ impl ParsedRustType<'_> {
             // ParsedRustType::PossibleTypeVar(v) if type_vars.contains(&v) => RustType::TypeVar(v.to_owned()),
             // ParsedRustType::PossibleTypeVar(v) => RustType::Adt(RustPathAndGenerics { path: vec![v.to_owned()], generics: vec![], named_generics: vec![] }),
             ParsedRustType::Adt(s) => {
-                if s.generics.is_empty() 
-                    && s.named_generics.is_empty() 
-                    && s.path.start == ParsedPathStart::Relative 
-                    && s.path.segments.len() == 1 
-                    && type_vars.contains(&s.path.segments[0]) {
+                if s.generics.is_empty()
+                    && s.named_generics.is_empty()
+                    && s.path.start == ParsedPathStart::Relative
+                    && s.path.segments.len() == 1
+                    && type_vars.contains(&s.path.segments[0])
+                {
                     RustType::TypeVar(s.path.segments[0].to_owned())
                 } else {
                     RustType::Adt(s.to_zngur(base, type_vars))
                 }
             }
-        
         }
     }
 }
@@ -450,7 +458,10 @@ impl ParsedRustTrait<'_> {
                 output,
             } => RustTrait::Fn {
                 name: name.to_owned(),
-                inputs: inputs.into_iter().map(|s| s.to_zngur(base, type_vars)).collect(),
+                inputs: inputs
+                    .into_iter()
+                    .map(|s| s.to_zngur(base, type_vars))
+                    .collect(),
                 output: Box::new(output.to_zngur(base, type_vars)),
             },
         }
@@ -1064,15 +1075,19 @@ fn type_or_impl_item<'a>()
         ))
         .then_ignore(just(Token::Semicolon))
     }
-    just(Token::KwType).to(None)
-    .or(just(Token::KwImpl)
-        .ignore_then((select! { Token::Ident(c) => c })
-            .map(ParsedTypeVar)
-            .separated_by(just(Token::Comma))
-            .at_least(1)
-            .allow_trailing()
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::AngleOpen), just(Token::AngleClose))).map(Some))
+    just(Token::KwType)
+        .to(None)
+        .or(just(Token::KwImpl)
+            .ignore_then(
+                (select! { Token::Ident(c) => c })
+                    .map(ParsedTypeVar)
+                    .separated_by(just(Token::Comma))
+                    .at_least(1)
+                    .allow_trailing()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::AngleOpen), just(Token::AngleClose)),
+            )
+            .map(Some))
         .then(spanned(rust_type()))
         .then(
             spanned(inner_item())

@@ -1,6 +1,6 @@
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::collections::hash_map::Entry;
 
 use cpp::CppExportedFnDefinition;
 use cpp::CppExportedImplDefinition;
@@ -286,35 +286,57 @@ fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> (Vec<RustType>,
     (rusty_inputs, inputs)
 }
 
-fn matches_generic<'a, 'b>(ty: &'a RustType, generic: &'b RustType, mapping: &mut HashMap<&'b str, &'a RustType>) -> bool {
-    fn match_lists<'a, 'b>(v1: &'a [RustType], v2: &'b [RustType], mapping: &mut HashMap<&'b str, &'a RustType>) -> bool {
+fn matches_generic<'a, 'b>(
+    ty: &'a RustType,
+    generic: &'b RustType,
+    mapping: &mut HashMap<&'b str, &'a RustType>,
+) -> bool {
+    fn match_lists<'a, 'b>(
+        v1: &'a [RustType],
+        v2: &'b [RustType],
+        mapping: &mut HashMap<&'b str, &'a RustType>,
+    ) -> bool {
         v1.len() == v2.len() && match_iters(v1, v2, mapping)
     }
 
-    fn match_iters<'a, 'b>(i1: impl IntoIterator<Item = &'a RustType>,  i2: impl IntoIterator<Item = &'b RustType>, mapping: &mut HashMap<&'b str, &'a RustType>) -> bool {
-        i1.into_iter().zip(i2).all(|(ty1, ty2)| matches_generic(ty1, ty2, mapping))
+    fn match_iters<'a, 'b>(
+        i1: impl IntoIterator<Item = &'a RustType>,
+        i2: impl IntoIterator<Item = &'b RustType>,
+        mapping: &mut HashMap<&'b str, &'a RustType>,
+    ) -> bool {
+        i1.into_iter()
+            .zip(i2)
+            .all(|(ty1, ty2)| matches_generic(ty1, ty2, mapping))
     }
 
     match (ty, generic) {
         (RustType::TypeVar(_), _) => unreachable!(),
-        (ty, RustType::TypeVar(v)) => {
-            mapping.insert(v, ty).map(|prev_binding| prev_binding == ty).unwrap_or(true)
-        }
+        (ty, RustType::TypeVar(v)) => mapping
+            .insert(v, ty)
+            .map(|prev_binding| prev_binding == ty)
+            .unwrap_or(true),
         (RustType::Primitive(p1), RustType::Primitive(p2)) => p1 == p2,
-        (RustType::Ref(m1, t1), RustType::Ref(m2, t2)) 
-        | (RustType::Raw(m1, t1), RustType::Raw(m2, t2)) => m1 == m2 && matches_generic(t1, t2, mapping),
-        (RustType::Boxed(t1), RustType::Boxed(t2))
-        | (RustType::Slice(t1), RustType::Slice(t2)) => matches_generic(t1, t2, mapping),
+        (RustType::Ref(m1, t1), RustType::Ref(m2, t2))
+        | (RustType::Raw(m1, t1), RustType::Raw(m2, t2)) => {
+            m1 == m2 && matches_generic(t1, t2, mapping)
+        }
+        (RustType::Boxed(t1), RustType::Boxed(t2)) | (RustType::Slice(t1), RustType::Slice(t2)) => {
+            matches_generic(t1, t2, mapping)
+        }
         (RustType::Dyn(_, _), RustType::Dyn(_, _)) => todo!(),
         (RustType::Tuple(tys1), RustType::Tuple(tys2)) => match_lists(tys1, tys2, mapping),
         (RustType::Adt(adt1), RustType::Adt(adt2)) => {
             // For now named generics must be in the same order
-            adt1.path == adt2.path && match_lists(&adt1.generics, &adt2.generics, mapping) 
-            && adt1.named_generics.len() == adt2.named_generics.len()
-            && adt1.named_generics.iter().zip(adt2.named_generics.iter())
-                .all(|((n1, t1), (n2, t2))| n1 == n2 && matches_generic(t1, t2, mapping))
+            adt1.path == adt2.path
+                && match_lists(&adt1.generics, &adt2.generics, mapping)
+                && adt1.named_generics.len() == adt2.named_generics.len()
+                && adt1
+                    .named_generics
+                    .iter()
+                    .zip(adt2.named_generics.iter())
+                    .all(|((n1, t1), (n2, t2))| n1 == n2 && matches_generic(t1, t2, mapping))
         }
-        (_, _) => false
+        (_, _) => false,
     }
 }
 
@@ -324,16 +346,30 @@ enum SubstitutionError<'a> {
     UndefinedType,
 }
 
-fn map_substitute<'a>(i: impl IntoIterator<Item = &'a RustType>, mapping: &HashMap<&str, &RustType>, validate: &impl Fn(&RustType) -> bool) -> Result<Vec<RustType>, SubstitutionError<'a>> {
-    i.into_iter().map(|ty| substitute_vars(ty, mapping, validate)).collect::<Result<_,_>>()
+fn map_substitute<'a>(
+    i: impl IntoIterator<Item = &'a RustType>,
+    mapping: &HashMap<&str, &RustType>,
+    validate: &impl Fn(&RustType) -> bool,
+) -> Result<Vec<RustType>, SubstitutionError<'a>> {
+    i.into_iter()
+        .map(|ty| substitute_vars(ty, mapping, validate))
+        .collect::<Result<_, _>>()
 }
 
-fn substitute_vars<'a>(ty: &'a RustType, mapping: &HashMap<&str, &RustType>, validate: &impl Fn(&RustType) -> bool) -> Result<RustType, SubstitutionError<'a>> {
+fn substitute_vars<'a>(
+    ty: &'a RustType,
+    mapping: &HashMap<&str, &RustType>,
+    validate: &impl Fn(&RustType) -> bool,
+) -> Result<RustType, SubstitutionError<'a>> {
     fn ident(_: &RustType) -> bool {
         true
     }
     let ty = match ty {
-        RustType::TypeVar(v) => mapping.get(v.as_str()).map_or(Err(SubstitutionError::UnboundVar(v.as_str())), |ty| Ok((*ty).to_owned()))?,
+        RustType::TypeVar(v) => mapping
+            .get(v.as_str())
+            .map_or(Err(SubstitutionError::UnboundVar(v.as_str())), |ty| {
+                Ok((*ty).to_owned())
+            })?,
         p @ RustType::Primitive(_) => p.to_owned(),
         RustType::Ref(m, t) => RustType::Ref(*m, Box::new(substitute_vars(t, mapping, &ident)?)),
         RustType::Raw(m, t) => RustType::Raw(*m, Box::new(substitute_vars(t, mapping, &ident)?)),
@@ -341,40 +377,58 @@ fn substitute_vars<'a>(ty: &'a RustType, mapping: &HashMap<&str, &RustType>, val
         RustType::Slice(t) => RustType::Slice(Box::new(substitute_vars(t, mapping, &ident)?)),
         RustType::Dyn(_, _) => todo!(),
         RustType::Tuple(tys) => RustType::Tuple(map_substitute(tys, mapping, &ident)?),
-        RustType::Adt(RustPathAndGenerics { path, generics, named_generics }) => {
-            RustType::Adt(RustPathAndGenerics { 
-                path: path.to_owned(), 
-                generics: map_substitute(generics, mapping, &ident)?, 
-                named_generics: named_generics.iter().map(|(name, ty)| {
+        RustType::Adt(RustPathAndGenerics {
+            path,
+            generics,
+            named_generics,
+        }) => RustType::Adt(RustPathAndGenerics {
+            path: path.to_owned(),
+            generics: map_substitute(generics, mapping, &ident)?,
+            named_generics: named_generics
+                .iter()
+                .map(|(name, ty)| {
                     substitute_vars(ty, mapping, &ident).map(|ty| (name.to_owned(), ty))
-                }).collect::<Result<_,_>>()?,
-            })
-        }
+                })
+                .collect::<Result<_, _>>()?,
+        }),
     };
-    validate(&ty).then_some(ty).ok_or(SubstitutionError::UndefinedType)
+    validate(&ty)
+        .then_some(ty)
+        .ok_or(SubstitutionError::UndefinedType)
 }
 
-fn substitute_method_vars<'a>(m: &'a ZngurMethodDetails, mapping: &HashMap<&str, &RustType>, validate: &impl Fn(&RustType) -> bool) -> Result<ZngurMethodDetails, SubstitutionError<'a>> {
-    Ok(ZngurMethodDetails { 
-        data: ZngurMethod { 
-            name: m.data.name.to_owned(), 
-            generics: map_substitute(&m.data.generics, mapping, validate)?, 
-            receiver: m.data.receiver, 
-            inputs: map_substitute(&m.data.inputs, mapping, validate)?, 
+fn substitute_method_vars<'a>(
+    m: &'a ZngurMethodDetails,
+    mapping: &HashMap<&str, &RustType>,
+    validate: &impl Fn(&RustType) -> bool,
+) -> Result<ZngurMethodDetails, SubstitutionError<'a>> {
+    Ok(ZngurMethodDetails {
+        data: ZngurMethod {
+            name: m.data.name.to_owned(),
+            generics: map_substitute(&m.data.generics, mapping, validate)?,
+            receiver: m.data.receiver,
+            inputs: map_substitute(&m.data.inputs, mapping, validate)?,
             output: substitute_vars(&m.data.output, mapping, validate)?,
-        }, 
-        use_path: m.use_path.to_owned(), 
-        deref: m.deref.as_ref().map(|ty| substitute_vars(&ty, mapping, validate)).transpose()?,
+        },
+        use_path: m.use_path.to_owned(),
+        deref: m
+            .deref
+            .as_ref()
+            .map(|ty| substitute_vars(&ty, mapping, validate))
+            .transpose()?,
     })
 }
 
-fn augment_type_with_impls(mut ty: ZngurType, impls: &[ZngurType], defined_types: &HashSet<RustType>) -> ZngurType {
+fn augment_type_with_impls(
+    mut ty: ZngurType,
+    impls: &[ZngurType],
+    defined_types: &HashSet<RustType>,
+) -> ZngurType {
     fn validate(defined_types: &HashSet<RustType>) -> impl Fn(&RustType) -> bool {
-        |ty| {  
+        |ty| {
             let ty = match ty {
-                RustType::Raw(_, ty)
-                | RustType::Ref(_, ty) => ty,
-                ty => ty
+                RustType::Raw(_, ty) | RustType::Ref(_, ty) => ty,
+                ty => ty,
             };
             match ty {
                 RustType::Primitive(_) => true,
@@ -388,14 +442,14 @@ fn augment_type_with_impls(mut ty: ZngurType, impls: &[ZngurType], defined_types
         if !matches_generic(&ty.ty, &zng_impl.ty, &mut mapping) {
             continue;
         }
-        
+
         // For these we just choose the first match layout. Worst case is a compile error
         ty.layout = ty.layout.or(zng_impl.layout);
         if ty.cpp_ref.is_none() {
             ty.cpp_ref = zng_impl.cpp_ref.clone()
         }
         if ty.cpp_value.is_none() {
-            ty.cpp_value= zng_impl.cpp_value.clone()
+            ty.cpp_value = zng_impl.cpp_value.clone()
         }
         for t in &zng_impl.wellknown_traits {
             if !ty.wellknown_traits.contains(t) {
@@ -406,22 +460,38 @@ fn augment_type_with_impls(mut ty: ZngurType, impls: &[ZngurType], defined_types
             if ty.methods.iter().any(|x| x.data.name == m.data.name) {
                 continue;
             }
-            match substitute_method_vars(m, &mapping, &validate(defined_types)){
+            match substitute_method_vars(m, &mapping, &validate(defined_types)) {
                 Ok(m) => ty.methods.push(m),
                 // Do nothing if we reference an undefined type in an `impl`
                 Err(SubstitutionError::UndefinedType) => (),
-                Err(SubstitutionError::UnboundVar(v)) => panic!("Failed to substitute type variable {} in method {} in impl {} for type {}", v, m.data.name, zng_impl.ty, ty.ty)
+                Err(SubstitutionError::UnboundVar(v)) => panic!(
+                    "Failed to substitute type variable {} in method {} in impl {} for type {}",
+                    v, m.data.name, zng_impl.ty, ty.ty
+                ),
             }
         }
         for c in &zng_impl.constructors {
             if ty.constructors.iter().any(|x| x.name == c.name) {
                 continue;
             }
-            let new_inputs: Result<Vec<_>, _> = c.inputs.iter().map(|(name, ty)| substitute_vars(ty, &mapping, &validate(defined_types)).map(|ty| (name.to_owned(), ty))).collect();
+            let new_inputs: Result<Vec<_>, _> = c
+                .inputs
+                .iter()
+                .map(|(name, ty)| {
+                    substitute_vars(ty, &mapping, &validate(defined_types))
+                        .map(|ty| (name.to_owned(), ty))
+                })
+                .collect();
             match new_inputs {
-                Ok(inputs) => ty.constructors.push(ZngurConstructor { name: c.name.to_owned(), inputs }),
+                Ok(inputs) => ty.constructors.push(ZngurConstructor {
+                    name: c.name.to_owned(),
+                    inputs,
+                }),
                 Err(SubstitutionError::UndefinedType) => (),
-                Err(SubstitutionError::UnboundVar(v)) => panic!("Failed to substitute type variable {} in constructor {:?} in impl {} for type {}", v, c.name, zng_impl.ty, ty.ty)
+                Err(SubstitutionError::UnboundVar(v)) => panic!(
+                    "Failed to substitute type variable {} in constructor {:?} in impl {} for type {}",
+                    v, c.name, zng_impl.ty, ty.ty
+                ),
             }
         }
     }
