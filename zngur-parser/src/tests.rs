@@ -6,14 +6,14 @@ use zngur_def::{RustPathAndGenerics, RustType};
 use crate::ParsedZngFile;
 
 fn check_success(zng: &str) {
-    let _ = ParsedZngFile::parse("main.zng", zng);
+    let _ = ParsedZngFile::parse_str(zng);
 }
 
 pub struct ErrorText(pub String);
 
 fn check_fail(zng: &str, error: Expect) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse("main.zng", zng);
+        let _ = ParsedZngFile::parse_str(zng);
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -129,8 +129,7 @@ type crate::Way {
 
 #[test]
 fn alias_expands_correctly() {
-    let parsed = ParsedZngFile::parse(
-        "main.zng",
+    let parsed = ParsedZngFile::parse_str(
         r#"
 use ::std::string::String as MyString;
 type MyString {
@@ -138,7 +137,7 @@ type MyString {
 }
     "#,
     );
-    let ty = parsed.types.first().expect("no type parsed");
+    let ty = parsed.types.values().next().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
         panic!("no match?");
     };
@@ -147,8 +146,7 @@ type MyString {
 
 #[test]
 fn alias_expands_nearest_scope_first() {
-    let parsed = ParsedZngFile::parse(
-        "main.zng",
+    let parsed = ParsedZngFile::parse_str(
         r#"
 use ::std::string::String as MyString;
 mod crate {
@@ -159,9 +157,32 @@ mod crate {
 }
     "#,
     );
-    let ty = parsed.types.first().expect("no type parsed");
+    let ty = parsed.types.values().next().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
         panic!("no match?");
     };
     assert_eq!(p.as_slice(), ["crate", "MyLocalString"]);
+}
+
+#[test]
+fn import_parser_test() {
+    // Test that import statements can be parsed successfully
+    let parsed = ParsedZngFile::parse_str(
+        r#"
+import "./relative/path.zng";
+import "/absolute/path.zng";
+type Example {
+    #layout(size = 1, align = 1);
+}
+    "#,
+    );
+    assert_eq!(parsed.imports.len(), 2);
+    assert_eq!(
+        parsed.imports[0].0,
+        std::path::PathBuf::from("./relative/path.zng")
+    );
+    assert_eq!(
+        parsed.imports[1].0,
+        std::path::PathBuf::from("/absolute/path.zng")
+    );
 }
