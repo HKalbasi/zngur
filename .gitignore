@@ -1,5 +1,5 @@
 /target
-a.out
+a.out*
 .vscode
 compile_commands.json
 zngur-autozng/doc.json

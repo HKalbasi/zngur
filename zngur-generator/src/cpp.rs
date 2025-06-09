@@ -5,7 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use zngur_def::{Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
+use zngur_def::{CppRef, CppValue, Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
 
 use crate::{ZngurWellknownTraitData, rust::IntoCpp};
 
@@ -486,8 +486,8 @@ pub struct CppTypeDefinition {
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
-    pub cpp_value: Option<(String, String)>,
-    pub cpp_ref: Option<String>,
+    pub cpp_value: Option<CppValue>,
+    pub cpp_ref: Option<CppRef>,
 }
 
 impl Default for CppTypeDefinition {
@@ -716,7 +716,7 @@ inline {ty}({as_std_function} f);
                 }
                 None => (),
             }
-            if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
+            if let Some(CppValue(rust_link_name, cpp_ty)) = &self.cpp_value {
                 writeln!(
                     state,
                     r#"
@@ -1034,7 +1034,7 @@ private:
                     }
                 }
             }
-            if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
+            if let Some(CppValue(rust_link_name, cpp_ty)) = &self.cpp_value {
                 writeln!(
                     state,
                     r#"
@@ -1135,7 +1135,7 @@ namespace rust {{
         template<>
         inline void __zngur_internal_assume_init< {ty} >({ty}&) noexcept {{
         }}
-    
+
         template<>
         inline void __zngur_internal_assume_deinit< {ty} >({ty}&) noexcept {{
         }}
@@ -1157,7 +1157,7 @@ namespace rust {{
         inline void __zngur_internal_assume_init< {ty} >({ty}& t) noexcept {{
             t.drop_flag = true;
         }}
-    
+
         template<>
         inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept {{
             ::rust::__zngur_internal_check_init< {ty} >(t);

@@ -2,6 +2,9 @@ use std::{collections::HashMap, fmt::Display};
 
 use itertools::Itertools;
 
+mod merge;
+pub use merge::{Merge, MergeFailure, MergeResult};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mutability {
     Mut,
@@ -45,13 +48,13 @@ pub struct ZngurExternCppImpl {
     pub methods: Vec<ZngurMethod>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ZngurConstructor {
     pub name: Option<String>,
     pub inputs: Vec<(String, RustType)>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 pub struct ZngurField {
     pub name: String,
     pub ty: RustType,
@@ -86,11 +89,27 @@ pub enum LayoutPolicy {
     OnlyByRef,
 }
 
-#[derive(Debug)]
+impl LayoutPolicy {
+    pub const ZERO_SIZED_TYPE: Self = LayoutPolicy::StackAllocated { size: 0, align: 1 };
+}
+
+#[derive(Debug, PartialEq, Eq)]
 pub struct ZngurMethodDetails {
     pub data: ZngurMethod,
     pub use_path: Option<Vec<String>>,
     pub deref: Option<RustType>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CppValue(pub String, pub String);
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct CppRef(pub String);
+
+impl Display for CppRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
+    }
 }
 
 #[derive(Debug)]
@@ -101,8 +120,8 @@ pub struct ZngurType {
     pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
     pub fields: Vec<ZngurField>,
-    pub cpp_value: Option<(String, String)>,
-    pub cpp_ref: Option<String>,
+    pub cpp_value: Option<CppValue>,
+    pub cpp_ref: Option<CppRef>,
 }
 
 #[derive(Debug)]
@@ -112,14 +131,23 @@ pub struct ZngurTrait {
 }
 
 #[derive(Debug, Default)]
-pub struct ZngurFile {
+pub struct AdditionalIncludes(pub String);
+
+#[derive(Debug, Default)]
+pub struct ConvertPanicToException(pub bool);
+
+#[derive(Clone, Debug, Default)]
+pub struct Import(pub std::path::PathBuf);
+#[derive(Debug, Default)]
+pub struct ZngurSpec {
+    pub imports: Vec<Import>,
     pub types: Vec<ZngurType>,
     pub traits: HashMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,
-    pub additional_includes: String,
-    pub convert_panic_to_exception: bool,
+    pub additional_includes: AdditionalIncludes,
+    pub convert_panic_to_exception: ConvertPanicToException,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

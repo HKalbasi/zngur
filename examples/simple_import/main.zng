@@ -1,0 +1,39 @@
+// Main module - imports foo and bar modules to demonstrate import/merge
+
+import "./foo.zng";
+import "./bar.zng";
+
+// Note: All APIs from foo.zng and bar.zng are now available
+// Primitives from primitives.zng are also available transitively
+// The std module definitions are automatically merged
+
+// Main module extensions - adding additional APIs to imported types
+mod ::std {
+    mod vec {
+        type Vec<i32> {
+            #layout(size = 24, align = 8);
+            wellknown_traits(Debug);
+
+            // Inherited methods from foo.zng (automatically merged)
+            fn new() -> Vec<i32>;
+            fn push(&mut self, i32);
+
+            // Additional methods beyond what foo.zng provides
+            fn is_empty(&self) -> bool;
+            fn clear(&mut self);
+        }
+    }
+
+    type option::Option<::std::string::String> {
+        #layout(size = 24, align = 8);
+
+        // Inherited constructors and methods from bar.zng (automatically merged)
+        constructor None;
+        constructor Some(::std::string::String);
+        fn is_some(&self) -> bool;
+        fn is_none(&self) -> bool;
+
+        // Additional methods beyond what bar.zng provides
+        fn unwrap(self) -> ::std::string::String;
+    }
+}
