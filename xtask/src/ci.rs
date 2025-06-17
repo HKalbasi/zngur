@@ -10,20 +10,11 @@ fn check_crate(sh: &Shell) -> Result<()> {
 }
 
 fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
-    const CARGO_PROJECTS: &[&str] = &["cxx_demo", "osmium", "tutorial_cpp"];
+    const CARGO_PROJECTS: &[&str] = &["cxx_demo", "tutorial_cpp"];
     sh.change_dir("examples");
     let examples = cmd!(sh, "ls").read()?;
     for example in examples.lines() {
         sh.change_dir(example);
-        if example == "osmium" {
-            if cfg!(target_os = "macos") {
-                sh.change_dir("..");
-                continue;
-            }
-            if !sh.path_exists("map.osm") {
-                cmd!(sh, "wget -O map.osm https://api.openstreetmap.org/api/0.6/map?bbox=36.58848,51.38459,36.63783,51.55314").run()?;
-            }
-        }
         if CARGO_PROJECTS.contains(&example) {
             cmd!(sh, "cargo build")
                 .run()
