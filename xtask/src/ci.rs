@@ -62,5 +62,6 @@ pub fn main(fix: bool) -> Result<()> {
         }
     }
     check_examples(sh, fix).with_context(|| "Checking examples failed")?;
+    cmd!(sh, "cargo test --all-features").run()?;
     Ok(())
 }
