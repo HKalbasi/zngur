@@ -1,5 +1,6 @@
 /target
 a.out
+a.out.dSYM
 .vscode
 compile_commands.json
 zngur-autozng/doc.json
