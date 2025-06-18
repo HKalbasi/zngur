@@ -6,7 +6,7 @@ fn main() {
 
     let cxx = std::env::var("CXX").unwrap_or("c++".to_owned());
 
-    let lto_enabled = cxx.ends_with("clang++");
+    let lto_enabled = cxx.ends_with("clang++") && cfg!(target_os = "linux");
 
     if lto_enabled {
         build::rustc_env("RUSTC_FLAGS", "-C linker-plugin-lto -C linker=clang");
@@ -27,7 +27,8 @@ fn main() {
         .cpp(true)
         .compiler(cxx)
         .include(&crate_dir)
-        .include(&out_dir);
+        .include(&out_dir)
+        .std("c++17");
 
     if lto_enabled {
         my_build.flag("-flto");

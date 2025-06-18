@@ -379,17 +379,6 @@ name = "example-memory_management"
 version = "0.6.0"
 
 [[package]]
-name = "example-osmium"
-version = "0.6.0"
-dependencies = [
- "bitflags 2.4.0",
- "build-rs",
- "cc",
- "itertools 0.11.0",
- "zngur",
-]
-
-[[package]]
 name = "example-rayon"
 version = "0.6.0"
 dependencies = [
