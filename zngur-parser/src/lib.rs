@@ -1,4 +1,4 @@
-use std::{fmt::Display, process::exit, sync::Mutex};
+use std::{fmt::Display, process::exit};
 
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
@@ -250,7 +250,7 @@ impl ParsedMethod<'_> {
 }
 
 impl ProcessedItem<'_> {
-    fn add_to_zngur_file(self, r: &mut ZngurFile, aliases: &[ParsedAlias], base: &[String]) {
+    fn add_to_zngur_file(self, r: &mut ZngurFile, aliases: &[ParsedAlias], base: &[String], ctx: &ParseContext) {
         match self {
             ProcessedItem::Mod {
                 path,
@@ -260,16 +260,13 @@ impl ProcessedItem<'_> {
                 let base = path.to_zngur(base);
                 mod_aliases.extend_from_slice(aliases);
                 for item in items {
-                    item.add_to_zngur_file(r, &mod_aliases, &base);
+                    item.add_to_zngur_file(r, &mod_aliases, &base, ctx);
                 }
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
                     // We add unit type implicitly.
-                    create_and_emit_error(
-                        "Unit type is declared implicitly. Remove this entirely.",
-                        ty.span,
-                    );
+                    create_and_emit_error(ctx, "Unit type is declared implicitly. Remove this entirely.", ty.span);
                 }
 
                 let mut methods = vec![];
@@ -294,18 +291,20 @@ impl ProcessedItem<'_> {
                                             "size" => size = Some(value),
                                             "align" => align = Some(value),
                                             _ => {
-                                                create_and_emit_error("Unknown property", key.span)
+                                                create_and_emit_error(ctx, "Unknown property", key.span)
                                             }
                                         }
                                     }
                                     let Some(size) = size else {
                                         create_and_emit_error(
+                                            ctx,
                                             "Size is not declared for this type",
                                             ty.span,
                                         );
                                     };
                                     let Some(align) = align else {
                                         create_and_emit_error(
+                                            ctx,
                                             "Align is not declared for this type",
                                             ty.span,
                                         );
@@ -317,7 +316,7 @@ impl ProcessedItem<'_> {
                             });
                             match layout_span {
                                 Some(_) => {
-                                    create_and_emit_error("Duplicate layout policy found", span);
+                                    create_and_emit_error(ctx, "Duplicate layout policy found", span);
                                 }
                                 None => layout_span = Some(span),
                             }
@@ -374,7 +373,7 @@ impl ProcessedItem<'_> {
                         ParsedTypeItem::CppRef { cpp_type } => {
                             match layout_span {
                                 Some(span) => {
-                                    create_and_emit_error("Duplicate layout policy found", span);
+                                    create_and_emit_error(ctx, "Duplicate layout policy found", span);
                                 }
                                 None => {
                                     layout =
@@ -403,23 +402,23 @@ impl ProcessedItem<'_> {
                 }
                 if let Some(is_unsized) = is_unsized {
                     if let Some(span) = layout_span {
-                        let file_name = LATEST_FILENAME.lock().unwrap().to_owned();
                         emit_ariadne_error(
+                            ctx,
                             Report::build(
                                 ReportKind::Error,
-                                file_name.clone(),
+                                ctx.filename,
                                 span.start,
                             )
                             .with_message("Duplicate layout policy found for unsized type.")
                             .with_label(
-                                Label::new((file_name.clone(), span.start..span.end))
+                                Label::new((ctx.filename.to_string(), span.start..span.end))
                                     .with_message(
                                         "Unsized types have implicit layout policy, remove this.",
                                     )
                                     .with_color(Color::Red),
                             )
                             .with_label(
-                                Label::new((file_name.clone(), is_unsized.span.start..is_unsized.span.end))
+                                Label::new((ctx.filename.to_string(), is_unsized.span.start..is_unsized.span.end))
                                     .with_message("Type declared as unsized here.")
                                     .with_color(Color::Blue),
                             )
@@ -430,6 +429,7 @@ impl ProcessedItem<'_> {
                 }
                 let Some(layout) = layout else {
                     create_and_emit_error(
+                        ctx,
                         "No layout policy found for this type. \
 Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
                         ty.span,
@@ -598,17 +598,24 @@ impl ParsedRustPathAndGenerics<'_> {
     }
 }
 
-static LATEST_FILENAME: Mutex<String> = Mutex::new(String::new());
-static LATEST_TEXT: Mutex<String> = Mutex::new(String::new());
+struct ParseContext<'a> {
+  filename: &'a str,
+  text: &'a str,
+}
+
+impl<'a> ParseContext<'a> {
+  fn new(filename: &'a str, text: &'a str) -> Self {
+    Self { filename, text }
+  }
+}
 
 impl<'a> ParsedZngFile<'a> {
     pub fn parse(filename: &str, text: &str) -> ZngurFile {
-        *LATEST_FILENAME.lock().unwrap() = filename.to_string();
-        *LATEST_TEXT.lock().unwrap() = text.to_string();
+        let ctx = ParseContext::new(filename, text);
         let (tokens, errs) = lexer().parse(text).into_output_errors();
         let Some(tokens) = tokens else {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-            emit_error(errs);
+            emit_error(&ctx, errs);
         };
         let tokens: ParserInput<'_> = tokens
             .as_slice()
@@ -619,9 +626,9 @@ impl<'a> ParsedZngFile<'a> {
             .into_output_errors();
         let Some(ast) = ast else {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-            emit_error(errs);
+            emit_error(&ctx, errs);
         };
-        ast.0.into_zngur_file()
+        ast.0.into_zngur_file(&ctx)
     }
 
     pub fn process(self) -> ProcessedZngFile<'a> {
@@ -629,8 +636,8 @@ impl<'a> ParsedZngFile<'a> {
         ProcessedZngFile::new(aliases, items)
     }
 
-    pub fn into_zngur_file(self) -> ZngurFile {
-        self.process().into_zngur_file()
+    fn into_zngur_file(self, ctx: &ParseContext) -> ZngurFile {
+        self.process().into_zngur_file(ctx)
     }
 }
 
@@ -664,28 +671,25 @@ impl<'a> ProcessedZngFile<'a> {
         ProcessedZngFile { aliases, items }
     }
 
-    pub fn into_zngur_file(self) -> ZngurFile {
+    fn into_zngur_file(self, ctx: &ParseContext) -> ZngurFile {
         let mut r = ZngurFile::default();
         for item in self.items {
-            item.add_to_zngur_file(&mut r, &self.aliases, &[]);
+            item.add_to_zngur_file(&mut r, &self.aliases, &[], ctx);
         }
         r
     }
 }
 
-fn create_and_emit_error(error: &str, span: Span) -> ! {
-    emit_error([Rich::custom(span, error)].into_iter())
+fn create_and_emit_error(ctx: &ParseContext, error: &str, span: Span) -> ! {
+    emit_error(ctx, [Rich::custom(span, error)].into_iter())
 }
 
 #[cfg(test)]
-fn emit_ariadne_error(err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
+fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
     let mut r = Vec::<u8>::new();
     // Block needed to drop lock guards before panic
     {
-        let filename = &**LATEST_FILENAME.lock().unwrap();
-        let text = &**LATEST_TEXT.lock().unwrap();
-
-        err.write(sources([(filename.to_string(), text)]), &mut r)
+        err.write(sources([(ctx.filename.to_string(), ctx.text)]), &mut r)
             .unwrap();
     }
     std::panic::resume_unwind(Box::new(tests::ErrorText(
@@ -694,27 +698,24 @@ fn emit_ariadne_error(err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
 }
 
 #[cfg(not(test))]
-fn emit_ariadne_error(err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
-    let filename = &**LATEST_FILENAME.lock().unwrap();
-    let text = &**LATEST_TEXT.lock().unwrap();
-
-    err.eprint(sources([(filename.to_string(), text)])).unwrap();
+fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
+    err.eprint(sources([(ctx.filename.to_string(), ctx.text)])).unwrap();
     exit(101);
 }
 
-fn emit_error<'a>(errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
-    let filename = LATEST_FILENAME.lock().unwrap().to_owned();
+fn emit_error<'a>(ctx: &ParseContext, errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
     for e in errs {
         emit_ariadne_error(
-            Report::build(ReportKind::Error, &filename, e.span().start)
+            ctx,
+            Report::build(ReportKind::Error, ctx.filename, e.span().start)
                 .with_message(e.to_string())
                 .with_label(
-                    Label::new((filename.to_string(), e.span().into_range()))
+                    Label::new((ctx.filename.to_string(), e.span().into_range()))
                         .with_message(e.reason().to_string())
                         .with_color(Color::Red),
                 )
                 .with_labels(e.contexts().map(|(label, span)| {
-                    Label::new((filename.to_string(), span.into_range()))
+                    Label::new((ctx.filename.to_string(), span.into_range()))
                         .with_message(format!("while parsing this {}", label))
                         .with_color(Color::Yellow)
                 }))
