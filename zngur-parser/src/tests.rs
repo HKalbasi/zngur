@@ -66,12 +66,12 @@ type () {
 }
     "#,
         expect![[r#"
-            Error: found 'welcome_traits' expected 'layout', '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
+            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
                ╭─[main.zng:4:5]
                │
              4 │     welcome_traits(Copy);
-               │     ───────┬──────
-               │            ╰──────── found 'welcome_traits' expected 'layout', '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
+               │     ───────┬──────  
+               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
             ───╯
         "#]],
     );
@@ -113,8 +113,8 @@ type crate::Way {
                ╭─[main.zng:3:5]
                │
              3 │     #layout(size = 1, align = 2);
-               │     ─────────────┬─────────────  
-               │                  ╰─────────────── Duplicate layout policy found
+               │     ──────────────┬─────────────  
+               │                   ╰─────────────── Duplicate layout policy found
             ───╯
         "#]],
     );
