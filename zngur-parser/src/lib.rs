@@ -250,7 +250,13 @@ impl ParsedMethod<'_> {
 }
 
 impl ProcessedItem<'_> {
-    fn add_to_zngur_file(self, r: &mut ZngurFile, aliases: &[ParsedAlias], base: &[String], ctx: &ParseContext) {
+    fn add_to_zngur_file(
+        self,
+        r: &mut ZngurFile,
+        aliases: &[ParsedAlias],
+        base: &[String],
+        ctx: &ParseContext,
+    ) {
         match self {
             ProcessedItem::Mod {
                 path,
@@ -266,7 +272,11 @@ impl ProcessedItem<'_> {
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
                     // We add unit type implicitly.
-                    create_and_emit_error(ctx, "Unit type is declared implicitly. Remove this entirely.", ty.span);
+                    create_and_emit_error(
+                        ctx,
+                        "Unit type is declared implicitly. Remove this entirely.",
+                        ty.span,
+                    );
                 }
 
                 let mut methods = vec![];
@@ -290,9 +300,11 @@ impl ProcessedItem<'_> {
                                         match key.inner {
                                             "size" => size = Some(value),
                                             "align" => align = Some(value),
-                                            _ => {
-                                                create_and_emit_error(ctx, "Unknown property", key.span)
-                                            }
+                                            _ => create_and_emit_error(
+                                                ctx,
+                                                "Unknown property",
+                                                key.span,
+                                            ),
                                         }
                                     }
                                     let Some(size) = size else {
@@ -316,7 +328,11 @@ impl ProcessedItem<'_> {
                             });
                             match layout_span {
                                 Some(_) => {
-                                    create_and_emit_error(ctx, "Duplicate layout policy found", span);
+                                    create_and_emit_error(
+                                        ctx,
+                                        "Duplicate layout policy found",
+                                        span,
+                                    );
                                 }
                                 None => layout_span = Some(span),
                             }
@@ -373,7 +389,11 @@ impl ProcessedItem<'_> {
                         ParsedTypeItem::CppRef { cpp_type } => {
                             match layout_span {
                                 Some(span) => {
-                                    create_and_emit_error(ctx, "Duplicate layout policy found", span);
+                                    create_and_emit_error(
+                                        ctx,
+                                        "Duplicate layout policy found",
+                                        span,
+                                    );
                                 }
                                 None => {
                                     layout =
@@ -599,14 +619,14 @@ impl ParsedRustPathAndGenerics<'_> {
 }
 
 struct ParseContext<'a> {
-  filename: &'a str,
-  text: &'a str,
+    filename: &'a str,
+    text: &'a str,
 }
 
 impl<'a> ParseContext<'a> {
-  fn new(filename: &'a str, text: &'a str) -> Self {
-    Self { filename, text }
-  }
+    fn new(filename: &'a str, text: &'a str) -> Self {
+        Self { filename, text }
+    }
 }
 
 impl<'a> ParsedZngFile<'a> {
@@ -699,7 +719,8 @@ fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Ran
 
 #[cfg(not(test))]
 fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
-    err.eprint(sources([(ctx.filename.to_string(), ctx.text)])).unwrap();
+    err.eprint(sources([(ctx.filename.to_string(), ctx.text)]))
+        .unwrap();
     exit(101);
 }
 
