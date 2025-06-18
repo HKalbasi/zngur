@@ -18,7 +18,7 @@ fn main() {
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).compiler(&cxx);
+    let my_build = my_build.cpp(true).compiler(&cxx).std("c++17");
     let my_build = || my_build.clone();
 
     my_build().file("generated.cpp").compile("zngur_generated");

@@ -23,7 +23,9 @@ fn main() {
         .cpp(true)
         .compiler(&cxx)
         .include(&crate_dir)
-        .include(&out_dir);
+        .include(&out_dir)
+        .std("c++17");
+
     let my_build = || my_build.clone();
 
     my_build()
