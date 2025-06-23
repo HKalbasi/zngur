@@ -1,0 +1,17 @@
+=== Import/Merge Demonstration ===
+
+foo(): Creating a Rust Vec<i32>
+  Vec contents: [main.cpp:16] numbers = [
+    10,
+    20,
+    30,
+]
+  Vec is_empty(): 0
+  After clear(), is_empty(): 1
+
+bar(): Creating Rust Option<String>
+  some_value.is_some(): 1
+  none_value.is_none(): 1
+  Unwrapped string: [main.cpp:36] unwrapped_string = ""
+
+=== Extended APIs from main.zng working alongside imported APIs ===

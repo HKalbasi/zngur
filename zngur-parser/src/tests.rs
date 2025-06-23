@@ -6,14 +6,14 @@ use zngur_def::{RustPathAndGenerics, RustType};
 use crate::ParsedZngFile;
 
 fn check_success(zng: &str) {
-    let _ = ParsedZngFile::parse("main.zng", zng);
+    let _ = ParsedZngFile::parse_str(zng);
 }
 
 pub struct ErrorText(pub String);
 
 fn check_fail(zng: &str, error: Expect) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse("main.zng", zng);
+        let _ = ParsedZngFile::parse_str(zng);
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -35,7 +35,7 @@ type () {
     "#,
         expect![[r#"
             Error: Unit type is declared implicitly. Remove this entirely.
-               ╭─[main.zng:2:6]
+               ╭─[<string literal>:2:6]
                │
              2 │ type () {
                │      ─┬  
@@ -66,12 +66,12 @@ type () {
 }
     "#,
         expect![[r#"
-            Error: found 'welcome_traits' expected 'layout', '#', 'wellknown_traits', 'constructor', 'fn', or '}'
-               ╭─[main.zng:4:5]
+            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
+               ╭─[<string literal>:4:5]
                │
              4 │     welcome_traits(Copy);
                │     ───────┬──────  
-               │            ╰──────── found 'welcome_traits' expected 'layout', '#', 'wellknown_traits', 'constructor', 'fn', or '}'
+               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
             ───╯
         "#]],
     );
@@ -88,7 +88,7 @@ type ::std::string::String {
     "#,
         expect![[r#"
             Error: Duplicate layout policy found
-               ╭─[main.zng:4:5]
+               ╭─[<string literal>:4:5]
                │
              4 │     #heap_allocated;
                │     ───────┬───────  
@@ -110,11 +110,11 @@ type crate::Way {
     "#,
         expect![[r#"
             Error: Duplicate layout policy found
-               ╭─[main.zng:3:5]
+               ╭─[<string literal>:3:5]
                │
              3 │     #layout(size = 1, align = 2);
-               │     ─────────────┬─────────────  
-               │                  ╰─────────────── Duplicate layout policy found
+               │     ──────────────┬─────────────  
+               │                   ╰─────────────── Duplicate layout policy found
             ───╯
         "#]],
     );
@@ -129,8 +129,7 @@ type crate::Way {
 
 #[test]
 fn alias_expands_correctly() {
-    let parsed = ParsedZngFile::parse(
-        "main.zng",
+    let parsed = ParsedZngFile::parse_str(
         r#"
 use ::std::string::String as MyString;
 type MyString {
@@ -147,8 +146,7 @@ type MyString {
 
 #[test]
 fn alias_expands_nearest_scope_first() {
-    let parsed = ParsedZngFile::parse(
-        "main.zng",
+    let parsed = ParsedZngFile::parse_str(
         r#"
 use ::std::string::String as MyString;
 mod crate {
@@ -164,4 +162,22 @@ mod crate {
         panic!("no match?");
     };
     assert_eq!(p.as_slice(), ["crate", "MyLocalString"]);
+}
+
+#[test]
+fn import_parser_test() {
+    // Test that import statements can be parsed successfully
+    let parsed = ParsedZngFile::parse_str(
+        r#"
+import "./relative/path.zng";
+type Example {
+    #layout(size = 1, align = 1);
+}
+    "#,
+    );
+    assert_eq!(parsed.imports.len(), 1);
+    assert_eq!(
+        parsed.imports[0].0,
+        std::path::PathBuf::from("./relative/path.zng")
+    );
 }
