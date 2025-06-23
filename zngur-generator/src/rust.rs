@@ -550,6 +550,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
             r#"
             const _: [(); {offset}] = [(); ::std::mem::offset_of!({owner}, {name})];
             const _: () = {{
+                #[allow(dead_code)]
                 fn check_field(value: {owner}) -> {ty} {{
                     value.{name}
                 }}
