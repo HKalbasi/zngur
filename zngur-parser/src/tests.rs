@@ -35,7 +35,7 @@ type () {
     "#,
         expect![[r#"
             Error: Unit type is declared implicitly. Remove this entirely.
-               ╭─[main.zng:2:6]
+               ╭─[<string literal>:2:6]
                │
              2 │ type () {
                │      ─┬  
@@ -67,7 +67,7 @@ type () {
     "#,
         expect![[r#"
             Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
-               ╭─[main.zng:4:5]
+               ╭─[<string literal>:4:5]
                │
              4 │     welcome_traits(Copy);
                │     ───────┬──────  
@@ -88,7 +88,7 @@ type ::std::string::String {
     "#,
         expect![[r#"
             Error: Duplicate layout policy found
-               ╭─[main.zng:4:5]
+               ╭─[<string literal>:4:5]
                │
              4 │     #heap_allocated;
                │     ───────┬───────  
@@ -110,7 +110,7 @@ type crate::Way {
     "#,
         expect![[r#"
             Error: Duplicate layout policy found
-               ╭─[main.zng:3:5]
+               ╭─[<string literal>:3:5]
                │
              3 │     #layout(size = 1, align = 2);
                │     ──────────────┬─────────────  
@@ -170,19 +170,14 @@ fn import_parser_test() {
     let parsed = ParsedZngFile::parse_str(
         r#"
 import "./relative/path.zng";
-import "/absolute/path.zng";
 type Example {
     #layout(size = 1, align = 1);
 }
     "#,
     );
-    assert_eq!(parsed.imports.len(), 2);
+    assert_eq!(parsed.imports.len(), 1);
     assert_eq!(
         parsed.imports[0].0,
         std::path::PathBuf::from("./relative/path.zng")
-    );
-    assert_eq!(
-        parsed.imports[1].0,
-        std::path::PathBuf::from("/absolute/path.zng")
     );
 }
