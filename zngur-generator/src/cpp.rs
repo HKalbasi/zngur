@@ -1689,6 +1689,12 @@ namespace rust {
         for ty in [8, 16, 32, 64]
             .into_iter()
             .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
+            .chain([
+              "long".to_string(),
+              "long long".to_string(),
+              "unsigned long".to_string(),
+              "unsigned long long".to_string(),
+            ])
             .chain([8, 16, 32, 64].into_iter().flat_map(|x| {
                 [
                     format!("::rust::Ref<int{x}_t>"),
@@ -1704,9 +1710,21 @@ namespace rust {
                 "::size_t".to_string(),
             ])
         {
-            if ty == "::size_t" {
-                writeln!(state, "#ifdef __APPLE__")?;
-            }
+            let needs_endif = match ty.as_str() {
+                "::size_t" => {
+                    writeln!(state, "#ifdef __APPLE__")?;
+                    true
+                }
+                "long" | "unsigned long" => {
+                    writeln!(state, "#if !defined(__APPLE__) && (ULONG_MAX == 0xFFFFFFFFUL)")?;
+                    true
+                }
+                "long long" | "unsigned long long" => {
+                    writeln!(state, "#if !defined(__APPLE__) && (ULLONG_MAX == SIZE_MAX)")?;
+                    true
+                }
+                _ => false
+            };
             writeln!(
                 state,
                 r#"
@@ -1787,6 +1805,10 @@ namespace rust {
                 || ty.starts_with("::size_t")
                 || ty.starts_with("::double")
                 || ty.starts_with("::float")
+                || ty == "long"
+                || ty == "long long"
+                || ty == "unsigned long"
+                || ty == "unsigned long long"
             {
                 writeln!(
                     state,
@@ -1800,7 +1822,8 @@ namespace rust {
                     "#
                 )?;
             }
-            if ty == "::size_t" {
+
+            if needs_endif {
                 writeln!(state, "#endif")?;
             }
         }
