@@ -1,0 +1,6 @@
+// Primitive types used across the import/merge example
+
+type bool {
+    #layout(size = 1, align = 1);
+    wellknown_traits(Copy);
+}

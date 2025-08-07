@@ -1,0 +1,24 @@
+// Bar module - exports Option<String> APIs for C++ usage
+
+import "./primitives.zng";
+
+mod ::std {
+    mod string {
+        type String {
+            #layout(size = 24, align = 8);
+            wellknown_traits(Debug);
+
+            fn new() -> String;
+        }
+    }
+
+    type option::Option<::std::string::String> {
+        #layout(size = 24, align = 8);
+
+        constructor None;
+        constructor Some(::std::string::String);
+
+        fn is_some(&self) -> bool;
+        fn is_none(&self) -> bool;
+    }
+}
