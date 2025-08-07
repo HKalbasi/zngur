@@ -1,0 +1,14 @@
+17
+s[2] = 7
+Rust panic would happen if we accessed invalid index, but we avoid it
+hello 2 2
+hello 5 7
+hello 7 14
+hello 3 17
+34 17
+vector iterator has been destructed
+[main.cpp:70] t = [
+    10,
+    20,
+    60,
+]

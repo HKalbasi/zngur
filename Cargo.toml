@@ -10,6 +10,10 @@ members = [
     "xtask",
     "benchmark",
 ]
+# Exclude tutorial-wasm32 from default workspace builds since it requires extra dependencies
+exclude = [
+    "examples/tutorial-wasm32",
+]
 resolver = "2"
 
 [workspace.package]
