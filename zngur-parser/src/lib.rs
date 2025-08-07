@@ -1,4 +1,4 @@
-use std::{fmt::Display, process::exit};
+use std::{fmt::Display, path::Component, process::exit};
 
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
@@ -299,12 +299,13 @@ impl ProcessedItem<'_> {
                         path.span,
                     )
                 }
-                if !path.path.starts_with(".") && !path.path.starts_with("..") {
-                    create_and_emit_error(
+                match path.path.components().next() {
+                    Some(Component::CurDir) | Some(Component::ParentDir) => {}
+                    _ => create_and_emit_error(
                         ctx,
                         "Module import is not supported. Use a relative path instead.",
                         path.span,
-                    )
+                    ),
                 }
 
                 r.imports.push(Import(path.path));
