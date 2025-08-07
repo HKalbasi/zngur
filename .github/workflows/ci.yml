@@ -16,14 +16,19 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
+      - uses: mymindstorm/setup-emsdk@v14
       - name: Install Rust nightly
         run: |
           rustup toolchain install nightly
           rustup default nightly
+          rustup target add wasm32-wasip1
           rustup component add rustfmt
       - name: Install Clang 19
         run: brew install llvm@19
+      - name: Install wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
       - run: CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
+
   build:
     runs-on: ubuntu-latest
     strategy:
@@ -36,11 +41,20 @@ jobs:
       CXX: ${{ matrix.cpp_compiler }}
     steps:
       - uses: actions/checkout@v3
+      - uses: mymindstorm/setup-emsdk@v14
       - name: Install Rust nightly
         run: |
           rustup toolchain install nightly
           rustup default nightly
+          rustup target add wasm32-wasip1
           rustup component add rustfmt
       - name: Install osmium
         run: sudo apt install libosmium2-dev
+      - name: Install wasmtime
+        uses: bytecodealliance/actions/wasmtime/setup@v1
+      - name: Cache WASI SDK
+        uses: actions/cache@v3
+        with:
+          path: examples/tutorial-wasm32/wasi-sdk-25.0-x86_64-linux
+          key: wasi-sdk-25.0-x86_64-linux-v1
       - run: cargo xtask ci
