@@ -5,10 +5,10 @@ use chumsky::prelude::*;
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    LayoutPolicy, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
-    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFile, ZngurFn,
-    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurTrait, ZngurType,
-    ZngurWellknownTrait,
+    AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
+    MergeFailure, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
+    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod,
+    ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -128,8 +128,14 @@ impl ParsedAlias<'_> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedImportPath {
+    path: std::path::PathBuf,
+    span: Span,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedItem<'a> {
-    ConvertPanicToException,
+    ConvertPanicToException(Span),
     CppAdditionalInclude(&'a str),
     Mod {
         path: ParsedPath<'a>,
@@ -140,17 +146,18 @@ enum ParsedItem<'a> {
         items: Vec<Spanned<ParsedTypeItem<'a>>>,
     },
     Trait {
-        tr: ParsedRustTrait<'a>,
+        tr: Spanned<ParsedRustTrait<'a>>,
         methods: Vec<ParsedMethod<'a>>,
     },
-    Fn(ParsedMethod<'a>),
+    Fn(Spanned<ParsedMethod<'a>>),
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
+    Import(ParsedImportPath),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ProcessedItem<'a> {
-    ConvertPanicToException,
+    ConvertPanicToException(Span),
     CppAdditionalInclude(&'a str),
     Mod {
         path: ParsedPath<'a>,
@@ -162,19 +169,20 @@ enum ProcessedItem<'a> {
         items: Vec<Spanned<ParsedTypeItem<'a>>>,
     },
     Trait {
-        tr: ParsedRustTrait<'a>,
+        tr: Spanned<ParsedRustTrait<'a>>,
         methods: Vec<ParsedMethod<'a>>,
     },
-    Fn(ParsedMethod<'a>),
+    Fn(Spanned<ParsedMethod<'a>>),
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
+    Import(ParsedImportPath),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedExternCppItem<'a> {
-    Function(ParsedMethod<'a>),
+    Function(Spanned<ParsedMethod<'a>>),
     Impl {
         tr: Option<ParsedRustTrait<'a>>,
-        ty: ParsedRustType<'a>,
+        ty: Spanned<ParsedRustType<'a>>,
         methods: Vec<ParsedMethod<'a>>,
     },
 }
@@ -249,10 +257,24 @@ impl ParsedMethod<'_> {
     }
 }
 
+fn checked_merge<T, U>(src: T, dst: &mut U, span: Span, ctx: &ParseContext)
+where
+    T: Merge<U>,
+{
+    match src.merge(dst) {
+        Ok(()) => {}
+        Err(e) => match e {
+            MergeFailure::Conflict(s) => {
+                create_and_emit_error(ctx, &s, span);
+            }
+        },
+    }
+}
+
 impl ProcessedItem<'_> {
-    fn add_to_zngur_file(
+    fn add_to_zngur_spec(
         self,
-        r: &mut ZngurFile,
+        r: &mut ZngurSpec,
         aliases: &[ParsedAlias],
         base: &[String],
         ctx: &ParseContext,
@@ -266,8 +288,26 @@ impl ProcessedItem<'_> {
                 let base = path.to_zngur(base);
                 mod_aliases.extend_from_slice(aliases);
                 for item in items {
-                    item.add_to_zngur_file(r, &mod_aliases, &base, ctx);
+                    item.add_to_zngur_spec(r, &mod_aliases, &base, ctx);
                 }
+            }
+            ProcessedItem::Import(path) => {
+                if path.path.is_absolute() {
+                    create_and_emit_error(
+                        ctx,
+                        "Absolute paths imports are not supported.",
+                        path.span,
+                    )
+                }
+                if !path.path.starts_with(".") && !path.path.starts_with("..") {
+                    create_and_emit_error(
+                        ctx,
+                        "Module import is not supported. Use a relative path instead.",
+                        path.span,
+                    )
+                }
+
+                r.imports.push(Import(path.path));
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
@@ -384,7 +424,7 @@ impl ProcessedItem<'_> {
                             });
                         }
                         ParsedTypeItem::CppValue { field, cpp_type } => {
-                            cpp_value = Some((field.to_owned(), cpp_type.to_owned()));
+                            cpp_value = Some(CppValue(field.to_owned(), cpp_type.to_owned()));
                         }
                         ParsedTypeItem::CppRef { cpp_type } => {
                             match layout_span {
@@ -396,12 +436,11 @@ impl ProcessedItem<'_> {
                                     );
                                 }
                                 None => {
-                                    layout =
-                                        Some(LayoutPolicy::StackAllocated { size: 0, align: 1 });
+                                    layout = Some(LayoutPolicy::ZERO_SIZED_TYPE);
                                     layout_span = Some(item_span);
                                 }
                             }
-                            cpp_ref = Some(cpp_type.to_owned());
+                            cpp_ref = Some(CppRef(cpp_type.to_owned()));
                         }
                     }
                 }
@@ -426,21 +465,24 @@ impl ProcessedItem<'_> {
                             ctx,
                             Report::build(
                                 ReportKind::Error,
-                                ctx.filename,
+                                ctx.filename().to_string(),
                                 span.start,
                             )
                             .with_message("Duplicate layout policy found for unsized type.")
                             .with_label(
-                                Label::new((ctx.filename.to_string(), span.start..span.end))
+                                Label::new((ctx.filename().to_string(), span.start..span.end))
                                     .with_message(
                                         "Unsized types have implicit layout policy, remove this.",
                                     )
                                     .with_color(Color::Red),
                             )
                             .with_label(
-                                Label::new((ctx.filename.to_string(), is_unsized.span.start..is_unsized.span.end))
-                                    .with_message("Type declared as unsized here.")
-                                    .with_color(Color::Blue),
+                                Label::new((
+                                    ctx.filename().to_string(),
+                                    is_unsized.span.start..is_unsized.span.end,
+                                ))
+                                .with_message("Type declared as unsized here.")
+                                .with_color(Color::Blue),
                             )
                             .finish(),
                         )
@@ -455,71 +497,110 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         ty.span,
                     );
                 };
-                r.types.push(ZngurType {
-                    ty: ty.inner.to_zngur(aliases, base),
-                    layout,
-                    methods,
-                    wellknown_traits: wt,
-                    constructors,
-                    fields,
-                    cpp_value,
-                    cpp_ref,
-                });
+                checked_merge(
+                    ZngurType {
+                        ty: ty.inner.to_zngur(aliases, base),
+                        layout,
+                        methods,
+                        wellknown_traits: wt,
+                        constructors,
+                        fields,
+                        cpp_value,
+                        cpp_ref,
+                    },
+                    r,
+                    ty.span,
+                    ctx,
+                );
             }
             ProcessedItem::Trait { tr, methods } => {
-                let tr = tr.to_zngur(aliases, base);
-                r.traits.insert(
-                    tr.clone(),
+                checked_merge(
                     ZngurTrait {
-                        tr,
+                        tr: tr.inner.to_zngur(aliases, base),
                         methods: methods
                             .into_iter()
                             .map(|m| m.to_zngur(aliases, base))
                             .collect(),
                     },
+                    r,
+                    tr.span,
+                    ctx,
                 );
             }
             ProcessedItem::Fn(f) => {
-                let method = f.to_zngur(aliases, base);
-                r.funcs.push(ZngurFn {
-                    path: RustPathAndGenerics {
-                        path: base.iter().chain(Some(&method.name)).cloned().collect(),
-                        generics: method.generics,
-                        named_generics: vec![],
+                let method = f.inner.to_zngur(aliases, base);
+                checked_merge(
+                    ZngurFn {
+                        path: RustPathAndGenerics {
+                            path: base.iter().chain(Some(&method.name)).cloned().collect(),
+                            generics: method.generics,
+                            named_generics: vec![],
+                        },
+                        inputs: method.inputs,
+                        output: method.output,
                     },
-                    inputs: method.inputs,
-                    output: method.output,
-                })
+                    r,
+                    f.span,
+                    ctx,
+                );
             }
             ProcessedItem::ExternCpp(items) => {
                 for item in items {
                     match item {
                         ParsedExternCppItem::Function(method) => {
-                            let method = method.to_zngur(aliases, base);
-                            r.extern_cpp_funcs.push(ZngurExternCppFn {
-                                name: method.name.to_string(),
-                                inputs: method.inputs,
-                                output: method.output,
-                            });
+                            let span = method.span;
+                            let method = method.inner.to_zngur(aliases, base);
+                            checked_merge(
+                                ZngurExternCppFn {
+                                    name: method.name.to_string(),
+                                    inputs: method.inputs,
+                                    output: method.output,
+                                },
+                                r,
+                                span,
+                                ctx,
+                            );
                         }
                         ParsedExternCppItem::Impl { tr, ty, methods } => {
-                            r.extern_cpp_impls.push(ZngurExternCppImpl {
-                                tr: tr.map(|x| x.to_zngur(aliases, base)),
-                                ty: ty.to_zngur(aliases, base),
-                                methods: methods
-                                    .into_iter()
-                                    .map(|x| x.to_zngur(aliases, base))
-                                    .collect(),
-                            });
+                            checked_merge(
+                                ZngurExternCppImpl {
+                                    tr: tr.map(|x| x.to_zngur(aliases, base)),
+                                    ty: ty.inner.to_zngur(aliases, base),
+                                    methods: methods
+                                        .into_iter()
+                                        .map(|x| x.to_zngur(aliases, base))
+                                        .collect(),
+                                },
+                                r,
+                                ty.span,
+                                ctx,
+                            );
                         }
                     }
                 }
             }
             ProcessedItem::CppAdditionalInclude(s) => {
-                r.additional_includes += s;
+                match AdditionalIncludes(s.to_owned()).merge(r) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        unreachable!() // For now, additional includes can't have conflicts.
+                    }
+                }
             }
-            ProcessedItem::ConvertPanicToException => {
-                r.convert_panic_to_exception = true;
+            ProcessedItem::ConvertPanicToException(span) => {
+                if ctx.depth > 0 {
+                    create_and_emit_error(
+                        ctx,
+                        "Using `#convert_panic_to_exception` in imported zngur files is not supported. This directive can only be used in the main zngur file.",
+                        span,
+                    );
+                }
+                match ConvertPanicToException(true).merge(r) {
+                    Ok(()) => {}
+                    Err(_) => {
+                        unreachable!() // For now, CPtE also can't have conflicts.
+                    }
+                }
             }
         }
     }
@@ -619,27 +700,66 @@ impl ParsedRustPathAndGenerics<'_> {
 }
 
 struct ParseContext<'a> {
-    filename: &'a str,
+    path: std::path::PathBuf,
     text: &'a str,
+    depth: usize,
 }
 
 impl<'a> ParseContext<'a> {
-    fn new(filename: &'a str, text: &'a str) -> Self {
-        Self { filename, text }
+    fn new(path: std::path::PathBuf, text: &'a str) -> Self {
+        Self {
+            path,
+            text,
+            depth: 0,
+        }
+    }
+
+    fn with_depth(path: std::path::PathBuf, text: &'a str, depth: usize) -> Self {
+        Self { path, text, depth }
+    }
+
+    fn filename(&self) -> &str {
+        self.path.file_name().unwrap().to_str().unwrap()
+    }
+}
+
+/// A trait for types which can resolve filesystem-like paths relative to a given directory.
+pub trait ImportResolver {
+    fn resolve_import(
+        &self,
+        cwd: &std::path::Path,
+        relpath: &std::path::Path,
+    ) -> Result<String, String>;
+}
+
+/// A default implementation of ImportResolver which uses conventional filesystem paths and semantics.
+struct DefaultImportResolver;
+
+impl ImportResolver for DefaultImportResolver {
+    fn resolve_import(
+        &self,
+        cwd: &std::path::Path,
+        relpath: &std::path::Path,
+    ) -> Result<String, String> {
+        let path = cwd
+            .join(relpath)
+            .canonicalize()
+            .map_err(|e| e.to_string())?;
+        std::fs::read_to_string(path).map_err(|e| e.to_string())
     }
 }
 
 impl<'a> ParsedZngFile<'a> {
-    pub fn parse(filename: &str, text: &str) -> ZngurFile {
-        let ctx = ParseContext::new(filename, text);
-        let (tokens, errs) = lexer().parse(text).into_output_errors();
+    fn parse_into(zngur: &mut ZngurSpec, ctx: &ParseContext, resolver: &impl ImportResolver) {
+        let (tokens, errs) = lexer().parse(ctx.text).into_output_errors();
         let Some(tokens) = tokens else {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
             emit_error(&ctx, errs);
         };
-        let tokens: ParserInput<'_> = tokens
-            .as_slice()
-            .map((text.len()..text.len()).into(), Box::new(|(t, s)| (t, s)));
+        let tokens: ParserInput<'_> = tokens.as_slice().map(
+            (ctx.text.len()..ctx.text.len()).into(),
+            Box::new(|(t, s)| (t, s)),
+        );
         let (ast, errs) = file_parser()
             .map_with(|ast, extra| (ast, extra.span()))
             .parse(tokens)
@@ -648,24 +768,81 @@ impl<'a> ParsedZngFile<'a> {
             let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
             emit_error(&ctx, errs);
         };
-        ast.0.into_zngur_file(&ctx)
+
+        let (aliases, items) = ast.0.0.into_iter().partition_map(partition_parsed_item_vec);
+        ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, &ctx);
+
+        if let Some(dirname) = ctx.path.parent() {
+            for import in std::mem::take(&mut zngur.imports) {
+                match resolver.resolve_import(dirname, &import.0) {
+                    Ok(text) => {
+                        Self::parse_into(
+                            zngur,
+                            &ParseContext::with_depth(
+                                dirname.join(&import.0),
+                                &text,
+                                ctx.depth + 1,
+                            ),
+                            resolver,
+                        );
+                    }
+                    Err(_) => {
+                        // TODO: emit a better error. How should we get a span here?
+                        // I'd like to avoid putting a ParsedImportPath in ZngurSpec, and
+                        // also not have to pass a filename to add_to_zngur_spec.
+                        emit_ariadne_error(
+                            &ctx,
+                            Report::build(ReportKind::Error, ctx.filename(), 0)
+                                .with_message(format!(
+                                    "Import path not found: {}",
+                                    import.0.display()
+                                ))
+                                .finish(),
+                        );
+                    }
+                }
+            }
+        }
     }
 
-    pub fn process(self) -> ProcessedZngFile<'a> {
-        let (aliases, items) = self.0.into_iter().partition_map(partition_parsed_item_vec);
-        ProcessedZngFile::new(aliases, items)
+    pub fn parse(path: std::path::PathBuf) -> ZngurSpec {
+        let mut zngur = ZngurSpec::default();
+        let text = std::fs::read_to_string(&path).unwrap();
+        Self::parse_into(
+            &mut zngur,
+            &ParseContext::new(path, &text),
+            &DefaultImportResolver,
+        );
+        zngur
     }
 
-    fn into_zngur_file(self, ctx: &ParseContext) -> ZngurFile {
-        self.process().into_zngur_file(ctx)
+    pub fn parse_str(text: &str) -> ZngurSpec {
+        let mut zngur = ZngurSpec::default();
+        Self::parse_into(
+            &mut zngur,
+            &ParseContext::new(std::path::PathBuf::from("test.zng"), text),
+            &DefaultImportResolver,
+        );
+        zngur
+    }
+
+    #[cfg(test)]
+    pub(crate) fn parse_str_with_resolver(text: &str, resolver: &impl ImportResolver) -> ZngurSpec {
+        let mut zngur = ZngurSpec::default();
+        Self::parse_into(
+            &mut zngur,
+            &ParseContext::new(std::path::PathBuf::from("test.zng"), text),
+            resolver,
+        );
+        zngur
     }
 }
 
 fn partition_parsed_item_vec(item: ParsedItem<'_>) -> Either<ParsedAlias<'_>, ProcessedItem<'_>> {
     match item {
         ParsedItem::Alias(alias) => Either::Left(alias),
-        ParsedItem::ConvertPanicToException => {
-            Either::Right(ProcessedItem::ConvertPanicToException)
+        ParsedItem::ConvertPanicToException(span) => {
+            Either::Right(ProcessedItem::ConvertPanicToException(span))
         }
         ParsedItem::CppAdditionalInclude(inc) => {
             Either::Right(ProcessedItem::CppAdditionalInclude(inc))
@@ -683,6 +860,7 @@ fn partition_parsed_item_vec(item: ParsedItem<'_>) -> Either<ParsedAlias<'_>, Pr
         ParsedItem::Trait { tr, methods } => Either::Right(ProcessedItem::Trait { tr, methods }),
         ParsedItem::Fn(method) => Either::Right(ProcessedItem::Fn(method)),
         ParsedItem::ExternCpp(items) => Either::Right(ProcessedItem::ExternCpp(items)),
+        ParsedItem::Import(path) => Either::Right(ProcessedItem::Import(path)),
     }
 }
 
@@ -691,12 +869,10 @@ impl<'a> ProcessedZngFile<'a> {
         ProcessedZngFile { aliases, items }
     }
 
-    fn into_zngur_file(self, ctx: &ParseContext) -> ZngurFile {
-        let mut r = ZngurFile::default();
+    fn into_zngur_spec(self, zngur: &mut ZngurSpec, ctx: &ParseContext) {
         for item in self.items {
-            item.add_to_zngur_file(&mut r, &self.aliases, &[], ctx);
+            item.add_to_zngur_spec(zngur, &self.aliases, &[], ctx);
         }
-        r
     }
 }
 
@@ -707,11 +883,9 @@ fn create_and_emit_error(ctx: &ParseContext, error: &str, span: Span) -> ! {
 #[cfg(test)]
 fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
     let mut r = Vec::<u8>::new();
-    // Block needed to drop lock guards before panic
-    {
-        err.write(sources([(ctx.filename.to_string(), ctx.text)]), &mut r)
-            .unwrap();
-    }
+    err.write(sources([(ctx.filename().to_string(), ctx.text)]), &mut r)
+        .unwrap();
+
     std::panic::resume_unwind(Box::new(tests::ErrorText(
         String::from_utf8(strip_ansi_escapes::strip(r)).unwrap(),
     )));
@@ -719,7 +893,7 @@ fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Ran
 
 #[cfg(not(test))]
 fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
-    err.eprint(sources([(ctx.filename.to_string(), ctx.text)]))
+    err.eprint(sources([(ctx.filename().to_string(), ctx.text)]))
         .unwrap();
     exit(101);
 }
@@ -728,15 +902,15 @@ fn emit_error<'a>(ctx: &ParseContext, errs: impl Iterator<Item = Rich<'a, String
     for e in errs {
         emit_ariadne_error(
             ctx,
-            Report::build(ReportKind::Error, ctx.filename, e.span().start)
+            Report::build(ReportKind::Error, ctx.filename(), e.span().start)
                 .with_message(e.to_string())
                 .with_label(
-                    Label::new((ctx.filename.to_string(), e.span().into_range()))
+                    Label::new((ctx.filename().to_string(), e.span().into_range()))
                         .with_message(e.reason().to_string())
                         .with_color(Color::Red),
                 )
                 .with_labels(e.contexts().map(|(label, span)| {
-                    Label::new((ctx.filename.to_string(), span.into_range()))
+                    Label::new((ctx.filename().to_string(), span.into_range()))
                         .with_message(format!("while parsing this {}", label))
                         .with_color(Color::Yellow)
                 }))
@@ -780,6 +954,7 @@ enum Token<'a> {
     KwConst,
     KwExtern,
     KwImpl,
+    KwImport,
     Ident(&'a str),
     Str(&'a str),
     Number(usize),
@@ -801,6 +976,7 @@ impl<'a> Token<'a> {
             "for" => Token::KwFor,
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
+            "import" => Token::KwImport,
             x => Token::Ident(x),
         }
     }
@@ -841,6 +1017,7 @@ impl Display for Token<'_> {
             Token::KwConst => write!(f, "const"),
             Token::KwExtern => write!(f, "extern"),
             Token::KwImpl => write!(f, "impl"),
+            Token::KwImport => write!(f, "import"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -1301,7 +1478,7 @@ fn type_item<'a>()
 fn trait_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     just(Token::KwTrait)
-        .ignore_then(rust_trait(rust_type()))
+        .ignore_then(spanned(rust_trait(rust_type())))
         .then(
             method()
                 .then_ignore(just(Token::Semicolon))
@@ -1315,7 +1492,7 @@ fn trait_item<'a>()
 
 fn fn_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    method()
+    spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedItem::Fn)
 }
@@ -1329,14 +1506,14 @@ fn additional_include_item<'a>()
                     Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
                 })
                 .or(just(Token::Ident("convert_panic_to_exception"))
-                    .to(ParsedItem::ConvertPanicToException)),
+                    .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span()))),
         )
         .boxed()
 }
 
 fn extern_cpp_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    let function = method()
+    let function = spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedExternCppItem::Function);
     let impl_block = just(Token::KwImpl)
@@ -1345,7 +1522,7 @@ fn extern_cpp_item<'a>()
                 .then_ignore(just(Token::KwFor))
                 .map(Some)
                 .or(empty().to(None))
-                .then(rust_type()),
+                .then(spanned(rust_type())),
         )
         .then(
             method()
@@ -1386,10 +1563,27 @@ fn item<'a>()
             extern_cpp_item(),
             fn_item(),
             additional_include_item(),
+            import_item(),
             alias(),
         ))
     })
     .boxed()
+}
+
+fn import_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+    just(Token::KwImport)
+        .ignore_then(select! {
+            Token::Str(path) => path,
+        })
+        .then_ignore(just(Token::Semicolon))
+        .map_with(|path, extra| {
+            ParsedItem::Import(ParsedImportPath {
+                path: std::path::PathBuf::from(path),
+                span: extra.span(),
+            })
+        })
+        .boxed()
 }
 
 fn path<'a>()
