@@ -1,0 +1,15 @@
+// Foo module - exports Vec<i32> APIs for C++ usage
+
+import "./primitives.zng";
+
+mod ::std {
+    mod vec {
+        type Vec<i32> {
+            #layout(size = 24, align = 8);
+            wellknown_traits(Debug);
+
+            fn new() -> Vec<i32>;
+            fn push(&mut self, i32);
+        }
+    }
+}
