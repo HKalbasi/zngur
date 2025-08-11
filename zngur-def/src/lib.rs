@@ -4,6 +4,7 @@ use itertools::Itertools;
 
 mod merge;
 pub use merge::{Merge, MergeFailure, MergeResult};
+use rustdoc_types::{ItemEnum, Primitive};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mutability {
@@ -124,6 +125,7 @@ pub struct ZngurType {
     pub cpp_ref: Option<CppRef>,
 }
 
+
 #[derive(Debug)]
 pub struct ZngurTrait {
     pub tr: RustTrait,
@@ -152,6 +154,80 @@ pub struct ZngurSpec {
     pub mangling_base: String,
     pub cpp_namespace: String,
 }
+
+// impl From<rustdoc_types::Crate> for ZngurSpec {
+//     fn from(value: rustdoc_types::Crate) -> Self {
+//         let spec = Self::default();
+//         for (_id, item) in value.index {
+//             match item.inner {
+//                 rustdoc_types::ItemEnum::Module(_) => {
+//                     // Handle module items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::ExternCrate { .. } => {
+//                     // Handle extern crate items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Union(_) => {
+//                 }
+//                 rustdoc_types::ItemEnum::Struct(_) => {
+//                     spec.types.push(ZngurType::from(item));
+//                 }
+//                 rustdoc_types::ItemEnum::StructField(_) => {
+//                     // Handle struct field items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Enum(_) => {
+//                     // Handle enum items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Variant(_) => {
+//                     // Handle variant items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Function(_) => {
+//                     // Handle function items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Trait(_) => {
+//                     // Handle trait items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::TraitAlias(_) => {
+//                     // Handle trait alias items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Impl(_) => {
+//                     // Handle impl items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::TypeAlias(_) => {
+//                     // Handle type alias items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Constant { .. } => {
+//                     // Handle constant items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Static(_) => {
+//                     // Handle static items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::ExternType => {
+//                     // Handle extern type items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Macro(_) => {
+//                     // Handle macro items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::ProcMacro(_) => {
+//                     // Handle proc macro items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Primitive(_) => {
+//                     // Handle primitive items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::AssocConst { .. } => {
+//                     // Handle associated constant items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::AssocType { .. } => {
+//                     // Handle associated type items if needed
+//                 }
+//                 rustdoc_types::ItemEnum::Use(_) => {
+//                     // Handle use items if needed
+//                 }
+//             }
+//         }
+//             spec
+//         
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum RustTrait {
@@ -184,6 +260,30 @@ pub enum PrimitiveRustType {
     ZngurCppOpaqueOwnedObject,
 }
 
+// TODO: isize and char
+impl From<Primitive> for PrimitiveRustType {
+    fn from(value: Primitive) -> Self {
+        match value.name.as_str() {
+            "u8" => PrimitiveRustType::Uint(8),
+            "u16" => PrimitiveRustType::Uint(16),
+            "u32" => PrimitiveRustType::Uint(32),
+            "u64" => PrimitiveRustType::Uint(64),
+            "u128" => PrimitiveRustType::Uint(128),
+            "i8" => PrimitiveRustType::Int(8),
+            "i16" => PrimitiveRustType::Int(16),
+            "i32" => PrimitiveRustType::Int(32),
+            "i64" => PrimitiveRustType::Int(64),
+            "i128" => PrimitiveRustType::Int(128),
+            "f32" => PrimitiveRustType::Float(32),
+            "f64" => PrimitiveRustType::Float(64),
+            "usize" => PrimitiveRustType::Usize,
+            "bool" => PrimitiveRustType::Bool,
+            "str" => PrimitiveRustType::Str,
+            _ => panic!("Unknown primitive type: {}", value.name),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RustPathAndGenerics {
     pub path: Vec<String>,
@@ -206,6 +306,36 @@ pub enum RustType {
 impl RustType {
     pub const UNIT: Self = RustType::Tuple(Vec::new());
 }
+
+// impl From<rustdoc_types::ItemEnum> for RustType {
+//     fn from(value: rustdoc_types::ItemEnum) -> Self {
+//         match value {
+//             ItemEnum::Module(m) => RustType::Adt(RustPathAndGenerics::from(m)),
+//             ItemEnum::StructField(t) => RustType::Adt(RustPathAndGenerics::from(t)),
+//             ItemEnum::Variant(v) => RustType::Adt(RustPathAndGenerics::from(v)),
+//             ItemEnum::Struct(s) => RustType::Adt(RustPathAndGenerics::from(s)),
+//             ItemEnum::Enum(e) => RustType::Adt(RustPathAndGenerics::from(e)),
+//             ItemEnum::Function(f) => RustType::Adt(RustPathAndGenerics::from(f)),
+//             ItemEnum::Trait(t) => RustType::Adt(RustPathAndGenerics::from(t)),
+//             ItemEnum::TraitAlias(t) => RustType::Adt(RustPathAndGenerics::from(t)),
+//             ItemEnum::Impl(i) => RustType::Adt(RustPathAndGenerics::from(i)),
+//             ItemEnum::TypeAlias(t) => RustType::Adt(RustPathAndGenerics::from(t)),
+//             ItemEnum::Constant{type_: t, const_: c} => RustType::Adt(RustPathAndGenerics::from(c)),
+//             ItemEnum::Static(s) => RustType::Adt(RustPathAndGenerics::from(s)),
+//             ItemEnum::ExternCrate{name: n, rename: r} => RustType::Adt(RustPathAndGenerics::from(e)),
+//             ItemEnum::Macro(m) => RustType::Adt(RustPathAndGenerics::from(m)),
+//             ItemEnum::ProcMacro(p) => RustType::Adt(RustPathAndGenerics::from(p)),
+//             ItemEnum::Primitive(p) => RustType::Primitive(PrimitiveRustType::from(p)),
+//             ItemEnum::Union(u) => RustType::Adt(RustPathAndGenerics::from(u)),
+//             ItemEnum::Use(u) => RustType::Adt(RustPathAndGenerics::from(u)),
+//             ItemEnum::AssocConst { type_, value } => RustType::Adt(RustPathAndGenerics::from(type_)),
+//             ItemEnum::AssocType { generics, bounds, type_ } => RustType::Adt(RustPathAndGenerics::from(type_)),
+//             ItemEnum::Constant { type_, const_ } => RustType::Adt(RustPathAndGenerics::from(type_)),
+//             ItemEnum::ExternType => RustType::Adt(RustPathAndGenerics::from(type_)),
+//             
+//         }
+//     }
+// }
 
 impl Display for RustPathAndGenerics {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
