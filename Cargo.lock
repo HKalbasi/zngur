@@ -1205,6 +1205,7 @@ version = "0.6.0"
 dependencies = [
  "anyhow",
  "clap",
+ "regex",
  "xshell",
 ]
 

@@ -41,7 +41,7 @@ Checkpoint 21
 PrintOnDrop(A) has been dropped
 Checkpoint 22
 
-thread '<unnamed>' panicked at examples/memory_management/src/lib.rs:30:9:
+thread '<unnamed>' ({{re:\d+}}) panicked at examples/memory_management/src/lib.rs:30:9:
 consume_and_panic executed with value B
 note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
 PrintOnDrop(B) has been dropped
