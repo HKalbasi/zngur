@@ -32,6 +32,14 @@ type (::std::string::String, crate::Foo) {
     field 1 (offset = 24, type = crate::Foo);
 }
 
+type (i32, ::std::string::String) {
+    #layout(size = 32, align = 8);
+    wellknown_traits(Debug);
+
+    field 0 (offset = 0, type = i32);
+    field 1 (offset = 8, type = ::std::string::String);
+}
+
 type crate::Scoped {
     #layout(size = 16, align = 8);
 
