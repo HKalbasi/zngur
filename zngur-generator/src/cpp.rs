@@ -1658,13 +1658,25 @@ namespace rust {
     struct RefMut;
 
     template<typename T, size_t OFFSET>
-    struct FieldOwned;
+    struct FieldOwned {
+        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
+        inline T read() const noexcept { auto r = as_ref(); return *r; }
+        inline operator T() const noexcept { return read(); }
+    };
 
     template<typename T, size_t OFFSET>
-    struct FieldRef;
+    struct FieldRef {
+        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
+        inline T read() const noexcept { auto r = as_ref(); return *r; }
+        inline operator T() const noexcept { return read(); }
+    };
 
     template<typename T, size_t OFFSET>
-    struct FieldRefMut;
+    struct FieldRefMut {
+        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
+        inline T read() const noexcept { auto r = as_ref(); return *r; }
+        inline operator T() const noexcept { return read(); }
+    };
 
     template<typename... T>
     struct Tuple;
@@ -1759,6 +1771,21 @@ namespace rust {
             data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }}
 
+         template<size_t OFFSET>
+         Ref(const FieldOwned< {ty}, OFFSET >& f) {{
+             data = reinterpret_cast<size_t>(&f) + OFFSET;
+         }}
+
+         template<size_t OFFSET>
+         Ref(const FieldRef< {ty}, OFFSET >& f) {{
+             data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+         }}
+
+         template<size_t OFFSET>
+         Ref(const FieldRefMut< {ty}, OFFSET >& f) {{
+             data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+         }}
+
         {ty}& operator*() {{
             return *reinterpret_cast< {ty}*>(data);
         }}
@@ -1776,6 +1803,16 @@ namespace rust {
         RefMut({ty}& t) {{
             data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }}
+
+         template<size_t OFFSET>
+         RefMut(const FieldOwned< {ty}, OFFSET >& f) {{
+             data = reinterpret_cast<size_t>(&f) + OFFSET;
+         }}
+
+         template<size_t OFFSET>
+         RefMut(const FieldRefMut< {ty}, OFFSET >& f) {{
+             data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+         }}
 
         {ty}& operator*() {{
             return *reinterpret_cast< {ty}*>(data);
