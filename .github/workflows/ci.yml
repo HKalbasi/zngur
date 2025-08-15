@@ -17,10 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: mymindstorm/setup-emsdk@v14
-      - name: Install Rust nightly
+      - name: Install Rust stable
         run: |
-          rustup toolchain install nightly
-          rustup default nightly
+          rustup toolchain install stable
           rustup target add wasm32-wasip1
           rustup component add rustfmt
       - name: Install Clang 19
@@ -42,10 +41,9 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: mymindstorm/setup-emsdk@v14
-      - name: Install Rust nightly
+      - name: Install Rust stable
         run: |
-          rustup toolchain install nightly
-          rustup default nightly
+          rustup toolchain install stable
           rustup target add wasm32-wasip1
           rustup component add rustfmt
       - name: Install osmium
