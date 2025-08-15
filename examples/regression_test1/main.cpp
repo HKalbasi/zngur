@@ -65,20 +65,22 @@ void test_field_underlying_conversions() {
   rust::Tuple<int32_t, rust::std::string::String> pair{42, "hi"_rs.to_owned()};
 
   // FieldOwned conversion to Ref and value
-  rust::Ref<int32_t> r0 = pair.f0;           // Ref from FieldOwned
-  int32_t v0 = pair.f0;                      // value read via operator T()
+  rust::Ref<int32_t> r0 = pair.f0;
+  int32_t v0 = pair.f0;
   zngur_dbg(v0);
+  // TODO: Add support for conversion to T for all fields.
+  // rust::std::string::String v1 = pair.f1;
 
   // FieldOwned<String> to Ref<String> and call a method
   rust::Ref<rust::std::string::String> sref = pair.f1;
   zngur_dbg(sref.len());
 
   rust::Ref<rust::Tuple<int32_t, rust::std::string::String>> pref = pair;
-  zngur_dbg(pref.f0.read());
+  zngur_dbg(int32_t(pref.f0));
   zngur_dbg(pref.f1.len());
 
   rust::RefMut<rust::Tuple<int32_t, rust::std::string::String>> pmut = pair;
-  zngur_dbg(pmut.f0.read());
+  zngur_dbg(int32_t(pmut.f0));
   pmut.f1.push_str("!"_rs);
   zngur_dbg(pmut.f1.len());
 }

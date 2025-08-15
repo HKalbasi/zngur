@@ -1659,23 +1659,17 @@ namespace rust {
 
     template<typename T, size_t OFFSET>
     struct FieldOwned {
-        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
-        inline T read() const noexcept { auto r = as_ref(); return *r; }
-        inline operator T() const noexcept { return read(); }
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
     };
 
     template<typename T, size_t OFFSET>
     struct FieldRef {
-        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
-        inline T read() const noexcept { auto r = as_ref(); return *r; }
-        inline operator T() const noexcept { return read(); }
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
     };
 
     template<typename T, size_t OFFSET>
     struct FieldRefMut {
-        inline ::rust::Ref<T> as_ref() const noexcept { return ::rust::Ref<T>(*this); }
-        inline T read() const noexcept { auto r = as_ref(); return *r; }
-        inline operator T() const noexcept { return read(); }
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
     };
 
     template<typename... T>
