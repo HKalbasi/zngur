@@ -12,6 +12,7 @@ type ::std::string::String {
     #layout(size = 24, align = 8);
     wellknown_traits(Debug);
 
+    fn clone(&self) -> ::std::string::String;
     fn push_str(&mut self, &str);
     fn len(&self) -> usize;
 }

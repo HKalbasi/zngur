@@ -68,8 +68,10 @@ void test_field_underlying_conversions() {
   rust::Ref<int32_t> r0 = pair.f0;
   int32_t v0 = pair.f0;
   zngur_dbg(v0);
-  // TODO: Add support for conversion to T for all fields.
-  // rust::std::string::String v1 = pair.f1;
+  // Types which are not `Copy` cannot support implicit conversion to T.
+  // We must use `.clone()` or similar methods to get a copy.
+  rust::std::string::String v1 = pair.f1.clone();
+  zngur_dbg(v1);
 
   // FieldOwned<String> to Ref<String> and call a method
   rust::Ref<rust::std::string::String> sref = pair.f1;
