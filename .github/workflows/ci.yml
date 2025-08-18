@@ -26,7 +26,7 @@ jobs:
         run: brew install llvm@19
       - name: Install wasmtime
         uses: bytecodealliance/actions/wasmtime/setup@v1
-      - run: CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
+      - run: CC=$(brew --prefix llvm@19)/bin/clang CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
 
   build:
     runs-on: ubuntu-latest
@@ -48,6 +48,9 @@ jobs:
           rustup component add rustfmt
       - name: Install osmium
         run: sudo apt install libosmium2-dev
+      - name: Install LLD for clang++
+        if: matrix.cpp_compiler == 'clang++'
+        run: sudo apt-get update && sudo apt-get install -y lld
       - name: Install wasmtime
         uses: bytecodealliance/actions/wasmtime/setup@v1
       - name: Cache WASI SDK
@@ -55,4 +58,9 @@ jobs:
         with:
           path: examples/tutorial-wasm32/wasi-sdk-25.0-x86_64-linux
           key: wasi-sdk-25.0-x86_64-linux-v1
-      - run: cargo xtask ci
+      - name: Run CI (clang++)
+        if: matrix.cpp_compiler == 'clang++'
+        run: CC=clang cargo xtask ci
+      - name: Run CI (g++)
+        if: matrix.cpp_compiler == 'g++'
+        run: cargo xtask ci
