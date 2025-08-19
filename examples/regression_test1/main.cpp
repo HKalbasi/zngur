@@ -59,7 +59,36 @@ void test_fields_and_constructor() {
   zngur_dbg(v4.f1.field2.len());
 }
 
+void test_field_underlying_conversions() {
+  auto scope = rust::crate::Scoped::new_("Test Field* underlying conversions"_rs);
+
+  rust::Tuple<int32_t, rust::std::string::String> pair{42, "hi"_rs.to_owned()};
+
+  // FieldOwned conversion to Ref and value
+  rust::Ref<int32_t> r0 = pair.f0;
+  int32_t v0 = pair.f0;
+  zngur_dbg(v0);
+  // Types which are not `Copy` cannot support implicit conversion to T.
+  // We must use `.clone()` or similar methods to get a copy.
+  rust::std::string::String v1 = pair.f1.clone();
+  zngur_dbg(v1);
+
+  // FieldOwned<String> to Ref<String> and call a method
+  rust::Ref<rust::std::string::String> sref = pair.f1;
+  zngur_dbg(sref.len());
+
+  rust::Ref<rust::Tuple<int32_t, rust::std::string::String>> pref = pair;
+  zngur_dbg(int32_t(pref.f0));
+  zngur_dbg(pref.f1.len());
+
+  rust::RefMut<rust::Tuple<int32_t, rust::std::string::String>> pmut = pair;
+  zngur_dbg(int32_t(pmut.f0));
+  pmut.f1.push_str("!"_rs);
+  zngur_dbg(pmut.f1.len());
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
+  test_field_underlying_conversions();
 }

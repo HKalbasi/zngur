@@ -12,6 +12,7 @@ type ::std::string::String {
     #layout(size = 24, align = 8);
     wellknown_traits(Debug);
 
+    fn clone(&self) -> ::std::string::String;
     fn push_str(&mut self, &str);
     fn len(&self) -> usize;
 }
@@ -30,6 +31,14 @@ type (::std::string::String, crate::Foo) {
 
     field 0 (offset = 0, type = ::std::string::String);
     field 1 (offset = 24, type = crate::Foo);
+}
+
+type (i32, ::std::string::String) {
+    #layout(size = 32, align = 8);
+    wellknown_traits(Debug);
+
+    field 0 (offset = 0, type = i32);
+    field 1 (offset = 8, type = ::std::string::String);
 }
 
 type crate::Scoped {

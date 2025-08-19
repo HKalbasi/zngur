@@ -49,3 +49,13 @@ Test fields and constructor work -- started
 [main.cpp:59] v4.f1.field2.len() = 12
 Test fields and constructor work -- finished
 
+Test Field* underlying conversions -- started
+[main.cpp:70] v0 = 42
+[main.cpp:74] v1 = "hi"
+[main.cpp:78] sref.len() = 2
+[main.cpp:81] int32_t(pref.f0) = 42
+[main.cpp:82] pref.f1.len() = 2
+[main.cpp:85] int32_t(pmut.f0) = 42
+[main.cpp:87] pmut.f1.len() = 3
+Test Field* underlying conversions -- finished
+
