@@ -9,7 +9,7 @@ When you declare fields in a tuple or struct using `field name (offset = X, type
 These wrappers now act as their underlying type `T` in many contexts:
 
 - `Ref<T>` construction from any `Field*<T, OFFSET>`
-- Implicit read via `operator T()` and `.read()` for value-like access
+- Implicit read via `operator T()` for value-like access
 - Method calls are forwarded when applicable
 
 Example:
