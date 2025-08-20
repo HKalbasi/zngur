@@ -110,6 +110,14 @@ vector iterator has been destructed
 
 See the [`examples/simple`](https://github.com/HKalbasi/zngur/blob/main/examples/simple) if you want to build and run it.
 
+## Installation
+
+The `zngur` CLI tool can be installed with cargo:
+
+```
+cargo install zngur-cli
+```
+
 <br>
 
 #### License
