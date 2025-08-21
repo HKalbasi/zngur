@@ -230,6 +230,8 @@ impl From<String> for PrimitiveRustType {
             "usize" => PrimitiveRustType::Usize,
             "bool" => PrimitiveRustType::Bool,
             "str" => PrimitiveRustType::Str,
+            //TODO NRB better impl
+            "isize" => PrimitiveRustType::Int(64),
             _ => panic!("Unknown primitive type: {}", value),
         }
     }

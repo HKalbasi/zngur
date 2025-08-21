@@ -1,8 +1,8 @@
 use crate::*;
-use rustdoc_types::{Crate, Id, Type};
+use rustdoc_types::{Crate, Id, Struct, Type};
 
-impl From<rustdoc_types::Crate> for ZngurSpec {
-    fn from(value: rustdoc_types::Crate) -> Self {
+impl From<Crate> for ZngurSpec {
+    fn from(value: Crate) -> Self {
         let crate_name = value.index.get(&value.root).unwrap().clone().name.unwrap();
         let mut spec = Self::default();
         for (id, item) in value.index.iter() {
@@ -13,14 +13,14 @@ impl From<rustdoc_types::Crate> for ZngurSpec {
                     }
                 }
                 ItemEnum::Enum(e) => {
-                    if let Some(ztype) = convert_enum_to_zngur_type(e, id, &value, &crate_name) {
-                        spec.types.push(ztype);
-                    }
+                    // if let Some(ztype) = convert_enum_to_zngur_type(e, id, &value, &crate_name) {
+                    //     spec.types.push(ztype);
+                    // }
                 }
                 ItemEnum::Function(_) => {
-                    if let Some(zfn) = fn_to_zngfn(id, &value, &crate_name) {
-                        spec.funcs.push(zfn);
-                    }
+                    // if let Some(zfn) = fn_to_zngfn(id, &value, &crate_name) {
+                    //     spec.funcs.push(zfn);
+                    // }
                 }
                 ItemEnum::Module(_) => {
                     // Handle module items if needed
@@ -81,9 +81,9 @@ impl From<rustdoc_types::Crate> for ZngurSpec {
 }
 
 fn convert_struct_to_zngur_type(
-    s: &rustdoc_types::Struct,
-    id: &rustdoc_types::Id,
-    value: &rustdoc_types::Crate,
+    s: &Struct,
+    id: &Id,
+    value: &Crate,
     crate_name: &String,
 ) -> Option<ZngurType> {
     let mut path = value.paths.get(id)?.clone().path;
@@ -99,7 +99,8 @@ fn convert_struct_to_zngur_type(
         ty,
         layout: LayoutPolicy::HeapAllocated,
         methods: vec![],
-        wellknown_traits: vec![],
+        //TODO NRB handle dynamically
+        wellknown_traits: vec![ZngurWellknownTrait::Drop],
         constructors: vec![],
         fields: vec![],
         cpp_value: None,
