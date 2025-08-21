@@ -198,14 +198,42 @@ fn fn_to_zngmethod(
         return None;
     };
 
+    let selff = func
+        .sig
+        .inputs
+        .iter()
+        .find(|(name, _ty)| name == "self")
+        .map(|(_name, ty)| ty);
+    let receiver = match selff {
+        None => ZngurMethodReceiver::Static,
+        Some(rec) => {
+            match rec {
+                Type::BorrowedRef {
+                    lifetime,
+                    is_mutable,
+                    type_,
+                } => {
+                    if *is_mutable {
+                        ZngurMethodReceiver::Ref(Mutability::Mut)
+                    } else {
+                        ZngurMethodReceiver::Ref(Mutability::Not)
+                    }
+                }
+                Type::Generic(s) => {
+                    // check s == "Self"?
+                    ZngurMethodReceiver::Move
+                }
+                // Maybe check for borrow ref and all others default to move?
+                _ => panic!(),
+            }
+        }
+    };
+
     let inputs = func
         .sig
         .inputs
         .iter()
-        .map(|(_name, ty)| match ty {
-            Type::Primitive(p) => RustType::Primitive(PrimitiveRustType::from(p.to_owned())),
-            _ => RustType::Primitive(PrimitiveRustType::from(String::from("u8"))),
-        })
+        .map(|(_name, ty)| RustType::try_from(ty.clone()).unwrap())
         .collect::<Vec<_>>();
 
     let output = if func.sig.output.is_some() {
@@ -213,12 +241,11 @@ fn fn_to_zngmethod(
     } else {
         RustType::UNIT
     };
-
     Some(ZngurMethod {
         name: item.name.clone()?,
         inputs,
         generics: vec![],
-        receiver: ZngurMethodReceiver::Static,
+        receiver,
         output,
     })
 }
