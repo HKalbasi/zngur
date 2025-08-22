@@ -1,5 +1,5 @@
 use crate::*;
-use rustdoc_types::{Crate, Id, Struct, Type};
+use rustdoc_types::{Crate, GenericArg, GenericArgs, Id, Struct, Type};
 
 impl From<Crate> for ZngurSpec {
     fn from(value: Crate) -> Self {
@@ -13,14 +13,14 @@ impl From<Crate> for ZngurSpec {
                     }
                 }
                 ItemEnum::Enum(e) => {
-                    // if let Some(ztype) = convert_enum_to_zngur_type(e, id, &value, &crate_name) {
-                    //     spec.types.push(ztype);
-                    // }
+                    if let Some(ztype) = convert_enum_to_zngur_type(e, id, &value, &crate_name) {
+                        spec.types.push(ztype);
+                    }
                 }
                 ItemEnum::Function(_) => {
-                    // if let Some(zfn) = fn_to_zngfn(id, &value, &crate_name) {
-                    //     spec.funcs.push(zfn);
-                    // }
+                    if let Some(zfn) = fn_to_zngfn(id, &value, &crate_name) {
+                        spec.funcs.push(zfn);
+                    }
                 }
                 ItemEnum::Module(_) => {
                     // Handle module items if needed
@@ -193,6 +193,7 @@ fn fn_to_zngmethod(
     func_id: &rustdoc_types::Id,
     value: &rustdoc_types::Crate,
 ) -> Option<ZngurMethod> {
+    let crate_name = value.index.get(&value.root).unwrap().clone().name.unwrap();
     let item = value.index.get(func_id)?;
     let ItemEnum::Function(func) = &item.inner else {
         return None;
@@ -229,6 +230,7 @@ fn fn_to_zngmethod(
         }
     };
 
+    //TODO NRB fix crate local type names
     let inputs = func
         .sig
         .inputs
@@ -266,10 +268,7 @@ fn fn_to_zngfn(
         .sig
         .inputs
         .iter()
-        .map(|(_name, ty)| match ty {
-            Type::Primitive(p) => RustType::Primitive(PrimitiveRustType::from(p.to_owned())),
-            _ => RustType::Primitive(PrimitiveRustType::from(String::from("u8"))),
-        })
+        .map(|(_name, ty)| ty.clone().try_into().unwrap())
         .collect::<Vec<_>>();
 
     let output = if func.sig.output.is_some() {
@@ -344,12 +343,21 @@ impl TryFrom<rustdoc_types::Type> for RustType {
             Type::ResolvedPath(path) => {
                 // Convert rustdoc_types::Path to RustPathAndGenerics
                 let path_vec = path.path.split("::").map(|s| s.to_string()).collect();
-                let generics = if let Some(args) = path.args {
-                    // TODO: Implement proper generic argument conversion
-                    vec![]
-                } else {
-                    vec![]
-                };
+                let mut generics = vec![];
+                if let Some(args) = path.args {
+                    match *args {
+                        GenericArgs::AngleBracketed { args, constraints } => {
+                            args.iter().for_each(|x| {
+                                if let GenericArg::Type(t) = x {
+                                    generics.push(RustType::try_from(t.clone()).unwrap());
+                                }
+                            })
+                        }
+                        //TODO NRB finish impl
+                        GenericArgs::Parenthesized { inputs, output } => {}
+                        GenericArgs::ReturnTypeNotation => {}
+                    }
+                }
                 let named_generics = vec![];
                 Ok(RustType::Adt(RustPathAndGenerics {
                     path: path_vec,
@@ -380,6 +388,11 @@ impl TryFrom<rustdoc_types::Type> for RustType {
                 // For generic types, we'll need to handle them in context
                 // For now, return a placeholder
                 Ok(RustType::Primitive(PrimitiveRustType::Uint(8)))
+                // Ok(RustType::Adt(RustPathAndGenerics {
+                //     path: name,
+                //     generics: vec![],
+                //     named_generics: vec![],
+                // }))
             }
             Type::Primitive(p) => Ok(RustType::Primitive(PrimitiveRustType::from(p))),
             Type::FunctionPointer(function_pointer) => {

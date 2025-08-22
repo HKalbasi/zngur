@@ -188,7 +188,7 @@ pub enum PrimitiveRustType {
     ZngurCppOpaqueOwnedObject,
 }
 
-// TODO: isize and char
+// TODO:NRB isize and char
 impl From<Primitive> for PrimitiveRustType {
     fn from(value: Primitive) -> Self {
         match value.name.as_str() {
