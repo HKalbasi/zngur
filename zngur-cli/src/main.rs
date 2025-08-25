@@ -1,8 +1,8 @@
 use rustdoc_json::*;
 use std::{fs::read_to_string, path::PathBuf};
 
-use clap::Parser;
-use zngur::AutoZngur;
+use clap::{Args, Parser};
+use zngur::{AutoZngur, Zngur};
 
 #[derive(Parser)]
 #[command(version)]
