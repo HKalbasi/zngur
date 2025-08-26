@@ -3,7 +3,6 @@ generated.rs
 generated.cpp
 generated.o
 main.js
-main.wasm
 target/
 a.out
 example_tutorial_wasm32.wasm
@@ -16,3 +15,4 @@ wasm32-wasip1-target
 
 # Build artifacts
 actual_output.txt
+*.wasm
