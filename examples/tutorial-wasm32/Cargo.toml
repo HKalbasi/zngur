@@ -1,9 +1,9 @@
 [package]
 name = "example-tutorial-wasm32"
 version = "0.6.0"
-edition = "2024"
-rust-version = "1.85"
-license = "MIT OR Apache-2.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
 publish = false
 
 [lib]
