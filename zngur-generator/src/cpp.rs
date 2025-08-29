@@ -77,6 +77,7 @@ impl Display for CppPath {
 pub struct CppType {
     pub path: CppPath,
     pub generic_args: Vec<CppType>,
+    pub pointer_mutability: Option<Mutability>,
 }
 
 impl CppType {
@@ -84,10 +85,14 @@ impl CppType {
         CppType {
             path: CppPath::from("rust::Ref"),
             generic_args: vec![self],
+            pointer_mutability: None,
         }
     }
 
     fn emit_specialization_decl(&self, state: &mut State) -> std::fmt::Result {
+        if self.pointer_mutability.is_some() {
+            panic!("Cannot emit specialization for pointer type: {}", self)
+        }
         if self.generic_args.is_empty() {
             write!(state, "struct {}", self.path.name())?;
         } else {
@@ -123,6 +128,12 @@ impl Display for CppType {
         if !self.generic_args.is_empty() {
             write!(f, "< {} >", self.generic_args.iter().join(", "))?;
         }
+        let ptr_suffix = match self.pointer_mutability {
+            Some(Mutability::Not) => " const*",
+            Some(Mutability::Mut) => "*",
+            None => "",
+        };
+        write!(f, "{}", ptr_suffix)?;
         Ok(())
     }
 }
@@ -162,16 +173,27 @@ fn split_string(input: &str) -> impl Iterator<Item = String> {
 impl From<&str> for CppType {
     fn from(value: &str) -> Self {
         let value = value.trim();
+        let (value, pointer_mutability) = if let Some(value) = value.strip_suffix('*') {
+            if let Some(value) = value.strip_suffix(" const") {
+                (value, Some(Mutability::Not))
+            } else {
+                (value, Some(Mutability::Mut))
+            }
+        } else {
+            (value, None)
+        };
         match value.split_once('<') {
             None => CppType {
                 path: CppPath::from(value),
                 generic_args: vec![],
+                pointer_mutability
             },
             Some((path, generics)) => {
                 let generics = generics.strip_suffix('>').unwrap();
                 CppType {
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
+                    pointer_mutability
                 }
             }
         }
@@ -1532,6 +1554,28 @@ namespace rust {
         zngur_pretty_print<typename ::std::remove_reference<T>::type>(input);
         return ::std::forward<T>(input);
     }
+    
+    // All (const) pointers have the same impl for __zngur_internal_data_ptr, __zngur_internal_assume_init, 
+    // and __zngur_internal_assume_deinit
+    template<typename T>
+    inline uint8_t* __zngur_internal_data_ptr(T* const& t) {{
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }}
+
+    template<typename T>
+    inline void __zngur_internal_assume_init(T*&) {{}}
+    template<typename T>
+    inline void __zngur_internal_assume_deinit(T*&) {{}}
+
+    template<typename T>
+    inline uint8_t* __zngur_internal_data_ptr(T const* const & t) {{
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }}
+
+    template<typename T>
+    inline void __zngur_internal_assume_init(T const*&) {{}}
+    template<typename T>
+    inline void __zngur_internal_assume_deinit(T const*&) {{}}
 "#;
         for ty in [8, 16, 32, 64]
             .into_iter()
@@ -1571,26 +1615,6 @@ namespace rust {
     inline size_t __zngur_internal_size_of< {ty} >() {{
         return sizeof({ty});
     }}
-
-    template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty}*>({ty}* const & t) {{
-        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-    }}
-
-    template<>
-    inline void __zngur_internal_assume_init< {ty}*>({ty}*&) {{}}
-    template<>
-    inline void __zngur_internal_assume_deinit< {ty}*>({ty}*&) {{}}
-
-    template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} const*>({ty} const* const & t) {{
-        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-    }}
-
-    template<>
-    inline void __zngur_internal_assume_init< {ty} const*>({ty} const*&) {{}}
-    template<>
-    inline void __zngur_internal_assume_deinit< {ty} const*>({ty} const*&) {{}}
 
     template<>
     struct Ref< {ty} > {{
