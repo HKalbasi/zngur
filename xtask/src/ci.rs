@@ -11,21 +11,8 @@ fn check_crate(sh: &Shell) -> Result<()> {
 }
 
 fn check_book_formatting() -> Result<()> {
-    match format_book::main(true /* check_only */) {
-        Ok(_) => Ok(()),
-        Err(e) => {
-            // Check if the error is just about dprint not being installed
-            let err_msg = format!("{}", e);
-            if err_msg.contains("dprint is not installed") {
-                eprintln!("Warning: Skipping book formatting check (dprint not available)");
-                Ok(())
-            } else {
-                Err(e).with_context(
-                    || "Book markdown files are not formatted. Run `cargo xtask format-book`",
-                )
-            }
-        }
-    }
+    format_book::main(true /* check_only */)
+        .with_context(|| "Book markdown files are not formatted. Run `cargo xtask format-book`")
 }
 
 fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
@@ -73,16 +60,8 @@ pub fn main(fix: bool) -> Result<()> {
     if fix {
         cmd!(sh, "cargo fmt --all").run()?;
         // Format book markdown files when using --fix
-        match format_book::main(false /* check_only */) {
-            Ok(_) => {}
-            Err(e) => {
-                let err_msg = format!("{}", e);
-                if err_msg.contains("dprint is not installed") {
-                    eprintln!("Warning: Skipping book formatting (dprint not available)");
-                } else {
-                    eprintln!("Warning: Failed to format book: {}", e);
-                }
-            }
+        if let Err(e) = format_book::main(false /* check_only */) {
+            eprintln!("Warning: Failed to format book: {}", e);
         }
     }
     // Check book formatting

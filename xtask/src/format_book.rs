@@ -14,29 +14,20 @@ pub fn main(check_only: bool) -> Result<()> {
         bail!("Book source directory 'book/src' not found");
     }
 
-    println!("Checking for dprint installation...");
+    println!("Checking for dprint...");
 
-    // Try to get dprint version to check if it's installed
-    let _dprint_version = match cmd!(sh, "dprint --version").read() {
-        Ok(version) => {
-            println!("Using dprint: {}", version.trim());
-            version
-        }
-        Err(_) => {
-            if check_only {
-                eprintln!("Warning: dprint not found. Skipping book formatting check.");
-                eprintln!("To enable book formatting checks, install dprint:");
-                eprintln!("  curl -fsSL https://dprint.dev/install.sh | sh");
-                eprintln!("  export PATH=\"$HOME/.dprint/bin:$PATH\"");
-                return Ok(());
-            } else {
-                eprintln!("dprint not found. Please install it first:");
-                eprintln!("  curl -fsSL https://dprint.dev/install.sh | sh");
-                eprintln!("  export PATH=\"$HOME/.dprint/bin:$PATH\"");
-                bail!("dprint is not installed");
-            }
-        }
-    };
+    // Try to use dprint directly first
+    let dprint_available = cmd!(sh, "dprint --version").read().is_ok();
+
+    if !dprint_available {
+        println!("dprint not found, installing via cargo...");
+        cmd!(sh, "cargo install dprint --locked")
+            .run()
+            .with_context(|| "Failed to install dprint via cargo install")?;
+        println!("✓ dprint installed successfully");
+    } else {
+        println!("✓ dprint is available");
+    }
 
     // Check if plugins need to be initialized/updated
     println!("Initializing dprint plugins...");

@@ -26,8 +26,6 @@ jobs:
         run: brew install llvm@19
       - name: Install wasmtime
         uses: bytecodealliance/actions/wasmtime/setup@v1
-      - name: Install dprint
-        run: curl -fsSL https://dprint.dev/install.sh | sh && echo "$HOME/.dprint/bin" >> $GITHUB_PATH
       - name: Run `cargo xtask ci`
         run: CC=$(brew --prefix llvm@19)/bin/clang CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
 
@@ -56,8 +54,6 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y lld
       - name: Install wasmtime
         uses: bytecodealliance/actions/wasmtime/setup@v1
-      - name: Install dprint
-        run: curl -fsSL https://dprint.dev/install.sh | sh && echo "$HOME/.dprint/bin" >> $GITHUB_PATH
       - name: Cache WASI SDK
         uses: actions/cache@v3
         with:
