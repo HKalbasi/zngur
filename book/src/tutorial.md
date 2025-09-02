@@ -3,7 +3,7 @@
 A Zngur project consists of 3 things:
 
 - An IDL (interface definition language) file named `main.zng`
-- A Rust crate (that can be everything, binary, rlib, static-lib, cdy-lib, ...)
+- A Rust crate (that can be anything: binary, rlib, static-lib, cdy-lib, ...)
 - A C++ project.
 
 To start, install Zngur:
@@ -12,7 +12,7 @@ To start, install Zngur:
 cargo install zngur-cli
 ```
 
-Then generate a new `staticlib` crate using `cargo init --lib` and appending this to the `Cargo.toml`:
+Then generate a new `staticlib` crate using `cargo init --lib` and by appending this to `Cargo.toml`:
 
 ```Toml
 [lib]
@@ -64,11 +64,13 @@ type crate::Inventory {
 }
 ```
 
-Zngur needs to know the size and align of the types inside the bridge. You can figure it out using the rust-analyzer (by hovering
-over the struct or type alias) or fill it with some random number and then fix it from the compiler error.
+Zngur needs to know the size and alignment of the types inside the bridge.
+You can find these using rust-analyzer (by hovering over the struct or type alias)
+or fill it with some random number and then fix it from the compiler error.
 
-> **Note:** Ideally `main.zng` file should be auto-generated, but we are not there yet. Also, Zngur can work without explicit size and
-> align (with some caveats), see [layout policies](./call_rust_from_cpp/layout_policy.md) for more details.
+> **Note:** Ideally `main.zng` should be auto-generated, but we are not there yet.
+> Also, Zngur can work without explicit size and alignment (with some caveats),
+> see [layout policies](./call_rust_from_cpp/layout_policy.md) for more details.
 
 Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files. It will generate a `./generated.h` C++ header file, and a
 `./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include the generated Rust file. Then fill `main.cpp` file
@@ -85,8 +87,8 @@ int main() {
 Zngur will add every Rust item with its full path in the `rust` namespace, so for example `String` will become `rust::std::string::String` in the
 C++ side.
 
-To build it, you need to first build the Rust code using `cargo build`, which will generate a `libyourcrate.a` in the `./target/debug` folder, and
-you can build your C++ code by linking to it:
+To build it, you first need to build the Rust code using `cargo build`, which will generate a `libyourcrate.a` in the `./target/debug` folder,
+and then you can build your C++ code by linking to it:
 
 ```bash
 clang++ main.cpp -g -L ./target/debug/ -l your_crate
@@ -110,8 +112,8 @@ int main() {
 }
 ```
 
-There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.md) has the
-complete list of them.
+There are some traits that Zngur has special support for them, and `Debug` is among them.
+[This page](./call_rust_from_cpp/wellknown_traits.md) has the complete list of them.
 
 Assuming that everything works correctly, you should see something like this after executing the program:
 

@@ -1,18 +1,18 @@
 # Design decisions
 
-## Keep Rust code normal and idiomatic. All glue code should live in the C++ side.
+## Keep Rust code normal and idiomatic. All glue code should live on the C++ side.
 
-One of the most important use of a C++/Rust interop tool like Zngur is in Rust rewrite projects. In
+One of the most important uses of a C++/Rust interop tool like Zngur is in Rust rewrite projects. In
 those projects, most people are C++ experts but have little to no Rust experience. Writing
-glue codes in Rust and using `UniquePtr`, `Pin` and similar make Rust code more weirder and
-harder than what Rust actually is, creates a not really great first Rust experience for them.
+glue code in Rust and using `UniquePtr`, `Pin` and similar constructs make Rust code weirder and
+harder than what Rust actually is, creating a not really great first Rust experience for them.
 
 Writing glue code in C++ also makes things considerably easier, since C++ semantics are a superset of
 Rust semantics (See [idea](./zngur.md#idea)) and Rust can't express all C++ things easily.
 
 ### Keep `main.zng` in a separate file
 
-CXX style embedding of the IDL in a Rust proc macro confused Rust newcomers, so Zngur avoids it.
+CXX-style embedding of the IDL in a Rust proc macro confuses Rust newcomers, so Zngur avoids it.
 
 ## Be a zero cost abstraction
 
@@ -31,13 +31,13 @@ any of them. Any build system that can do the following process is able to build
 
 ## Keep Rust things Rusty
 
-- To minimizing the surprise.
+- To minimize surprise.
 - Rust decisions are usually superior to C++ ones.
 
 ### `Result<T, E>` is not automatically converted to exception
 
-`Result<T, E>` has some benefits over exception based error handling. For example, the unhappy case can not be forgotten
-and must be handled. Due these benefits, a similar `std::expected<T, E>` is added to the C++23. In order to not losing
+`Result<T, E>` has some benefits over exception-based error handling. For example, the unhappy case cannot be forgotten
+and must be handled. Due to these benefits, a similar `std::expected<T, E>` was added to C++23. In order to not lose
 this Rust benefit, `Result<T, E>` is not converted to a C++ exception.
 
 Panics, which are implemented by stack unwinding similar to C++ exceptions, are converted to a C++ exception with

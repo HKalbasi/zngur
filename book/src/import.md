@@ -15,9 +15,9 @@ Import paths are resolved relative to the directory containing the current `.zng
 - `import "./types.zng";`
 
 At this time, absolute paths are not supported.
-Importing paths without a leading specified (e.g. `import "foo/bar.zng";`) is reserved for a possible future extension.
+Importing paths without a leading specifier (e.g. `import "foo/bar.zng";`) is reserved for a possible future extension.
 
-Above, "the current zng file" refers to the `.zng` file being parsed, which is not necessarily the top-level `.zng` file passed to `zngur` on the command line.
+Above, "the current .zng file" refers to the `.zng` file being parsed, which is not necessarily the top-level `.zng` file passed to `zngur` on the command line.
 
 ## Behavior
 

@@ -25,9 +25,9 @@ the [`examples/osmium`](https://github.com/HKalbasi/zngur/blob/main/examples/osm
 
 ## Opaque owned C++ type
 
-Owning C++ type in the Rust stack is impossible without a huge amount of acrobatics, since Rust assumes that every type is memcpy-movable, which doesn't
-work for C++ types with non trivial move constructors. It is not entirely impossible, for example the `moveit` crate achieves it by hiding the binding
-of the stack owner in a macro:
+Owning C++ types on the Rust stack is impossible without a huge amount of acrobatics,
+since Rust assumes that every type is memcpy-movable, which doesn't work for C++ types with non-trivial move constructors.
+It is not entirely impossible, for example the `moveit` crate achieves it by hiding the binding of the stack owner in a macro:
 
 ```Rust
 moveit! {
@@ -38,16 +38,17 @@ stack_obj.as_mut().set(42);
 assert_eq!(stack_obj.get(), 42);
 ```
 
-Keeping the Rust side clean and idiomatic is one of the design goals of Zngur, and such a macro is not clean and idiomatic Rust. So storing C++
-objects in the Rust stack is not supported. If you really need to store things in the Rust stack, consider moving the type definition into Rust.
+Keeping the Rust side clean and idiomatic is one of the design goals of Zngur, and such a macro is not clean and idiomatic Rust.
+So, storing C++ objects on the Rust stack is not supported.
+If you really need to store things on the Rust stack, consider moving the type definition into Rust.
 
-Keeping C++ object in Rust using heap allocation is supported with `ZngurCppOpaqueOwnedObject`.
+Keeping C++ objects in Rust using heap allocation is supported with `ZngurCppOpaqueOwnedObject`.
 
 ## Creating trait objects from C++ types
 
 By the above infrastructure you can convert your C++ types into `&dyn Trait` or `Box<dyn Trait>`. To do that, you need to:
 
-- Create a opaque borrowed (or owned for `Box<dyn Trait>`) type for the C++ type.
+- Create an opaque borrowed (or owned for `Box<dyn Trait>`) type for the C++ type.
 - Implement the `Trait` for that type inside C++.
 - Cast `&Opaque` to `&dyn Trait` when needed.
 

@@ -1,12 +1,12 @@
 # Wellknown traits
 
-Some Rust traits from standard library has special support or effect in Zngur. They are listed in this page. You can use
-them by adding `wellknown_traits(Trait1, Trait2);` statement for your type in `main.zng` file.
+Some Rust traits from the standard library have special support or effect in Zngur. They are listed on this page.
+You can use them by adding `wellknown_traits(Trait1, Trait2);` statement for your type in the `main.zng` file.
 
 ## Copy
 
-Adding this trait enables copy constructor for the type in the C++ side, and removes the drop flag and destructor related generated
-codes, so it will improve the performance.
+Adding this trait enables the copy constructor for the type on the C++ side,
+and removes the drop flag and destructor-related generated code, so it will improve performance.
 
 ## ?Sized
 

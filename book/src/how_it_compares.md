@@ -1,4 +1,4 @@
-# How it compares to other tools?
+# How Zngur compares to other tools
 
 Zngur is not the only tool in the Rust/C++ interoperability space. Its pros and cons relative to other popular tools are described
 on this page.
@@ -9,15 +9,15 @@ CXX says:
 
 > Be aware that the design of this library is intentionally restrictive and opinionated! It isn't a goal to be powerful enough to handle arbitrary signatures in either language. Instead, this project is about carving out a reasonably expressive set of functionality about which we can make useful safety guarantees today and maybe extend over time.
 
-Zngur also makes safety guarantees but also tries to be powerful enough to handle arbitrary signatures from Rust code. And we believe
+Zngur also makes safety guarantees but also tries to be powerful enough to handle arbitrary signatures from Rust code. We believe
 Rust types are expressive enough so that there is no need to support C++ types in Rust. For example, instead of defining a C++ opaque
-type and using it in Rust by an `UniquePtr`, you can define the behavior of that type in a Rust normal trait, implement that trait
-for your C++ type, and then convert that type into a `Box<dyn Trait>` and use it in Rust. Zngur benefits over CXX are:
+type and using it in Rust via a `UniquePtr`, you can define the behavior of that type in a normal Rust trait, implement that trait
+for your C++ type, and then convert that type into a `Box<dyn Trait>` and use it in Rust. Zngur's benefits over CXX are:
 
 - Zngur supports owning Rust variables on the C++ stack, saving some unnecessary allocations.
 - CXX has limited support for some types in the standard library, but Zngur supports almost everything (`Vec<T>`, `Vec<Vec<T>>`, `HashMap<T, T>`,
   `Box<[T]>`, `Arc<dyn T>`, ...) with almost full API.
-- Zngur keeps the Rust side clean and normal, moving all glue code in the C++ side. But using CXX you will see the foreign types and glue codes
+- Zngur keeps the Rust side clean and normal, moving all glue code to the C++ side. But using CXX you will see the foreign types and glue code
   in both languages.
 
 ### Migrating from CXX to Zngur

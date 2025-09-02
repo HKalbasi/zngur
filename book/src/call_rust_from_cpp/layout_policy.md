@@ -1,27 +1,31 @@
 # Layout policy
 
-A normal Zngur usage requires explicitly declaring data layout information (size and align) in order to storing Rust things
-by value in the C++ stack. But the layout of Rust type are not stable, and can break when changing the compiler version, using
-different compiler configuration (e.g. `-Z randomize-layout`) and in different targets. This can make Zngur unusable for certain
-circumstances, so Zngur supports different strategies (and all of them has their own drawback) for storing Rust things by value
-in the C++, called "Layout policies".
+Normal Zngur usage requires explicitly declaring data layout information (size and alignment)
+in order to store Rust things by value on the C++ stack.
+But the layout of Rust types is not stable, and can break when changing the compiler version,
+using different compiler configurations (e.g. `-Z randomize-layout`) and on different targets.
+This can make Zngur unusable for certain circumstances, so Zngur supports different strategies
+(and all of them have their own drawbacks) for storing Rust things by value in C++, called "Layout policies".
 
-In fact, you should never use this mode of Zngur (and any other form of static assertion on size and align) when you don't control
-the final compiler that compiles the code, since it can break for your users in an unrecoverable state if they can't change the `zng` file
-and rebuild your code. For example, you should never publish such a crate in the crates.io, if everyone does that, it makes upgrading
+In fact, you should never use this mode of Zngur (and any other form of static assertion on size and alignment)
+when you don't control the final compiler that compiles the code,
+since it can break for your users in an unrecoverable state if they can't change the `.zng` file and rebuild your code.
+For example, you should never publish such a crate to crates.io, because if everyone does that, it makes upgrading
 the compiler challenging and breaks the ecosystem.
 
-In a normal Rust/C++ project where C++ is the boss, you usually can control the compiler version. It's perfectly fine to have multiple
-versions of the Rust compiler in a single C++ build process, and Rustup will make it easy for you to pick your pinned version of the
-compiler. In a binary Rust project there is also no problem, since you control the final build process, but in library Rust projects
-using Zngur with explicit data layout annotations for unstable types is usually not desireable.
+In a normal Rust/C++ project where C++ is the boss, you can usually control the compiler version.
+It's perfectly fine to have multiple versions of the Rust compiler in a single C++ build process,
+and Rustup will make it easy for you to pick your pinned version of the compiler.
+In a binary Rust project there is also no problem, since you control the final build process,
+but in library Rust projects using Zngur with explicit data layout annotations for unstable types is usually not desirable.
 
 These are the layout policies Zngur currently supports:
 
 ## `#layout(size = X, align = Y)`
 
-This is the normal mode, which you should provide exact value of size and align for your type, which enables storing
-them by value in the stack of C++. This mode has the best performance, but it has problems mentioned above.
+This is the normal mode, in which you should provide the exact values of size and alignment for your type,
+which enables storing them by value on the C++ stack.
+This mode has the best performance, but it has the problems mentioned above.
 
 Note that even in projects that you don't control the compiler, you can use this mode for types that have stable
 size and align, such as:

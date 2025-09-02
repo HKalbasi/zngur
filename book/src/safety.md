@@ -1,16 +1,18 @@
 # Safety
 
-Rust is a pretty strict language about its rules, and its rules are not necessarily equivalent to the C++ rules that C++ developers
-know. So, extra care is needed in using C++ and Rust together in a project. By using Zngur, Rust side remains a normal, idiomatic and
-safe code which can't cause undefined behavior (UB), but nothing prevents the C++ side to break Rust expectations. This page
-lists the ways that it can break the rules and things to consider for preventing it.
+Rust is a pretty strict language, and its rules are not necessarily equivalent to the C++ rules that C++ developers know.
+So, extra care is needed when using C++ and Rust together.
+By using Zngur, the Rust side remains normal, idiomatic and safe code that can't cause undefined behavior (UB),
+but nothing prevents the C++ side from breaking Rust expectations.
+This page lists the ways that it can break the rules and things to consider for preventing it.
 
 ## C++ functions exposed into Rust
 
-Zngur supports multiple ways of calling C++ functions in Rust, including free functions in `rust::exported_functions` namespace, writing `impl` block
-for Rust types, and converting a `std::function` into a `Box<dyn FnX()>`. In all of these, your C++ function should behave like a safe Rust function
-that avoids UB in all cases. This property is called _soundness_, and if there exists some inputs and conditions that cause UB, then your
-function is _unsound_. You can assume these about your parameters:
+Zngur supports multiple ways of calling C++ functions in Rust, including free functions in the `rust::exported_functions` namespace,
+writing `impl` blocks for Rust types, and converting a `std::function` into a `Box<dyn FnX()>`.
+In all of these, your C++ function should behave like a safe Rust function that avoids UB in all cases.
+This property is called _soundness_, and if there exist some inputs and conditions that cause UB, then your function is _unsound_.
+You can assume these things about your parameters:
 
 - `&mut T` is a valid reference at least until the end of your function to a `T`, and you have exclusive access to it.
 - `&T` is a valid reference at least until the end of your function to a `T`, but there may exist other threads that are

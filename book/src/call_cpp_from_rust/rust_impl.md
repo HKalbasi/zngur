@@ -1,4 +1,4 @@
-# Writing `impl` block for Rust types in C++
+# Writing `impl` blocks for Rust types in C++
 
 ## Inherent `impl`
 
