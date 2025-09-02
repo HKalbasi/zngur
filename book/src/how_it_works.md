@@ -5,12 +5,14 @@ So, special care must be taken when transferring Rust types between Rust and C++
 
 ## How a Rust type is represented in C++
 
-A normal Rust type's ABI is undefined, so passing it directly in a cross-language function call is undefined behavior.
+A normal Rust type's ABI is undefined,
+so passing it directly in a cross-language function call is undefined behavior.
 The guarantee is that the size and alignment of a type won't change during a compile session.
 By adding static assertions against the user-provided size and alignment in the `main.zng` file,
 Zngur ensures that it knows the correct size and alignment of the type for this compile session.
 Knowing the size and alignment of a type enables `std::ptr::read` and `std::ptr::write`.
-These functions only need the pointer to be valid (which basically means `ptr..ptr+size` should belong to a single live chunk of memory,
+These functions only need the pointer to be valid
+(which basically means `ptr..ptr+size` should belong to a single live chunk of memory,
 [read more](https://doc.rust-lang.org/std/ptr/index.html#safety)) and aligned.
 So, Zngur can use a pointer to `data`, as defined below, in those functions:
 
@@ -18,13 +20,15 @@ So, Zngur can use a pointer to `data`, as defined below, in those functions:
 alignas(align_value) mutable ::std::array<uint8_t, size_value> data;
 ```
 
-The `mutable` keyword is equivalent to the `UnsafeCell` in Rust. It allows modifying `const` objects (which happens with
-Rust interior mutable types) without triggering UB.
+The `mutable` keyword is equivalent to the `UnsafeCell` in Rust.
+It allows modifying `const` objects (which happens with Rust interior mutable types) without triggering UB.
 
-To support running destructors of Rust types in C++, Zngur uses `std::ptr::drop_in_place` which has similar constraints to `read` and
-`write`. But to prevent double free, Zngur needs to track if a Rust type is moved out. It does this using a boolean field called
-`drop_flag`, which is `false` if the value doesn't need drop (it is uninitialized or moved out from) and otherwise `true`. So a C++ wrapper
-for a typical Rust type will look like this:
+To support running destructors of Rust types in C++,
+Zngur uses `std::ptr::drop_in_place` which has similar constraints to `read` and `write`.
+But to prevent double free, Zngur needs to track if a Rust type is moved out.
+It does this using a boolean field called `drop_flag`,
+which is `false` if the value doesn't need drop (it is uninitialized or moved out from) and otherwise `true`.
+So a C++ wrapper for a typical Rust type will look like this:
 
 ```C++
 struct MultiBuf {
@@ -50,14 +54,18 @@ public:
 };
 ```
 
-Note that the drop flag [also exists in Rust](https://doc.rust-lang.org/stable/nomicon/drop-flags.html). It is not stored inside
-the type, but in the stack of the owner, and the compiler generates them only if necessary.
+Note that the drop flag [also exists in Rust](https://doc.rust-lang.org/stable/nomicon/drop-flags.html).
+It is not stored inside the type, but in the stack of the owner,
+and the compiler generates them only if necessary.
 
 ## Calling Rust functions from C++
 
-For exposing a function or method from Rust to C++, an `extern "C"` function is generated that takes all arguments as `*mut u8`, and
-takes output as an output parameter `o: *mut u8`. It then reads arguments using `ptr::read`, calls the underlying function, and write
-the result in `o` using `ptr::write`. So for example for `rustyline::Result<String>::unwrap` some code like this will be generated:
+For exposing a function or method from Rust to C++,
+an `extern "C"` function is generated that takes all arguments as `*mut u8`,
+and takes output as an output parameter `o: *mut u8`.
+It then reads arguments using `ptr::read`, calls the underlying function,
+and write the result in `o` using `ptr::write`.
+So for example for `rustyline::Result<String>::unwrap` some code like this will be generated:
 
 ```Rust
 #[unsafe(no_mangle)]
@@ -89,13 +97,16 @@ In the C++ side, this code will be generated for that function:
 }
 ```
 
-`::rust::std::string::String o;` creates an uninitialized `String`. `__zngur_internal_assume_init` sets its drop flag to `true` so that it will become
-freed after being returned by this function. Then it will call the underlying Rust function, and by `__zngur_internal_assume_deinit` it will ensure
-that the destructor for `i0` is not called. `i0` is now semantically moved in Rust, and it's Rust responsibility to destruct it.
+`::rust::std::string::String o;` creates an uninitialized `String`.
+`__zngur_internal_assume_init` sets its drop flag to `true` so that it will become freed after being returned by this function.
+Then it will call the underlying Rust function,
+and by `__zngur_internal_assume_deinit` it will ensure that the destructor for `i0` is not called.
+`i0` is now semantically moved in Rust, and it's Rust responsibility to destruct it.
 
 ## Calling C++ functions from Rust
 
-Similarly, for exposing a C++ function to Rust, a function will be generated that takes all inputs and output by `uint8_t*`.
+Similarly, for exposing a C++ function to Rust,
+a function will be generated that takes all inputs and output by `uint8_t*`.
 
 ```C++
 extern "C" {
@@ -137,8 +148,9 @@ are implemented in this way.
 
 ## Implementing Rust traits for C++ classes
 
-C++ types can't exist in Rust by value, since it might need a nontrivial move constructor incompatible with Rust moves. So for representing
-them in Rust, Zngur uses the following struct:
+C++ types can't exist in Rust by value,
+since it might need a nontrivial move constructor incompatible with Rust moves.
+So for representing them in Rust, Zngur uses the following struct:
 
 ```Rust
 struct ZngurCppOpaqueOwnedObject {
@@ -153,10 +165,13 @@ impl Drop for ZngurCppOpaqueOwnedObject {
 }
 ```
 
-Where `data` is a `new`ed pointer in C++, and `destructor` is a function pointer that can `delete` that data, i.e. `[](uint8_t *d) { delete (T *)d; }`. It's
-basically a type erased `unique_ptr`.
+Where `data` is a `new`ed pointer in C++,
+and `destructor` is a function pointer that can `delete` that data,
+i.e. `[](uint8_t *d) { delete (T *)d; }`.
+It's basically a type erased `unique_ptr`.
 
-For converting a C++ class into a `Box<dyn Trait>`, Zngur generates a code like this in the Rust side:
+For converting a C++ class into a `Box<dyn Trait>`,
+Zngur generates a code like this in the Rust side:
 
 ```Rust
 extern "C" {
@@ -227,9 +242,10 @@ pub extern "C" fn __zngur_crate_BlobStoreTrait_s13(
 }
 ```
 
-Which constructs a `Wrapper` around `ZngurCppOpaqueOwnedObject`, and
-implements the trait for it. Inside of each trait function is very similar to a normal `C++` function used in Rust and contains the
-similar `MaybeUninit`s.
+Which constructs a `Wrapper` around `ZngurCppOpaqueOwnedObject`,
+and implements the trait for it.
+Inside of each trait function is very similar to a normal `C++` function used in Rust
+and contains the similar `MaybeUninit`s.
 
 Using that, `make_box` can be defined:
 

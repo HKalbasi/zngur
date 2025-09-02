@@ -1,6 +1,9 @@
 # Import
 
-The `import` directive allows you to include type definitions and other declarations from other `.zng` files into your main specification. Types, traits, and modules can appear multiple times across the transitive set of imported files, and their content is merged together.
+The `import` directive allows you to include type definitions and other declarations
+from other `.zng` files into your main specification.
+Types, traits, and modules can appear multiple times across the transitive set of imported files,
+and their content is merged together.
 
 ## Syntax
 
@@ -15,9 +18,11 @@ Import paths are resolved relative to the directory containing the current `.zng
 - `import "./types.zng";`
 
 At this time, absolute paths are not supported.
-Importing paths without a leading specifier (e.g. `import "foo/bar.zng";`) is reserved for a possible future extension.
+Importing paths without a leading specifier (e.g. `import "foo/bar.zng";`)
+is reserved for a possible future extension.
 
-Above, "the current .zng file" refers to the `.zng` file being parsed, which is not necessarily the top-level `.zng` file passed to `zngur` on the command line.
+Above, "the current .zng file" refers to the `.zng` file being parsed,
+which is not necessarily the top-level `.zng` file passed to `zngur` on the command line.
 
 ## Behavior
 
@@ -30,11 +35,17 @@ When an import statement is processed:
 
 ## Merging
 
-Zngur's merge algorithm attempts to compute the union of each set of declarations which share an identity (e.g. every `type crate::Inventory { ... }` across all imported files). Duplicates are ignored, but contradictions will raise a compiler error. For example, if two different `type crate::Inventory { ... }` declarations both specify `wellknown_traits(Debug);`, parsing will succeed. However, if they specify different layouts, an error will be reported.
+Zngur's merge algorithm attempts to compute the union of each set of declarations
+which share an identity (e.g. every `type crate::Inventory { ... }` across all imported files).
+Duplicates are ignored, but contradictions will raise a compiler error.
+For example, if two different `type crate::Inventory { ... }` declarations
+both specify `wellknown_traits(Debug);`, parsing will succeed.
+However, if they specify different layouts, an error will be reported.
 
 ## `#convert_panic_to_exception` constraints
 
-`#convert_panic_to_exception` may only appear in a top-level `.zng` file. This is an application-level decision that should not be determined by dependent libraries.
+`#convert_panic_to_exception` may only appear in a top-level `.zng` file.
+This is an application-level decision that should not be determined by dependent libraries.
 
 ## Example
 
@@ -90,6 +101,9 @@ mod ::std {
 }
 ```
 
-In this example, `main.zng` imports type definitions from two separate files, allowing for better organization of the zngur specification.
+In this example, `main.zng` imports type definitions from two separate files,
+allowing for better organization of the zngur specification.
 
-Notice that `iterators.zng` is able to "reopen" the `::std::vec::Vec<i32>` specification and extend it with a single function, `into_iter`. It does not need to respecify the `#layout` because that is already declared in `core_types.zng`.
+Notice that `iterators.zng` is able to "reopen" the `::std::vec::Vec<i32>` specification
+and extend it with a single function, `into_iter`.
+It does not need to respecify the `#layout` because that is already declared in `core_types.zng`.

@@ -1,6 +1,7 @@
 # Fields as underlying types
 
-When you declare fields in a tuple or struct using `field name (offset = X, type = T);`, the generated C++ exposes helper wrapper types:
+When you declare fields in a tuple or struct using `field name (offset = X, type = T);`,
+the generated C++ exposes helper wrapper types:
 
 - `rust::FieldOwned<T, OFFSET>` for fields on owning types
 - `rust::FieldRef<T, OFFSET>` for fields on `Ref<Ty>`
