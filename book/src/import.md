@@ -24,7 +24,7 @@ Above, "the current .zng file" refers to the `.zng` file being parsed, which is 
 When an import statement is processed:
 
 1. The parser reads and parses the imported file
-2. All declarations from the imported file are _merged_ into the current specification
+2. All declarations from the imported file are *merged* into the current specification
 3. Imported content becomes available as if it were defined in the importing file
 4. Import processing happens recursively - imported files can themselves contain import statements
 
@@ -39,6 +39,7 @@ Zngur's merge algorithm attempts to compute the union of each set of declaration
 ## Example
 
 **main.zng:**
+
 ```zng
 import "./core_types.zng";
 import "./iterators.zng";
@@ -54,6 +55,7 @@ type MyApp {
 ```
 
 **core_types.zng:**
+
 ```zng
 mod ::std {
     type option::Option<i32> {
@@ -77,6 +79,7 @@ mod ::std {
 ```
 
 **iterators.zng:**
+
 ```zng
 mod ::std {
     mod vec {

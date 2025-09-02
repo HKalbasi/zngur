@@ -11,7 +11,7 @@ This page lists the ways that it can break the rules and things to consider for 
 Zngur supports multiple ways of calling C++ functions in Rust, including free functions in the `rust::exported_functions` namespace,
 writing `impl` blocks for Rust types, and converting a `std::function` into a `Box<dyn FnX()>`.
 In all of these, your C++ function should behave like a safe Rust function that avoids UB in all cases.
-This property is called _soundness_, and if there exist some inputs and conditions that cause UB, then your function is _unsound_.
+This property is called *soundness*, and if there exist some inputs and conditions that cause UB, then your function is *unsound*.
 You can assume these things about your parameters:
 
 - `&mut T` is a valid reference at least until the end of your function to a `T`, and you have exclusive access to it.
