@@ -11,7 +11,7 @@ enum Command {
     },
     FormatBook {
         #[arg(long)]
-        check: bool,
+        fix: bool,
     },
 }
 
@@ -19,6 +19,6 @@ fn main() -> anyhow::Result<()> {
     let cmd = Command::parse();
     match cmd {
         Command::CI { fix } => ci::main(fix),
-        Command::FormatBook { check } => format_book::main(check),
+        Command::FormatBook { fix } => format_book::main(fix),
     }
 }

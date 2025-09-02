@@ -1,7 +1,7 @@
 use anyhow::{Context, Result, bail};
 use xshell::{Shell, cmd};
 
-pub fn main(check_only: bool) -> Result<()> {
+pub fn main(fix: bool) -> Result<()> {
     let sh = Shell::new()?;
 
     // Check if dprint config exists
@@ -36,7 +36,14 @@ pub fn main(check_only: bool) -> Result<()> {
         eprintln!("Continuing with existing plugins...");
     }
 
-    if check_only {
+    if fix {
+        println!("Formatting markdown files...");
+        cmd!(sh, "dprint fmt")
+            .run()
+            .with_context(|| "Failed to format markdown files")?;
+        println!("✓ Book formatting complete!");
+        Ok(())
+    } else {
         println!("Checking markdown formatting...");
         match cmd!(sh, "dprint check").run() {
             Ok(_) => {
@@ -45,16 +52,9 @@ pub fn main(check_only: bool) -> Result<()> {
             }
             Err(_) => {
                 eprintln!("✗ Some markdown files need formatting.");
-                eprintln!("Run `cargo xtask format-book` to fix them.");
+                eprintln!("Run `cargo xtask format-book --fix` to fix them.");
                 bail!("Book formatting check failed");
             }
         }
-    } else {
-        println!("Formatting markdown files...");
-        cmd!(sh, "dprint fmt")
-            .run()
-            .with_context(|| "Failed to format markdown files")?;
-        println!("✓ Book formatting complete!");
-        Ok(())
     }
 }

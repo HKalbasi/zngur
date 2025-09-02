@@ -11,7 +11,7 @@ fn check_crate(sh: &Shell) -> Result<()> {
 }
 
 fn check_book_formatting() -> Result<()> {
-    format_book::main(true /* check_only */)
+    format_book::main(false /* don't fix */)
         .with_context(|| "Book markdown files are not formatted. Run `cargo xtask format-book`")
 }
 
@@ -59,8 +59,7 @@ pub fn main(fix: bool) -> Result<()> {
     sh.set_var("RUSTFLAGS", "-D warnings");
     if fix {
         cmd!(sh, "cargo fmt --all").run()?;
-        // Format book markdown files when using --fix
-        if let Err(e) = format_book::main(false /* check_only */) {
+        if let Err(e) = format_book::main(true /* fix */) {
             eprintln!("Warning: Failed to format book: {}", e);
         }
     }
