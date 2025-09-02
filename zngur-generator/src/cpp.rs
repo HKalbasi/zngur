@@ -1478,17 +1478,32 @@ impl CppFile {
 #define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 
 namespace rust {
+    // Because paritial specialization is not allowed, we use the default implementation to cover all pointer types.
+    // In principle, these implementations work for any integral type that matches the C ABI, but zngur explicitly 
+    // generates the others (i8, etc.) already
     template<typename T>
-    uint8_t* __zngur_internal_data_ptr(const T& t);
+    uint8_t* __zngur_internal_data_ptr(const T& t) {
+        static_assert(std::is_pointer_v<T>, "should only fall back to default impl for pointer types");
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
 
     template<typename T>
-    void __zngur_internal_assume_init(T& t);
+    void __zngur_internal_assume_init(T& t) {
+        static_assert(std::is_pointer_v<T>, "should only fall back to default impl for pointer types");
+        // No-op
+    }
 
     template<typename T>
-    void __zngur_internal_assume_deinit(T& t);
+    void __zngur_internal_assume_deinit(T& t) {
+        static_assert(std::is_pointer_v<T>, "should only fall back to default impl for pointer types");
+        // No-op
+    }
 
     template<typename T>
-    inline size_t __zngur_internal_size_of();
+    inline size_t __zngur_internal_size_of() {
+        static_assert(std::is_pointer_v<T>, "should only fall back to default impl for pointer types");
+        return sizeof(T);
+    }
 
     template<typename T>
     inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) {
@@ -1554,28 +1569,6 @@ namespace rust {
         zngur_pretty_print<typename ::std::remove_reference<T>::type>(input);
         return ::std::forward<T>(input);
     }
-    
-    // All (const) pointers have the same impl for __zngur_internal_data_ptr, __zngur_internal_assume_init, 
-    // and __zngur_internal_assume_deinit
-    template<typename T>
-    inline uint8_t* __zngur_internal_data_ptr(T* const& t) {{
-        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-    }}
-
-    template<typename T>
-    inline void __zngur_internal_assume_init(T*&) {{}}
-    template<typename T>
-    inline void __zngur_internal_assume_deinit(T*&) {{}}
-
-    template<typename T>
-    inline uint8_t* __zngur_internal_data_ptr(T const* const & t) {{
-        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-    }}
-
-    template<typename T>
-    inline void __zngur_internal_assume_init(T const*&) {{}}
-    template<typename T>
-    inline void __zngur_internal_assume_deinit(T const*&) {{}}
 "#;
         for ty in [8, 16, 32, 64]
             .into_iter()
