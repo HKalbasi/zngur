@@ -1,3 +1,4 @@
+use crate::format_book;
 use anyhow::{Context, Result};
 use xshell::{Shell, cmd};
 
@@ -7,6 +8,24 @@ fn check_crate(sh: &Shell) -> Result<()> {
         .run()
         .with_context(|| "Crate is not formatted. Run `cargo fmt`")?;
     Ok(())
+}
+
+fn check_book_formatting() -> Result<()> {
+    match format_book::main(true /* check_only */) {
+        Ok(_) => Ok(()),
+        Err(e) => {
+            // Check if the error is just about dprint not being installed
+            let err_msg = format!("{}", e);
+            if err_msg.contains("dprint is not installed") {
+                eprintln!("Warning: Skipping book formatting check (dprint not available)");
+                Ok(())
+            } else {
+                Err(e).with_context(
+                    || "Book markdown files are not formatted. Run `cargo xtask format-book`",
+                )
+            }
+        }
+    }
 }
 
 fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
@@ -53,7 +72,22 @@ pub fn main(fix: bool) -> Result<()> {
     sh.set_var("RUSTFLAGS", "-D warnings");
     if fix {
         cmd!(sh, "cargo fmt --all").run()?;
+        // Format book markdown files when using --fix
+        match format_book::main(false /* check_only */) {
+            Ok(_) => {}
+            Err(e) => {
+                let err_msg = format!("{}", e);
+                if err_msg.contains("dprint is not installed") {
+                    eprintln!("Warning: Skipping book formatting (dprint not available)");
+                } else {
+                    eprintln!("Warning: Failed to format book: {}", e);
+                }
+            }
+        }
     }
+    // Check book formatting
+    check_book_formatting().with_context(|| "Book formatting check failed")?;
+
     for dir in cmd!(sh, "ls").read()?.lines() {
         if sh.path_exists(format!("{dir}/Cargo.toml")) {
             sh.change_dir(dir);
