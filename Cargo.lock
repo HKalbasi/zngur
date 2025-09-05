@@ -1895,6 +1895,7 @@ dependencies = [
  "serde",
  "serde_json",
  "zngur",
+ "zngur-def",
 ]
 
 [[package]]

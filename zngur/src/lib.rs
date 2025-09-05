@@ -2,12 +2,13 @@
 //! about the Zngur itself, see [the documentation](https://hkalbasi.github.io/zngur).
 
 use std::{
+    collections::HashMap,
     fs::File,
     io::Write,
     path::{Path, PathBuf},
 };
 
-use zngur_generator::{ParsedZngFile, ZngurGenerator};
+use zngur_generator::{LayoutPolicy, ParsedZngFile, ZngurGenerator, ZngurSpec};
 
 #[must_use]
 /// Builder for the Zngur generator.
@@ -149,8 +150,14 @@ impl AutoZngur {
         self
     }
 
-    pub fn generate(self, cr: rustdoc_types::Crate) {
-        let file = ZngurGenerator::build_from_zng(cr.into());
+    pub fn generate(
+        self,
+        cr: rustdoc_types::Crate,
+        sizes: HashMap<String, LayoutPolicy>,
+        rcore: HashMap<&str, rustdoc_types::Crate>,
+    ) {
+        let spec = ZngurSpec::from_crate(cr, sizes);
+        let file = ZngurGenerator::build_from_zng(spec);
 
         let (rust, h, cpp) = file.render();
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
@@ -171,4 +178,10 @@ impl AutoZngur {
                 .unwrap();
         }
     }
+}
+
+#[derive(Debug)]
+pub struct SizeInfo {
+    pub size: u32,
+    pub alignment: u32,
 }

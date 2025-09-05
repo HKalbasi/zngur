@@ -1,8 +1,14 @@
 use rustdoc_json::*;
-use std::{fs::read_to_string, path::PathBuf};
+use std::{
+    collections::HashMap,
+    fs::{self, read_to_string},
+    path::PathBuf,
+    str::from_utf8,
+};
+use zngur_def::LayoutPolicy;
 
 use clap::{Args, Parser};
-use zngur::{AutoZngur, Zngur};
+use zngur::{AutoZngur, SizeInfo, Zngur};
 
 #[derive(Parser)]
 #[command(version)]
@@ -50,6 +56,12 @@ enum Command {
 
 fn main() {
     let cmd = Command::parse();
+    const ALLOC: &str = include_str!("../stdjson/alloc.json");
+    const CORE: &str = include_str!("../stdjson/core.json");
+    const PROC_MACRO: &str = include_str!("../stdjson/proc_macro.json");
+    const STD: &str = include_str!("../stdjson/std.json");
+    const STD_DETECT: &str = include_str!("../stdjson/std_detect.json");
+    const TEST: &str = include_str!("../stdjson/test.json");
     match cmd {
         Command::Generate {
             path,
@@ -76,4 +88,42 @@ fn main() {
             zng.generate();
         }
     }
+}
+
+fn get_type_sizes(path: PathBuf) -> HashMap<String, LayoutPolicy> {
+    std::process::Command::new("cargo")
+        .current_dir(&path)
+        .arg("clean")
+        .output()
+        .expect("close to godliness");
+    let raw_output = std::process::Command::new("cargo")
+        .current_dir(path)
+        .args(["+nightly", "rustc", "--", "-Z", "print-type-sizes"])
+        .output()
+        .expect("something");
+    let output = str::from_utf8(&raw_output.stdout).unwrap();
+    str_to_typesizes(output)
+}
+
+fn str_to_typesizes(input: &str) -> HashMap<String, LayoutPolicy> {
+    input
+        .split_terminator("\n")
+        .filter(|s| s.contains("type:"))
+        .map(|s| {
+            let mut parts = s.split_whitespace().skip(2).peekable();
+            let mut name = parts.next().unwrap().to_string().clone();
+            while let Some(p) = parts.peek()
+                && p.parse::<u32>().is_err()
+            {
+                name.push(' ');
+                name.push_str(parts.next().unwrap());
+            }
+            let size = parts.next().unwrap().parse::<usize>().unwrap();
+            let align = parts.skip(2).next().unwrap().parse::<usize>().unwrap();
+            (
+                name[1..(name.len() - 2)].to_string(),
+                LayoutPolicy::StackAllocated { size, align },
+            )
+        })
+        .collect::<HashMap<_, _>>()
 }

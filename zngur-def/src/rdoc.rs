@@ -1,14 +1,14 @@
 use crate::*;
-use rustdoc_types::{Crate, GenericArg, GenericArgs, Id, Struct, Type};
+use rustdoc_types::{Crate, GenericArg, GenericArgs, Id, ItemSummary, Struct, Type};
 
-impl From<Crate> for ZngurSpec {
-    fn from(value: Crate) -> Self {
+impl ZngurSpec {
+    pub fn from_crate(value: Crate, layout_info: HashMap<String, LayoutPolicy>) -> Self {
         let crate_name = value.index.get(&value.root).unwrap().clone().name.unwrap();
         let mut spec = Self::default();
         for (id, item) in value.index.iter() {
             match &item.inner {
                 ItemEnum::Struct(s) => {
-                    if let Some(ztype) = convert_struct_to_zngur_type(s, id, &value, &crate_name) {
+                    if let Some(ztype) = convert_struct_to_zngur_type(s, id, &value, &layout_info) {
                         spec.types.push(ztype);
                     }
                 }
@@ -53,9 +53,7 @@ impl From<Crate> for ZngurSpec {
                 ItemEnum::Static(_) => {
                     // Handle static items if needed
                 }
-                ItemEnum::ExternType => {
-                    // Handle extern type items if needed
-                }
+                ItemEnum::ExternType => {}
                 ItemEnum::Macro(_) => {
                     // Handle macro items if needed
                 }
@@ -71,7 +69,8 @@ impl From<Crate> for ZngurSpec {
                 ItemEnum::AssocType { .. } => {
                     // Handle associated type items if needed
                 }
-                ItemEnum::Use(_) => {
+                ItemEnum::Use(u) => {
+                    dbg!(u);
                     // Handle use items if needed
                 }
             }
@@ -84,10 +83,16 @@ fn convert_struct_to_zngur_type(
     s: &Struct,
     id: &Id,
     value: &Crate,
-    crate_name: &String,
+    layout_info: &HashMap<String, LayoutPolicy>,
 ) -> Option<ZngurType> {
-    let mut path = value.paths.get(id)?.clone().path;
-    convert_path(&mut path, crate_name);
+    let mut path_info = value.paths.get(id)?.clone();
+    let is_local = convert_path(&mut path_info);
+    let path = path_info.path;
+    let layout = if is_local {
+        layout_info.get(path.last().unwrap()).unwrap().clone()
+    } else {
+        layout_info.get(&path.join("::")).unwrap().clone()
+    };
 
     let ty = RustType::Adt(RustPathAndGenerics {
         path,
@@ -97,9 +102,9 @@ fn convert_struct_to_zngur_type(
 
     let mut ztype = ZngurType {
         ty,
-        layout: LayoutPolicy::HeapAllocated,
+        layout,
         methods: vec![],
-        //TODO NRB handle dynamically
+        //TODO:NRB handle dynamically
         wellknown_traits: vec![ZngurWellknownTrait::Drop],
         constructors: vec![],
         fields: vec![],
@@ -117,8 +122,9 @@ fn convert_enum_to_zngur_type(
     value: &rustdoc_types::Crate,
     crate_name: &String,
 ) -> Option<ZngurType> {
-    let mut path = value.paths.get(id)?.clone().path;
-    convert_path(&mut path, crate_name);
+    let mut path_info = value.paths.get(id)?.clone();
+    convert_path(&mut path_info);
+    let path = path_info.path;
 
     let ty = RustType::Adt(RustPathAndGenerics {
         path,
@@ -142,6 +148,7 @@ fn convert_enum_to_zngur_type(
 }
 
 fn process_impls(ztype: &mut ZngurType, impls: &[rustdoc_types::Id], value: &rustdoc_types::Crate) {
+    //TODO:NRB dumb impl, fix logic. pass items directly
     for impl_id in impls {
         let impl_item = match value.index.get(impl_id) {
             Some(item) => item,
@@ -156,7 +163,13 @@ fn process_impls(ztype: &mut ZngurType, impls: &[rustdoc_types::Id], value: &rus
             None => {
                 // Native impl, add methods
                 for method_id in &i.items {
-                    if let Some(method) = fn_to_zngmethod(method_id, value) {
+                    if let Some(mut method) = fn_to_zngmethod(method_id, value) {
+                        // outputs self
+                        if let RustType::Adt(s) = &method.output
+                            && s.path == vec!["Self"]
+                        {
+                            method.output = ztype.ty.clone();
+                        }
                         ztype.methods.push(ZngurMethodDetails {
                             data: method,
                             use_path: None,
@@ -230,11 +243,12 @@ fn fn_to_zngmethod(
         }
     };
 
-    //TODO NRB fix crate local type names
+    //TODO:NRB fix crate local type names
     let inputs = func
         .sig
         .inputs
         .iter()
+        .filter(|(name, _ty)| name != "self")
         .map(|(_name, ty)| RustType::try_from(ty.clone()).unwrap())
         .collect::<Vec<_>>();
 
@@ -258,8 +272,9 @@ fn fn_to_zngfn(
     crate_name: &String,
 ) -> Option<ZngurFn> {
     let item = value.index.get(func_id)?;
-    let mut path = value.paths.get(func_id)?.clone().path;
-    convert_path(&mut path, crate_name);
+    let mut path_info = value.paths.get(func_id)?.clone();
+    convert_path(&mut path_info);
+    let path = path_info.path;
     let ItemEnum::Function(func) = &item.inner else {
         return None;
     };
@@ -290,11 +305,13 @@ fn fn_to_zngfn(
 
 // HELPER FUNCTIONS
 
-fn convert_path(raw: &mut Vec<String>, crate_name: &String) {
-    let f = raw.first_mut().unwrap();
-    if f == crate_name {
+fn convert_path(summ: &mut ItemSummary) -> bool {
+    if summ.crate_id == 0 {
+        let f = summ.path.first_mut().unwrap();
         *f = "crate".into();
+        return true;
     }
+    false
 }
 
 // fn item_enum_to_rusttype(item: &ItemEnum, id: &Id, cr: &Crate) -> Option<RustType> {
@@ -353,7 +370,7 @@ impl TryFrom<rustdoc_types::Type> for RustType {
                                 }
                             })
                         }
-                        //TODO NRB finish impl
+                        //TODO:NRB finish impl
                         GenericArgs::Parenthesized { inputs, output } => {}
                         GenericArgs::ReturnTypeNotation => {}
                     }
@@ -387,12 +404,11 @@ impl TryFrom<rustdoc_types::Type> for RustType {
             Type::Generic(name) => {
                 // For generic types, we'll need to handle them in context
                 // For now, return a placeholder
-                Ok(RustType::Primitive(PrimitiveRustType::Uint(8)))
-                // Ok(RustType::Adt(RustPathAndGenerics {
-                //     path: name,
-                //     generics: vec![],
-                //     named_generics: vec![],
-                // }))
+                Ok(RustType::Adt(RustPathAndGenerics {
+                    path: vec![name],
+                    generics: vec![],
+                    named_generics: vec![],
+                }))
             }
             Type::Primitive(p) => Ok(RustType::Primitive(PrimitiveRustType::from(p))),
             Type::FunctionPointer(function_pointer) => {

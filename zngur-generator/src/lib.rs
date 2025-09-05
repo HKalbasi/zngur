@@ -26,7 +26,10 @@ pub struct ZngurGenerator(pub ZngurSpec);
 
 impl ZngurGenerator {
     pub fn build_from_zng(zng: ZngurSpec) -> Self {
-        //TODO NRB remove
+        for each in &zng.types {
+            // dbg!(&each.fields);
+        }
+        //TODO:NRB remove
         dbg!(&zng);
         ZngurGenerator(zng)
     }
