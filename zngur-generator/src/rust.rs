@@ -4,7 +4,10 @@ use itertools::Itertools;
 
 use crate::{
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
-    cpp::{CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
+    cpp::{
+        CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
+        PanicToExceptionSymbols,
+    },
 };
 
 use zngur_def::*;
@@ -135,10 +138,11 @@ impl IntoCpp for RustType {
 pub struct RustFile {
     pub text: String,
     pub panic_to_exception: bool,
+    pub mangling_base: String,
 }
 
-impl Default for RustFile {
-    fn default() -> Self {
+impl RustFile {
+    pub fn new(mangling_base: &str) -> Self {
         Self {
             text: r#"
 #[allow(dead_code)]
@@ -178,6 +182,7 @@ pub use zngur_types::ZngurCppOpaqueBorrowedObject;
 "#
             .to_owned(),
             panic_to_exception: false,
+            mangling_base: mangling_base.to_owned(),
         }
     }
 }
@@ -200,9 +205,10 @@ macro_rules! wln {
     };
 }
 
-fn mangle_name(name: &str) -> String {
-    let mut name = "__zngur_"
+fn mangle_name(name: &str, mangling_base: &str) -> String {
+    let mut name = "_zngur_"
         .chars()
+        .chain(mangling_base.chars())
         .chain(name.chars().filter(|c| !c.is_whitespace()))
         .chain(Some('_'))
         .collect::<String>();
@@ -221,6 +227,7 @@ fn mangle_name(name: &str) -> String {
         (2, "+", 'l'),
         (2, "(", 'p'),
         (2, ")", 'q'),
+        (2, "@", 'z'),
     ];
     while let Some((pos, which)) = bads.iter().filter_map(|x| Some((name.find(x.1)?, x))).min() {
         name.replace_range(pos..pos + which.1.len(), "_");
@@ -235,6 +242,10 @@ pub struct ConstructorMangledNames {
 }
 
 impl RustFile {
+    fn mangle_name(&self, name: &str) -> String {
+        mangle_name(name, &self.mangling_base)
+    }
+
     fn call_cpp_function(&mut self, name: &str, inputs: usize) {
         for n in 0..inputs {
             wln!(self, "let mut i{n} = ::core::mem::MaybeUninit::new(i{n});")
@@ -277,7 +288,7 @@ impl RustFile {
         let mut method_mangled_name = vec![];
         wln!(self, r#"unsafe extern "C" {{"#);
         for method in &tr.methods {
-            let name = mangle_name(&tr.tr.to_string()) + "_" + &method.name;
+            let name = self.mangle_name(&tr.tr.to_string()) + "_" + &method.name;
             wln!(
                 self,
                 r#"fn {name}(data: *mut u8, {} o: *mut u8);"#,
@@ -319,7 +330,7 @@ impl RustFile {
     ) -> String {
         let trait_name = tr.tr.to_string();
         let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
-        let mangled_name = mangle_name(&trait_name);
+        let mangled_name = self.mangle_name(&trait_name);
         wln!(
             self,
             r#"
@@ -380,7 +391,7 @@ pub extern "C" fn {mangled_name}(
     ) -> String {
         let trait_name = tr.tr.to_string();
         let (trait_without_assocs, assocs) = tr.tr.clone().take_assocs();
-        let mangled_name = mangle_name(&trait_name) + "_borrowed";
+        let mangled_name = self.mangle_name(&trait_name) + "_borrowed";
         wln!(
             self,
             r#"
@@ -438,7 +449,7 @@ pub extern "C" fn {mangled_name}(
         inputs: &[RustType],
         output: &RustType,
     ) -> String {
-        let mangled_name = mangle_name(&inputs.iter().chain(Some(output)).join(", "));
+        let mangled_name = self.mangle_name(&inputs.iter().chain(Some(output)).join(", "));
         let trait_str = format!("{name}({}) -> {output}", inputs.iter().join(", "));
         wln!(
             self,
@@ -479,7 +490,7 @@ pub extern "C" fn {mangled_name}(
     }
 
     pub fn add_tuple_constructor(&mut self, fields: &[RustType]) -> String {
-        let constructor = mangle_name(&fields.iter().join("&"));
+        let constructor = self.mangle_name(&fields.iter().join("&"));
         w!(
             self,
             r#"
@@ -507,7 +518,7 @@ pub extern "C" fn {constructor}("#
         rust_name: &str,
         args: &[(String, RustType)],
     ) -> ConstructorMangledNames {
-        let constructor = mangle_name(rust_name);
+        let constructor = self.mangle_name(rust_name);
         let match_check = format!("{constructor}_check");
         w!(
             self,
@@ -568,7 +579,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         let mut mangled_names = vec![];
         w!(self, r#"unsafe extern "C" {{"#);
         for method in methods {
-            let mn = mangle_name(&format!("{}_extern_method_{}", owner, method.name));
+            let mn = self.mangle_name(&format!("{}_extern_method_{}", owner, method.name));
             w!(
                 self,
                 r#"
@@ -632,7 +643,7 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         inputs: &[RustType],
         output: &RustType,
     ) -> String {
-        let mangled_name = mangle_name(rust_name);
+        let mangled_name = self.mangle_name(rust_name);
         w!(
             self,
             r#"
@@ -657,7 +668,7 @@ pub(crate) fn {rust_name}("#
     }
 
     pub fn add_cpp_value_bridge(&mut self, ty: &RustType, field: &str) -> String {
-        let mangled_name = mangle_name(&format!("{ty}_cpp_value_{field}"));
+        let mangled_name = self.mangle_name(&format!("{ty}_cpp_value_{field}"));
         w!(
             self,
             r#"
@@ -678,10 +689,10 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         use_path: Option<Vec<String>>,
         deref: bool,
     ) -> String {
-        let mut mangled_name = mangle_name(rust_name);
+        let mut mangled_name = self.mangle_name(rust_name);
         if deref {
             mangled_name += "_deref_";
-            mangled_name += &mangle_name(&inputs[0].to_string());
+            mangled_name += &self.mangle_name(&inputs[0].to_string());
         }
         w!(
             self,
@@ -728,7 +739,7 @@ pub extern "C" fn {mangled_name}("#
             ZngurWellknownTrait::Unsized => ZngurWellknownTraitData::Unsized,
             ZngurWellknownTrait::Copy => ZngurWellknownTraitData::Copy,
             ZngurWellknownTrait::Drop => {
-                let drop_in_place = mangle_name(&format!("{ty}=drop_in_place"));
+                let drop_in_place = self.mangle_name(&format!("{ty}=drop_in_place"));
                 wln!(
                     self,
                     r#"
@@ -741,8 +752,8 @@ pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
                 ZngurWellknownTraitData::Drop { drop_in_place }
             }
             ZngurWellknownTrait::Debug => {
-                let pretty_print = mangle_name(&format!("{ty}=debug_pretty"));
-                let debug_print = mangle_name(&format!("{ty}=debug_print"));
+                let pretty_print = self.mangle_name(&format!("{ty}=debug_pretty"));
+                let debug_print = self.mangle_name(&format!("{ty}=debug_print"));
                 let dbg_ty = if !is_unsized {
                     format!("{ty}")
                 } else {
@@ -774,7 +785,9 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
         }
     }
 
-    pub(crate) fn enable_panic_to_exception(&mut self) {
+    pub(crate) fn enable_panic_to_exception(&mut self) -> PanicToExceptionSymbols {
+        let detect_panic = self.mangle_name("@detect_panic");
+        let take_panic = self.mangle_name("@take_panic");
         wln!(
             self,
             r#"thread_local! {{
@@ -782,7 +795,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
         }}
         #[allow(non_snake_case)]
         #[unsafe(no_mangle)]
-        pub fn __zngur_detect_panic() -> u8 {{
+        pub fn {detect_panic}() -> u8 {{
             PANIC_PAYLOAD.with(|p| {{
                 let pp = p.take();
                 let r = if pp.is_some() {{ 1 }} else {{ 0 }};
@@ -793,14 +806,18 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
 
         #[allow(non_snake_case)]
         #[unsafe(no_mangle)]
-        pub fn __zngur_take_panic() {{
+        pub fn {take_panic}() {{
             PANIC_PAYLOAD.with(|p| {{
                 p.take();
             }})
         }}
-        "#
+        "#,
         );
         self.panic_to_exception = true;
+        PanicToExceptionSymbols {
+            detect_panic,
+            take_panic,
+        }
     }
 
     fn wrap_in_catch_unwind(&mut self, f: impl FnOnce(&mut RustFile)) {
@@ -827,9 +844,9 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 CppLayoutPolicy::StackAllocated { size, align }
             }
             LayoutPolicy::HeapAllocated => {
-                let size_fn = mangle_name(&format!("{ty}_size_fn"));
-                let alloc_fn = mangle_name(&format!("{ty}_alloc_fn"));
-                let free_fn = mangle_name(&format!("{ty}_free_fn"));
+                let size_fn = self.mangle_name(&format!("{ty}_size_fn"));
+                let alloc_fn = self.mangle_name(&format!("{ty}_alloc_fn"));
+                let free_fn = self.mangle_name(&format!("{ty}_free_fn"));
                 wln!(
                     self,
                     r#"

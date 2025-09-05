@@ -180,26 +180,28 @@ impl From<&str> for CppType {
 
 struct State {
     text: String,
-    panic_to_exception: bool,
+    panic_to_exception: Option<PanicToExceptionSymbols>,
 }
 
 impl State {
     fn panic_handler(&self) -> String {
-        if self.panic_to_exception {
-            r#"
-            if (__zngur_detect_panic()) {
-                __zngur_take_panic();
-                throw ::rust::Panic{};
-            }
-            "#
-            .to_owned()
+        if let Some(symbols) = &self.panic_to_exception {
+            format!(
+                r#"
+            if ({}()) {{
+                {}();
+                throw ::rust::Panic{{}};
+            }}
+            "#,
+                symbols.detect_panic, symbols.take_panic,
+            )
         } else {
             "".to_owned()
         }
     }
 
     fn remove_no_except_in_panic(&mut self) {
-        if self.panic_to_exception {
+        if self.panic_to_exception.is_some() {
             self.text = self.text.replace(" noexcept ", " ");
         }
     }
@@ -1559,15 +1561,22 @@ auto data_as_impl = &args;
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct PanicToExceptionSymbols {
+    pub detect_panic: String,
+    pub take_panic: String,
+}
+
 #[derive(Default)]
 pub struct CppFile {
+    pub header_file_name: String,
     pub type_defs: Vec<CppTypeDefinition>,
     pub trait_defs: HashMap<RustTrait, CppTraitDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,
     pub additional_includes: String,
-    pub panic_to_exception: bool,
+    pub panic_to_exception: Option<PanicToExceptionSymbols>,
 }
 
 impl CppFile {
@@ -1585,16 +1594,20 @@ impl CppFile {
 #include <math.h>
 "#;
         state.text += &self.additional_includes;
-        if self.panic_to_exception {
-            state.text += r#"
-            namespace rust {
-                class Panic {};
-            }
-            extern "C" {
-                uint8_t __zngur_detect_panic();
-                void __zngur_take_panic();
-            }
-            "#;
+        if let Some(symbols) = &self.panic_to_exception {
+            writeln!(
+                state,
+                r#"
+            namespace rust {{
+                class Panic {{}};
+            }}
+            extern "C" {{
+                uint8_t {}();
+                void {}();
+            }}
+            "#,
+                symbols.detect_panic, symbols.take_panic,
+            )?;
         }
         state.text += r#"
 #define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
@@ -1912,7 +1925,7 @@ namespace rust {
     }
 
     fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
-        writeln!(state, r#"#include "./generated.h""#)?;
+        writeln!(state, r#"#include "{}""#, self.header_file_name)?;
         writeln!(state, "extern \"C\" {{")?;
         for t in &self.trait_defs {
             *is_really_needed = true;
@@ -1973,11 +1986,11 @@ namespace rust {
     pub fn render(self) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
-            panic_to_exception: self.panic_to_exception,
+            panic_to_exception: self.panic_to_exception.clone(),
         };
         let mut cpp_file = State {
             text: "".to_owned(),
-            panic_to_exception: self.panic_to_exception,
+            panic_to_exception: self.panic_to_exception.clone(),
         };
         self.emit_h_file(&mut h_file).unwrap();
         let mut is_cpp_needed = false;

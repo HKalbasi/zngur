@@ -22,7 +22,7 @@ pub use zngur_parser::ParsedZngFile;
 
 pub use zngur_def::*;
 
-pub struct ZngurGenerator(ZngurSpec);
+pub struct ZngurGenerator(pub ZngurSpec);
 
 impl ZngurGenerator {
     pub fn build_from_zng(zng: ZngurSpec) -> Self {
@@ -44,16 +44,16 @@ impl ZngurGenerator {
             cpp_ref: None,
         });
         let mut cpp_file = CppFile::default();
+        cpp_file.header_file_name = zng.cpp_include_header_name.clone();
         cpp_file.additional_includes = zng.additional_includes.0;
-        let mut rust_file = RustFile::default();
+        let mut rust_file = RustFile::new(&zng.mangling_base);
         cpp_file.trait_defs = zng
             .traits
             .iter()
             .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(value)))
             .collect();
         if zng.convert_panic_to_exception.0 {
-            rust_file.enable_panic_to_exception();
-            cpp_file.panic_to_exception = true;
+            cpp_file.panic_to_exception = Some(rust_file.enable_panic_to_exception());
         }
         for ty_def in zng.types {
             let ty = &ty_def.ty;

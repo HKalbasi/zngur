@@ -148,6 +148,9 @@ pub struct ZngurSpec {
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,
     pub additional_includes: AdditionalIncludes,
     pub convert_panic_to_exception: ConvertPanicToException,
+    pub cpp_include_header_name: String,
+    pub mangling_base: String,
+    pub cpp_namespace: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

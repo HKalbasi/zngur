@@ -27,6 +27,8 @@ pub struct Zngur {
     h_file_path: Option<PathBuf>,
     cpp_file_path: Option<PathBuf>,
     rs_file_path: Option<PathBuf>,
+    mangling_base: Option<String>,
+    cpp_namespace: Option<String>,
 }
 
 impl Zngur {
@@ -36,6 +38,8 @@ impl Zngur {
             h_file_path: None,
             cpp_file_path: None,
             rs_file_path: None,
+            mangling_base: None,
+            cpp_namespace: None,
         }
     }
 
@@ -54,12 +58,49 @@ impl Zngur {
         self
     }
 
-    pub fn generate(self) {
-        let file = ZngurGenerator::build_from_zng(ParsedZngFile::parse(self.zng_file));
+    pub fn with_mangling_base(mut self, mangling_base: &str) -> Self {
+        self.mangling_base = Some(mangling_base.to_owned());
+        self
+    }
 
-        let (rust, h, cpp) = file.render();
+    pub fn with_cpp_namespace(mut self, cpp_namespace: &str) -> Self {
+        self.cpp_namespace = Some(cpp_namespace.to_owned());
+        self
+    }
+
+    pub fn generate(self) {
+        let mut file = ZngurGenerator::build_from_zng(ParsedZngFile::parse(self.zng_file));
+
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
         let h_file_path = self.h_file_path.expect("No h file path provided");
+
+        file.0.cpp_include_header_name = h_file_path
+            .file_name()
+            .unwrap()
+            .to_string_lossy()
+            .into_owned();
+
+        file.0.cpp_namespace = "rust".to_owned();
+
+        if let Some(cpp_namespace) = self.cpp_namespace {
+            file.0.mangling_base = cpp_namespace.clone();
+            file.0.cpp_namespace = cpp_namespace;
+        }
+
+        if let Some(mangling_base) = self.mangling_base {
+            file.0.mangling_base = mangling_base;
+        }
+
+        let cpp_namespace = file.0.cpp_namespace.clone();
+
+        let (rust, mut h, mut cpp) = file.render();
+
+        // TODO: Don't hard code namespace as "::rust" and remove this replace
+        h = h
+            .replace("rust::", &format!("{cpp_namespace}::"))
+            .replace("namespace rust", &format!("namespace {cpp_namespace}"));
+        cpp = cpp.map(|cpp| cpp.replace("rust::", &format!("{cpp_namespace}::")));
+
         File::create(rs_file_path)
             .unwrap()
             .write_all(rust.as_bytes())
