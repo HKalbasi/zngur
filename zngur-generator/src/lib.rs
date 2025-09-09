@@ -16,6 +16,7 @@ use rust::IntoCpp;
 
 pub mod cpp;
 mod rust;
+mod template;
 
 pub use rust::RustFile;
 pub use zngur_parser::ParsedZngFile;
@@ -261,7 +262,7 @@ impl ZngurGenerator {
                     .collect(),
             });
         }
-        let (h, cpp) = cpp_file.render();
+        let (h, cpp) = cpp_file.render_template();
         (rust_file.text, h, cpp)
     }
 }

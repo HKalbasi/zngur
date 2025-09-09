@@ -1,0 +1,768 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <csignal>
+#include <array>
+#include <iostream>
+#include <functional>
+#include <math.h>
+
+{{ additional_includes }}
+
+#define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+
+namespace rust {
+{% if panic_to_exception %}
+    class Panic {};
+    extern "C" {
+        uint8_t __zngur_detect_panic();
+        void __zngur_take_panic();
+    }
+{% endif %}
+    template<typename T>
+    uint8_t* __zngur_internal_data_ptr(const T& t) noexcept ;
+
+    template<typename T>
+    void __zngur_internal_assume_init(T& t) noexcept ;
+
+    template<typename T>
+    void __zngur_internal_assume_deinit(T& t) noexcept ;
+
+    template<typename T>
+    inline size_t __zngur_internal_size_of() noexcept ;
+
+    template<typename T>
+    inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
+        memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
+        ::rust::__zngur_internal_assume_deinit(t);
+    }
+
+    template<typename T>
+    inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
+        T t;
+        ::rust::__zngur_internal_assume_init(t);
+        memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
+        return t;
+    }
+
+    template<typename T>
+    inline void __zngur_internal_check_init(const T&) noexcept {
+    }
+
+    class ZngurCppOpaqueOwnedObject {
+        uint8_t* data;
+        void (*destructor)(uint8_t*);
+
+    public:
+        template<typename T, typename... Args>
+        inline static ZngurCppOpaqueOwnedObject build(Args&&... args) {
+            ZngurCppOpaqueOwnedObject o;
+            o.data = reinterpret_cast<uint8_t*>(new T(::std::forward<Args>(args)...));
+            o.destructor = [](uint8_t* d) {
+                delete reinterpret_cast<T*>(d);
+            };
+            return o;
+        }
+
+        template<typename T>
+        inline T& as_cpp() {
+            return *reinterpret_cast<T *>(data);
+        }
+    };
+
+    template<typename T>
+    struct Ref;
+
+    template<typename T>
+    struct RefMut;
+
+    template<typename T, size_t OFFSET>
+    struct FieldOwned {
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    };
+
+    template<typename T, size_t OFFSET>
+    struct FieldRef {
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    };
+
+    template<typename T, size_t OFFSET>
+    struct FieldRefMut {
+        inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    };
+
+    template<typename... T>
+    struct Tuple;
+
+    using Unit = Tuple<>;
+
+    template<typename T>
+    struct ZngurPrettyPrinter;
+
+    class Inherent;
+
+    template<typename Type, typename Trait = Inherent>
+    class Impl;
+
+    template<typename T>
+    T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
+        ::std::cerr << "[" << file_name << ":" << line_number << "] " << exp << " = ";
+        ZngurPrettyPrinter<typename ::std::remove_reference<T>::type>::print(input);
+        return ::std::forward<T>(input);
+    }
+
+    {% for ty in builtin_types %}
+    {% let needs_endif = ty.as_str() == "::size_t" %}
+    {% if needs_endif %}
+    // Apple and WASM treat size_t as a distinct type, not a typedef'd primitive,
+    // so we need additional specializations.
+    #if defined(__APPLE__) || defined(__wasm__)
+    {% endif %}
+
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr< {{ ty }} >(const {{ ty }}& t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+
+    template<>
+    inline void __zngur_internal_assume_init< {{ ty }} >({{ ty }}&) noexcept {}
+    template<>
+    inline void __zngur_internal_assume_deinit< {{ ty }} >({{ ty }}&) noexcept {}
+
+    template<>
+    inline size_t __zngur_internal_size_of< {{ ty }} >() noexcept {
+        return sizeof({{ ty }});
+    }
+
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr< {{ ty }}*>({{ ty }}* const & t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+
+    template<>
+    inline void __zngur_internal_assume_init< {{ ty }}*>({{ ty }}*&) noexcept {}
+    template<>
+    inline void __zngur_internal_assume_deinit< {{ ty }}*>({{ ty }}*&) noexcept {}
+
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr< {{ ty }} const*>({{ ty }} const* const & t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+
+    template<>
+    inline void __zngur_internal_assume_init< {{ ty }} const*>({{ ty }} const*&) noexcept {}
+    template<>
+    inline void __zngur_internal_assume_deinit< {{ ty }} const*>({{ ty }} const*&) noexcept {}
+
+    template<>
+    struct Ref< {{ ty }} > {
+        Ref() {
+            data = 0;
+        }
+        Ref(const {{ ty }}& t) {
+            data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+        }
+
+        template<size_t OFFSET>
+        Ref(const FieldOwned< {{ ty }}, OFFSET >& f) {
+            data = reinterpret_cast<size_t>(&f) + OFFSET;
+        }
+
+        template<size_t OFFSET>
+        Ref(const FieldRef< {{ ty }}, OFFSET >& f) {
+            data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+        }
+
+        template<size_t OFFSET>
+        Ref(const FieldRefMut< {{ ty }}, OFFSET >& f) {
+            data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+        }
+
+        {{ ty }}& operator*() {
+            return *reinterpret_cast< {{ ty }}*>(data);
+        }
+        private:
+            size_t data;
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {{ ty }} > >(const ::rust::Ref< {{ ty }} >& t) noexcept ;
+        friend ::rust::ZngurPrettyPrinter< Ref< {{ ty }} > >;
+    };
+
+    template<>
+    struct RefMut< {{ ty }} > {
+        RefMut() {
+            data = 0;
+        }
+
+        RefMut({{ ty }}& t) {
+            data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+        }
+
+        template<size_t OFFSET>
+        RefMut(const FieldOwned< {{ ty }}, OFFSET >& f) {
+            data = reinterpret_cast<size_t>(&f) + OFFSET;
+        }
+
+        template<size_t OFFSET>
+        RefMut(const FieldRefMut< {{ ty }}, OFFSET >& f) {
+            data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+        }
+
+        {{ ty }}& operator*() {
+            return *reinterpret_cast< {{ ty }}*>(data);
+        }
+        private:
+            size_t data;
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {{ ty }} > >(const ::rust::RefMut< {{ ty }} >& t) noexcept ;
+        friend ::rust::ZngurPrettyPrinter< Ref< {{ ty }} > >;
+    };
+
+    {% let pretty_print = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float") %}
+    {% if pretty_print %}
+
+    template<>
+    struct ZngurPrettyPrinter<{{ ty }}> {
+        static inline void print({{ ty }} const& t) {
+            ::std::cerr << t << ::std::endl;
+        }
+    };
+
+    {% endif %}
+
+    {% if needs_endif %}
+    #endif // defined(__APPLE__) || defined(__wasm__)
+    {% endif %}
+
+    {% endfor %}
+
+} // namespace rust
+
+extern "C" {
+
+    {% for f in fn_defs %}
+      {{ f.sig.rust_link_decl() }}
+    {% endfor %}
+
+    {% for td in type_defs %}
+      {% for method in td.methods %}
+        {{ method.sig.rust_link_decl() }}
+      {% endfor %}
+
+      {% for c in td.constructors %}
+        {{ c.rust_link_decl() }}
+      {% endfor %}
+
+      {% if let Some(cpp_value) = td.cpp_value %}
+        ::rust::ZngurCppOpaqueOwnedObject* {{cpp_value}}(uint8_t*);
+      {% endif %}
+
+      {% if let CppLayoutPolicy::HeapAllocated{size_fn, alloc_fn, free_fn} = td.layout %}
+        size_t {{ size_fn }}();
+        uint8_t* {{ alloc_fn }}();
+        void {{ free_fn }}(uint8_t*);
+      {% endif %}
+
+      {% for tr in td.wellknown_traits %}
+        {% match tr %}
+          {% when ZngurWellknownTraitData::Debug with {pretty_print, debug_print} %}
+            void {{ pretty_print }}(uint8_t *data);
+            void {{ debug_print }}(uint8_t *data);
+          {% when ZngurWellknownTraitData::Drop with {drop_in_place} %}
+            void {{ drop_in_place }}(uint8_t *data);
+          {% when ZngurWellknownTraitData::Unsized | ZngurWellknownTraitData::Copy %}
+        {% endmatch %}
+      {% endfor%}
+
+    {% endfor %}
+
+    {% for (_, td) in trait_defs %}
+      {# See comment in CppTraitDefinition::emit_rust_links #}
+      {{ td.rust_links() }}
+    {% endfor %}
+
+} // extern "C"
+
+{% for td in type_defs %}
+  {{ td.ty.header() }}
+{% endfor %}
+
+{% for imp in exported_impls %}
+  {{ imp.ty.header() }}
+  {% if let Some(tr) = imp.tr %}
+    {{ tr.header() }}
+  {% endif %}
+{% endfor %}
+
+{% for (_, td) in trait_defs %}
+
+  {% if let CppTraitDefinition::Normal{ as_ty, methods, .. } = td %}
+    {% let name = as_ty.path.name() %}
+    {{ as_ty.path.open_namespace() }}
+
+      {{ as_ty.specialization_decl() }}
+      {
+        public:
+          virtual ~{{ name }}() {}
+        {% for method in methods %}
+          virtual {{ method.signature() }} = 0;
+        {% endfor %}
+      };
+
+    {{ as_ty.path.close_namespace() }}
+  {% endif %}
+
+{% endfor %}
+
+{% for td in type_defs %}
+    namespace rust {
+        template<>
+        inline uint8_t* __zngur_internal_data_ptr< {{ td.ty }} >(const {{ td.ty }}& t) noexcept ;
+        template<>
+        inline void __zngur_internal_check_init< {{ td.ty }} >(const {{ td.ty }}& t) noexcept ;
+        template<>
+        inline void __zngur_internal_assume_init< {{ td.ty }} >({{ td.ty }}& t) noexcept ;
+        template<>
+        inline void __zngur_internal_assume_deinit< {{ td.ty }} >({{ td.ty }}& t) noexcept ;
+        template<>
+        inline size_t __zngur_internal_size_of< {{ td.ty }} >() noexcept ;
+    }
+{% endfor %}
+
+{% for td in type_defs %}
+    {{ td.ty.path.open_namespace() }}
+
+    {% if td.ty.path.0 == ["rust", "Unit"] %}
+        template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
+    {% else %}
+        {{ td.ty.specialization_decl() }}
+        {
+        {% match td.layout %}
+            {% when CppLayoutPolicy::OnlyByRef %}
+        public:
+            {{ td.ty.path.name() }}() = delete;
+            {% when CppLayoutPolicy::StackAllocated with { size, align } %}
+        private:
+            alignas({{ align }}) mutable ::std::array<uint8_t, {{ size }}> data;
+            {% when CppLayoutPolicy::HeapAllocated with { .. } %}
+        private:
+            uint8_t* data;
+        {% endmatch %}
+
+        {% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy) %}
+        {% if td.layout != CppLayoutPolicy::OnlyByRef %}
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< {{ td.ty }} >(const {{ td.ty }}& t) noexcept ;
+    friend void ::rust::__zngur_internal_check_init< {{ td.ty }} >(const {{ td.ty }}& t) noexcept ;
+    friend void ::rust::__zngur_internal_assume_init< {{ td.ty }} >({{ td.ty }}& t) noexcept ;
+    friend void ::rust::__zngur_internal_assume_deinit< {{ td.ty }} >({{ td.ty }}& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< {{ td.ty }} >;
+                {% if !is_copy %}
+    bool drop_flag;
+                {% endif %}
+        {% endif %}
+        public:
+                {% if is_copy %}
+                    {% match td.layout %}
+                        {% when CppLayoutPolicy::StackAllocated with { .. } %}
+    {{ td.ty.path.name() }}() {  }
+    ~{{ td.ty.path.name() }}() {  }
+    {{ td.ty.path.name() }}(const {{ td.ty.path.name() }}& other) {
+        this->data = other.data;
+    }
+    {{ td.ty.path.name() }}& operator=(const {{ td.ty.path.name() }}& other) {
+        this->data = other.data;
+        return *this;
+    }
+    {{ td.ty.path.name() }}({{ td.ty.path.name() }}&& other) {
+        this->data = other.data;
+    }
+    {{ td.ty.path.name() }}& operator=({{ td.ty.path.name() }}&& other) {
+        this->data = other.data;
+        return *this;
+    }
+                        {% when CppLayoutPolicy::HeapAllocated with { size_fn, alloc_fn, free_fn } %}
+    {{ td.ty.path.name() }}() { data = {{ alloc_fn }}(); }
+    ~{{ td.ty.path.name() }}() { {{ free_fn }}(data); }
+    {{ td.ty.path.name() }}(const {{ td.ty.path.name() }}& other) {
+        data = {{ alloc_fn }}();
+        memcpy(this->data, other.data, {{ size_fn }}());
+    }
+    {{ td.ty.path.name() }}& operator=(const {{ td.ty.path.name() }}& other) {
+        memcpy(this->data, other.data, {{ size_fn }}());
+        return *this;
+    }
+    {{ td.ty.path.name() }}({{ td.ty.path.name() }}&& other) {
+        data = {{ alloc_fn }}();
+        memcpy(this->data, other.data, {{ size_fn }}());
+    }
+    {{ td.ty.path.name() }}& operator=({{ td.ty.path.name() }}&& other) {
+        memcpy(this->data, other.data, {{ size_fn }}());
+        return *this;
+    }
+                        {% when CppLayoutPolicy::OnlyByRef %}
+                    {% endmatch %}
+                {% else %}
+                    {% for tr in td.wellknown_traits %}
+                        {% match tr %}
+                            {% when ZngurWellknownTraitData::Drop with { drop_in_place } %}
+                                {% match td.layout %}
+                                    {% when CppLayoutPolicy::StackAllocated with { .. } %}
+    {{ td.ty.path.name() }}() : drop_flag(false) {  }
+    ~{{ td.ty.path.name() }}() {
+        if (drop_flag) {
+            {{ drop_in_place }}(&data[0]);
+        }
+    }
+    {{ td.ty.path.name() }}(const {{ td.ty.path.name() }}& other) = delete;
+    {{ td.ty.path.name() }}& operator=(const {{ td.ty.path.name() }}& other) = delete;
+    {{ td.ty.path.name() }}({{ td.ty.path.name() }}&& other) : drop_flag(false) {
+        *this = ::std::move(other);
+    }
+    {{ td.ty.path.name() }}& operator=({{ td.ty.path.name() }}&& other) {
+        if (this != &other)
+        {
+            if (drop_flag) {
+                {{ drop_in_place }}(&data[0]);
+            }
+            this->drop_flag = other.drop_flag;
+            this->data = other.data;
+            other.drop_flag = false;
+        }
+        return *this;
+    }
+                                    {% when CppLayoutPolicy::HeapAllocated with { size_fn, alloc_fn, free_fn } %}
+    {{ td.ty.path.name() }}() : drop_flag(false) { data = {{ alloc_fn }}(); }
+    ~{{ td.ty.path.name() }}() {
+        if (drop_flag) {
+            {{ drop_in_place }}(&data[0]);
+        }
+        {{ free_fn }}(data);
+    }
+    {{ td.ty.path.name() }}(const {{ td.ty.path.name() }}& other) = delete;
+    {{ td.ty.path.name() }}& operator=(const {{ td.ty.path.name() }}& other) = delete;
+    {{ td.ty.path.name() }}({{ td.ty.path.name() }}&& other) : drop_flag(false) {
+        data = {{ alloc_fn }}();
+        *this = ::std::move(other);
+    }
+    {{ td.ty.path.name() }}& operator=({{ td.ty.path.name() }}&& other) {
+        if (this != &other)
+        {
+            if (drop_flag) {
+                {{ drop_in_place }}(&data[0]);
+            }
+            this->drop_flag = other.drop_flag;
+            memcpy(this->data, other.data, {{ size_fn }}());
+            other.drop_flag = false;
+        }
+        return *this;
+    }
+                                    {% when CppLayoutPolicy::OnlyByRef %}
+                                {% endmatch %}
+                            {% when _ %}
+                        {% endmatch %}
+                    {% endfor %}
+                {% endif %}
+            {% for method in td.methods %}
+            static {{ method.sig.output }} {{ method.name }}({{ method.sig.cpp_params() }}) noexcept ;
+                {% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) %}
+                {% if !is_unsized && td.layout != CppLayoutPolicy::OnlyByRef && method.kind != ZngurMethodReceiver::Static %}
+            {{ method.sig.output }} {{ method.name }}({% for (n, ty) in method.sig.inputs.iter().skip(1).enumerate() %}{% if n > 0 %}, {% endif %}{{ ty }} i{{ n }}{% endfor %}) {% match method.kind %}{% when ZngurMethodReceiver::Ref(m) %}{% if *m == Mutability::Not %}const {% endif %}{% when ZngurMethodReceiver::Move %}{% when ZngurMethodReceiver::Static %}{% endmatch %}noexcept ;
+                {% endif %}
+            {% endfor %}
+
+            {# Add make_box method declarations for trait types #}
+            {% if let Some(from_trait) = td.from_trait %}
+                {% match from_trait %}
+                    {% when RustTrait::Fn with { inputs, output, .. } %}
+            static inline {{ td.ty.path.name() }} make_box(::std::function< {{ output.into_cpp() }}({% for (n, input) in inputs.iter().enumerate() %}{% if n > 0 %}, {% endif %}{{ input.into_cpp() }}{% endfor %}) > f);
+                    {% when RustTrait::Normal with { .. } %}
+            template<typename T, typename... Args>
+            static {{ td.ty.path.name() }} make_box(Args&&... args);
+                {% endmatch %}
+            {% endif %}
+
+            {# Add cpp() method for owned types with cpp_value #}
+            {% if let Some(cpp_value) = td.cpp_value %}
+                {% let CppValue(rust_link_name, cpp_ty) = cpp_value %}
+            inline {{ cpp_ty }}& cpp() {
+                return (*{{ rust_link_name }}(&data[0])).as_cpp< {{ cpp_ty }} >();
+            }
+            {% endif %}
+
+            {% if td.layout != CppLayoutPolicy::OnlyByRef %}
+            {% for constructor in td.constructors %}
+            {{ td.ty.path.name() }}({% for (n, ty) in constructor.inputs.iter().enumerate() %}{% if n > 0 %}, {% endif %}{{ ty }} i{{ n }}{% endfor %}) noexcept ;
+            {% endfor %}
+
+            {% for field in td.fields %}
+            [[no_unique_address]] ::rust::FieldOwned<{{ field.ty }}, {{ field.offset }}> {{ field.name }};
+            {% endfor %}
+            {% endif %}
+        };
+    {% endif %}
+
+    {{ td.ty.path.close_namespace() }}
+{% endfor %}
+
+{# Add internal helper function implementations for each type #}
+{% for td in type_defs %}
+    {% if td.layout != CppLayoutPolicy::OnlyByRef %}
+        {% match td.layout %}
+            {% when CppLayoutPolicy::StackAllocated with { size, align } %}
+namespace rust {
+    template<>
+    inline size_t __zngur_internal_size_of< {{ td.ty }} >() noexcept {
+        return {{ size }};
+    }
+            {% when CppLayoutPolicy::HeapAllocated with { size_fn, .. } %}
+namespace rust {
+    template<>
+    inline size_t __zngur_internal_size_of< {{ td.ty }} >() noexcept {
+        return {{ size_fn }}();
+    }
+            {% when CppLayoutPolicy::OnlyByRef %}
+        {% endmatch %}
+
+        {% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy) %}
+        {% if is_copy %}
+        template<>
+        inline void __zngur_internal_check_init< {{ td.ty }} >(const {{ td.ty }}&) noexcept {
+        }
+
+        template<>
+        inline void __zngur_internal_assume_init< {{ td.ty }} >({{ td.ty }}&) noexcept {
+        }
+
+        template<>
+        inline void __zngur_internal_assume_deinit< {{ td.ty }} >({{ td.ty }}&) noexcept {
+        }
+        {% else %}
+        template<>
+        inline void __zngur_internal_check_init< {{ td.ty }} >(const {{ td.ty }}& t) noexcept {
+            if (!t.drop_flag) {
+                ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type {{ td.ty }}" << ::std::endl;
+                while (true) raise(SIGSEGV);
+            }
+        }
+
+        template<>
+        inline void __zngur_internal_assume_init< {{ td.ty }} >({{ td.ty }}& t) noexcept {
+            t.drop_flag = true;
+        }
+
+        template<>
+        inline void __zngur_internal_assume_deinit< {{ td.ty }} >({{ td.ty }}& t) noexcept {
+            ::rust::__zngur_internal_check_init< {{ td.ty }} >(t);
+            t.drop_flag = false;
+        }
+        {% endif %}
+    template<>
+    inline uint8_t* __zngur_internal_data_ptr< {{ td.ty }} >({{ td.ty }} const & t) noexcept {
+        return const_cast<uint8_t*>(&t.data[0]);
+    }
+}
+    {% endif %}
+{% endfor %}
+
+{# Add Ref/RefMut template specializations for each type #}
+{% for td in type_defs %}
+    {# Generate Ref and RefMut specializations - corresponds to emit_ref_specialization() #}
+    {% for ref_kind in ["RefMut", "Ref"] %}
+        {% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) %}
+        {% if td.ty.path.0 == ["rust", "Str"] && *ref_kind == "Ref" %}
+    auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+        {% endif %}
+        {% if is_unsized %}
+namespace rust {
+template<>
+struct {{ ref_kind }}< {{ td.ty }} > {
+    {{ ref_kind }}() {
+        data = {0, 0};
+    }
+private:
+    ::std::array<size_t, 2> data;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{{ ref_kind }}< {{ td.ty }} > >(const ::rust::{{ ref_kind }}< {{ td.ty }} >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< ::rust::{{ ref_kind }}< {{ td.ty }} > >;
+        {% else %}
+namespace rust {
+template<>
+struct {{ ref_kind }}< {{ td.ty }} > {
+    {{ ref_kind }}() {
+        data = 0;
+    }
+            {% if td.layout != CppLayoutPolicy::OnlyByRef %}
+    {{ ref_kind }}(const {{ td.ty }}& t) {
+        ::rust::__zngur_internal_check_init< {{ td.ty }} >(t);
+        data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+            {% endif %}
+            {% for field in td.fields %}
+    [[no_unique_address]] ::rust::Field{{ ref_kind }}<{{ field.ty }}, {{ field.offset }}> {{ field.name }};
+            {% endfor %}
+private:
+    size_t data;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{{ ref_kind }}< {{ td.ty }} > >(const ::rust::{{ ref_kind }}< {{ td.ty }} >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< ::rust::{{ ref_kind }}< {{ td.ty }} > >;
+        {% endif %}
+public:
+        {% if *ref_kind == "Ref" %}
+    Ref(RefMut< {{ td.ty }} > rm) {
+        data = rm.data;
+    }
+            {% if !is_unsized %}
+    template<size_t OFFSET>
+    Ref(const FieldOwned< {{ td.ty }}, OFFSET >& f) {
+        data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    Ref(const FieldRef< {{ td.ty }}, OFFSET >& f) {
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    Ref(const FieldRefMut< {{ td.ty }}, OFFSET >& f) {
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+            {% endif %}
+        {% else %}
+    friend Ref< {{ td.ty }} >;
+            {% if !is_unsized %}
+    template<size_t OFFSET>
+    RefMut(const FieldOwned< {{ td.ty }}, OFFSET >& f) {
+        data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    RefMut(const FieldRefMut< {{ td.ty }}, OFFSET >& f) {
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+            {% endif %}
+        {% endif %}
+        {% if let Some(cpp_value) = td.cpp_value %}
+            {% let CppValue(rust_link_name, cpp_ty) = cpp_value %}
+    inline {{ cpp_ty }}& cpp() {
+        return (*{{ rust_link_name }}(reinterpret_cast<uint8_t*>(data))).as_cpp< {{ cpp_ty }} >();
+    }
+        {% endif %}
+        {% if let Some(cpp_ty) = td.cpp_ref %}
+    inline {{ cpp_ty }}& cpp() {
+        return *reinterpret_cast< {{ cpp_ty }}* >(data);
+    }
+    inline {{ ref_kind }}(const {{ cpp_ty }}& t) : data(reinterpret_cast<size_t>(&t)) {}
+        {% endif %}
+        {% for method in td.methods %}
+            {% match method.kind %}
+                {% when ZngurMethodReceiver::Ref(m) %}
+                    {% if !(*m == Mutability::Mut && *ref_kind == "Ref") %}
+    {{ method.sig.output }} {{ method.name }}({% for (n, ty) in method.sig.inputs.iter().skip(1).enumerate() %}{% if n > 0 %}, {% endif %}{{ ty }} i{{ n }}{% endfor %}) const noexcept ;
+                    {% endif %}
+                {% when _ %}
+            {% endmatch %}
+        {% endfor %}
+        {% if td.ty.path.0 == ["rust", "Str"] && *ref_kind == "Ref" %}
+    friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+};
+        {% else %}
+};
+        {% endif %}
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr< {{ ref_kind }} < {{ td.ty }} > >(const {{ ref_kind }}< {{ td.ty }} >& t) noexcept {
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+}
+
+template<>
+inline void __zngur_internal_assume_init< {{ ref_kind }} < {{ td.ty }} > >({{ ref_kind }}< {{ td.ty }} >&) noexcept {
+}
+
+template<>
+inline void __zngur_internal_check_init< {{ ref_kind }} < {{ td.ty }} > >(const {{ ref_kind }}< {{ td.ty }} >&) noexcept {
+}
+
+template<>
+inline void __zngur_internal_assume_deinit< {{ ref_kind }} < {{ td.ty }} > >({{ ref_kind }}< {{ td.ty }} >&) noexcept {
+}
+
+template<>
+inline size_t __zngur_internal_size_of< {{ ref_kind }} < {{ td.ty }} > >() noexcept {
+    {% if is_unsized %}
+    return 16;
+    {% else %}
+    return 8;
+    {% endif %}
+}
+}
+        {% if td.ty.path.0 == ["rust", "Str"] && *ref_kind == "Ref" %}
+inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
+    ::rust::Ref<::rust::Str> o;
+    o.data[0] = reinterpret_cast<size_t>(input);
+    o.data[1] = len;
+    return o;
+}
+        {% endif %}
+    {% endfor %}
+{% endfor %}
+
+{# Add field template specializations - corresponds to emit_field_specialization() #}
+{% for td in type_defs %}
+    {% for field_kind in ["FieldOwned", "FieldRef", "FieldRefMut"] %}
+    namespace rust {
+    template<size_t OFFSET>
+    struct {{ field_kind }}< {{ td.ty }}, OFFSET > {
+        {% for field in td.fields %}
+        [[no_unique_address]] {{ field_kind }}<{{ field.ty }}, OFFSET + {{ field.offset }}> {{ field.name }};
+        {% endfor %}
+        {% for method in td.methods %}
+            {% match method.kind %}
+                {% when ZngurMethodReceiver::Ref(m) %}
+                    {% if !(*m == Mutability::Mut && *field_kind == "FieldRef") %}
+        {{ method.sig.output }} {{ method.name }}({% for (n, ty) in method.sig.inputs.iter().skip(1).enumerate() %}{% if n > 0 %}, {% endif %}{{ ty }} i{{ n }}{% endfor %}) const noexcept ;
+                    {% endif %}
+                {% when _ %}
+            {% endmatch %}
+        {% endfor %}
+    };
+    }
+    {% endfor %}
+{% endfor %}
+
+{% for td in type_defs %}
+    {{ self.emit_cpp_fn_defs_for_type(td) }}
+{% endfor %}
+
+{% for fd in fn_defs %}
+    {{ fd.name.open_namespace() }}
+
+    inline {{ fd.sig.output }} {{ fd.name.name() }}({{ fd.sig.cpp_params() }}) noexcept {
+        {{ fd.sig.output }} o{};
+        {% for n in 0..fd.sig.inputs.len() %}
+        ::rust::__zngur_internal_assume_deinit(i{{ n }});
+        {% endfor %}
+        {{ fd.sig.rust_link_name }}({% for n in 0..fd.sig.inputs.len() %}::rust::__zngur_internal_data_ptr(i{{ n }}), {% endfor %}::rust::__zngur_internal_data_ptr(o));
+        {% if panic_to_exception %}
+        if (__zngur_detect_panic()) {
+            __zngur_take_panic();
+            throw ::rust::Panic{};
+        }
+        {% endif %}
+        ::rust::__zngur_internal_assume_init(o);
+        return o;
+    }
+
+    {{ fd.name.close_namespace() }}
+{% endfor %}
+
+{% for func in exported_fn_defs %}
+    namespace rust { namespace exported_functions {
+       {{ func.sig.output }} {{ func.name }}({{ func.sig.cpp_params() }});
+    } }
+{% endfor %}
+
+{% for imp in exported_impls %}
+    namespace rust { template<> class Impl< {{ imp.ty }}, {% if let Some(tr) = imp.tr %}{{ tr }}{% else %}::rust::Inherent{% endif %} > { public:
+    {% for (name, sig) in imp.methods %}
+       static {{ sig.output }} {{ name }}({{ sig.cpp_params() }});
+    {% endfor %}
+    }; }
+{% endfor %}
