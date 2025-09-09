@@ -235,8 +235,8 @@ impl From<&str> for CppType {
 }
 
 struct State {
-    pub(crate) text: String,
-    pub(crate) panic_to_exception: bool,
+    text: String,
+    panic_to_exception: bool,
 }
 
 impl State {
