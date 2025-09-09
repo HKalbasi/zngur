@@ -366,7 +366,7 @@ impl CppFnSig {
         } = self;
         writeln!(
             state,
-            "inline {output} {fn_name}({input_defs}) noexcept {{
+            "inline {output} {fn_name}({input_defs}){noexcept} {{
             {output} o{{}};
             {deinits}
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
@@ -386,6 +386,11 @@ impl CppFnSig {
             deinits = (0..inputs.len())
                 .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
                 .join("\n"),
+            noexcept = if state.panic_to_exception {
+                ""
+            } else {
+                " noexcept"
+            },
         )
     }
 }
@@ -1333,7 +1338,7 @@ namespace rust {{
             } = c;
             writeln!(
                 state,
-                "inline {fn_name}({input_defs}) noexcept {{
+                "inline {fn_name}({input_defs}){noexcept} {{
             ::rust::__zngur_internal_assume_init(*this);
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(*this));
             {deinits}
@@ -1349,6 +1354,11 @@ namespace rust {{
                 deinits = (0..inputs.len())
                     .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
                     .join("\n"),
+                noexcept = if state.panic_to_exception {
+                    ""
+                } else {
+                    " noexcept"
+                },
             )?;
         }
         match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
@@ -1434,7 +1444,7 @@ return o;
                 link_name: _,
                 link_name_ref,
             }) => {
-                for ref_kind in ["Ref", " RefMut"] {
+                for ref_kind in ["Ref", "RefMut"] {
                     writeln!(
                         state,
                         r#"
@@ -1477,7 +1487,7 @@ auto data_as_impl = &args;
                     writeln!(
                         state,
                         "template<size_t OFFSET>
-                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const noexcept {{
+                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const{noexcept} {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1490,7 +1500,8 @@ auto data_as_impl = &args;
                             .join(", "),
                         input_args = (0..inputs.len() - 1)
                             .map(|n| format!(", ::std::move(i{n})"))
-                            .join("")
+                            .join(""),
+                        noexcept = if state.panic_to_exception { "" } else { " noexcept" },
                     )?;
                 }
                 for ref_kind in ref_kinds {
@@ -1501,7 +1512,7 @@ auto data_as_impl = &args;
                     } = &method.sig;
                     writeln!(
                         state,
-                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const noexcept {{
+                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const{noexcept} {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1514,7 +1525,8 @@ auto data_as_impl = &args;
                             .join(", "),
                         input_args = (0..inputs.len() - 1)
                             .map(|n| format!(", ::std::move(i{n})"))
-                            .join("")
+                            .join(""),
+                        noexcept = if state.panic_to_exception { "" } else { " noexcept" },
                     )?;
                 }
             }
@@ -1529,7 +1541,7 @@ auto data_as_impl = &args;
                 } = &method.sig;
                 writeln!(
                     state,
-                    "inline {output} {fn_name}({input_defs}) {const_kw} noexcept {{
+                    "inline {output} {fn_name}({input_defs}) {const_kw}{noexcept} {{
                     return {fn_name}({this_arg}{input_args});
                 }}",
                     this_arg = match method.kind {
@@ -1550,6 +1562,11 @@ auto data_as_impl = &args;
                         ""
                     } else {
                         "const"
+                    },
+                    noexcept = if state.panic_to_exception {
+                        ""
+                    } else {
+                        " noexcept"
                     },
                 )?;
             }
@@ -1651,10 +1668,11 @@ auto data_as_impl = &args;
     pub(crate) fn emit_cpp_fn_defs_template(
         &self,
         traits: &HashMap<RustTrait, CppTraitDefinition>,
+        panic_to_exception: bool,
     ) -> String {
         let mut state = State {
             text: String::new(),
-            panic_to_exception: false, // This doesn't affect the output we need
+            panic_to_exception,
         };
         self.emit_cpp_fn_defs(&mut state, traits).unwrap();
         state.text

@@ -46,7 +46,7 @@ struct HeaderTemplate<'a> {
 
 impl<'a> HeaderTemplate<'a> {
     fn emit_cpp_fn_defs_for_type(&self, td: &CppTypeDefinition) -> String {
-        td.emit_cpp_fn_defs_template(self.trait_defs)
+        td.emit_cpp_fn_defs_template(self.trait_defs, self.panic_to_exception)
     }
 }
 
