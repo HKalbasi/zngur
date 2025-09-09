@@ -15,7 +15,7 @@ WASI_SDK_PATH = $(shell pwd)/$(WASI_SDK_DIR)
 WASI_SDK_URL = $(or $(WASI_SDK_DOWNLOAD_URL),https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-25/$(WASI_SDK_DIR).tar.gz)
 
 # WASI build flags for C++ compilation with wasmtime
-WASIFLAGS = -std=c++14 \
+WASIFLAGS = -std=c++11 \
            --target=wasm32-wasi \
            --sysroot=$(WASI_SDK_PATH)/share/wasi-sysroot \
            -D_WASI_EMULATED_SIGNAL \
