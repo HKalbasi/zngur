@@ -1,0 +1,36 @@
+#include "./generated.h"
+
+extern "C" {
+
+{% for (_, td) in trait_defs %}
+  {% match td %}
+    {% when CppTraitDefinition::Fn with { .. } %}
+      {# Fn traits don't emit cpp code #}
+    {% when CppTraitDefinition::Normal with { as_ty, methods, .. } %}
+      {% for method in methods %}
+void {{ method.rust_link_name }}(uint8_t* data{% for arg in 0..method.inputs.len() %}, uint8_t* i{{ arg }}{% endfor %}, uint8_t* o) {
+   {{ as_ty }}* data_typed = reinterpret_cast< {{ as_ty }}* >(data);
+   {{ method.output }} oo = data_typed->{{ method.name }}({% for (n, ty) in method.inputs.iter().enumerate() %}{% if n > 0 %}, {% endif %}::rust::__zngur_internal_move_from_rust< {{ ty }} >(i{{ n }}){% endfor %});
+   ::rust::__zngur_internal_move_to_rust(o, oo);
+}
+      {% endfor %}
+  {% endmatch %}
+{% endfor %}
+
+{% for func in exported_fn_defs %}
+void {{ func.sig.rust_link_name }}({% for n in 0..func.sig.inputs.len() %}uint8_t* i{{ n }},{% endfor %}uint8_t* o) {
+   {{ func.sig.output }} oo = ::rust::exported_functions::{{ func.name }}({% for (n, ty) in func.sig.inputs.iter().enumerate() %}{% if n > 0 %}, {% endif %}::rust::__zngur_internal_move_from_rust< {{ ty }} >(i{{ n }}){% endfor %});
+   ::rust::__zngur_internal_move_to_rust(o, oo);
+}
+{% endfor %}
+
+{% for imp in exported_impls %}
+  {% for (name, sig) in imp.methods %}
+void {{ sig.rust_link_name }}({% for n in 0..sig.inputs.len() %}uint8_t* i{{ n }},{% endfor %}uint8_t* o) {
+   {{ sig.output }} oo = ::rust::Impl< {{ imp.ty }}, {% if let Some(tr) = imp.tr %}{{ tr }}{% else %}::rust::Inherent{% endif %} >::{{ name }}({% for (n, ty) in sig.inputs.iter().enumerate() %}{% if n > 0 %}, {% endif %}::rust::__zngur_internal_move_from_rust< {{ ty }} >(i{{ n }}){% endfor %});
+   ::rust::__zngur_internal_move_to_rust(o, oo);
+}
+  {% endfor %}
+{% endfor %}
+
+}

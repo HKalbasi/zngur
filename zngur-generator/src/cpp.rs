@@ -13,6 +13,17 @@ use crate::{ZngurWellknownTraitData, rust::IntoCpp};
 pub struct CppPath(pub Vec<String>);
 
 impl CppPath {
+    pub(crate) fn open_namespace(&self) -> String {
+        self.namespace()
+            .iter()
+            .map(|x| format!("namespace {} {{", x))
+            .join("\n")
+    }
+
+    pub(crate) fn close_namespace(&self) -> String {
+        self.namespace().iter().map(|_| format!("}}")).join("\n")
+    }
+
     fn namespace(&self) -> &[String] {
         self.0.split_last().unwrap().1
     }
@@ -32,7 +43,7 @@ impl CppPath {
         Ok(())
     }
 
-    fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         self.0.split_last().unwrap().0
     }
 
@@ -87,6 +98,18 @@ impl CppType {
         }
     }
 
+    pub(crate) fn specialization_decl(&self) -> String {
+        if self.generic_args.is_empty() {
+            format!("struct {}", self.path.name())
+        } else {
+            format!(
+                "template<> struct {}< {} >",
+                self.path.name(),
+                self.generic_args.iter().join(", ")
+            )
+        }
+    }
+
     fn emit_specialization_decl(&self, state: &mut State) -> std::fmt::Result {
         if self.generic_args.is_empty() {
             write!(state, "struct {}", self.path.name())?;
@@ -99,6 +122,39 @@ impl CppType {
             )?;
         }
         Ok(())
+    }
+
+    fn header_helper(&self, state: &mut impl Write) -> std::fmt::Result {
+        // Note: probably need to keep this out of the template because it's recursive.
+        for x in &self.generic_args {
+            x.header_helper(state)?;
+        }
+        if !self.path.need_header() {
+            return Ok(());
+        }
+
+        // Reimplement emit_in_namespace because we don't have a &State.
+        for p in self.path.namespace() {
+            writeln!(state, "namespace {} {{", p)?;
+        }
+
+        if !self.generic_args.is_empty() {
+            writeln!(state, "template<typename ...T>")?;
+        }
+
+        writeln!(state, "struct {};", self.path.name())?;
+
+        for _ in self.path.namespace() {
+            writeln!(state, "}}")?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn header(&self) -> String {
+        let mut state = String::new();
+        self.header_helper(&mut state).unwrap();
+        state
     }
 
     fn emit_header(&self, state: &mut State) -> std::fmt::Result {
@@ -222,6 +278,21 @@ pub struct CppTraitMethod {
     pub output: CppType,
 }
 
+impl CppTraitMethod {
+    pub(crate) fn signature(&self) -> String {
+        format!(
+            "{} {}({})",
+            self.output,
+            self.name,
+            self.inputs
+                .iter()
+                .enumerate()
+                .map(|(n, x)| format!("{x} i{n}"))
+                .join(", ")
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct CppFnSig {
     pub rust_link_name: String,
@@ -230,6 +301,33 @@ pub struct CppFnSig {
 }
 
 impl CppFnSig {
+    /// Return a string that declares a noexcept void function named `rust_link_name`,
+    /// with N inputs and 1 output declared as uint8_t* pointers.
+    pub(crate) fn rust_link_decl(&self) -> String {
+        // I'd have preferred to do this work directly in the template file, but '|n|' won't parse in:
+        // {% let inputs = (0..f.sig.inputs.len()).map(|n| format!("uint8_t* i{n},")).join("") %}
+        // See https://github.com/askama-rs/askama-old/issues/284
+        format!("void {}(", self.rust_link_name)
+            + &self
+                .inputs
+                .iter()
+                .enumerate()
+                .map(|(n, _)| format!("uint8_t* i{n},"))
+                .join("")
+            + "uint8_t* o)"
+            + " noexcept ;"
+    }
+
+    /// Generate a C++ function parameter list from the inputs,
+    /// of the form "Type0 i0, Type1 i1, Type2 i2"
+    pub(crate) fn cpp_params(&self) -> String {
+        self.inputs
+            .iter()
+            .enumerate()
+            .map(|(n, ty)| format!("{ty} i{n}"))
+            .join(", ")
+    }
+
     fn emit_rust_link(&self, state: &mut State) -> std::fmt::Result {
         write!(state, "void {}(", self.rust_link_name)?;
         for n in 0..self.inputs.len() {
@@ -270,7 +368,7 @@ impl CppFnSig {
         } = self;
         writeln!(
             state,
-            "inline {output} {fn_name}({input_defs}) noexcept {{
+            "inline {output} {fn_name}({input_defs}){noexcept} {{
             {output} o{{}};
             {deinits}
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
@@ -290,6 +388,11 @@ impl CppFnSig {
             deinits = (0..inputs.len())
                 .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
                 .join("\n"),
+            noexcept = if state.panic_to_exception {
+                ""
+            } else {
+                " noexcept"
+            },
         )
     }
 }
@@ -344,6 +447,40 @@ pub enum CppTraitDefinition {
 }
 
 impl CppTraitDefinition {
+    pub(crate) fn rust_links(&self) -> String {
+        match self {
+            CppTraitDefinition::Fn {
+                sig:
+                    CppFnSig {
+                        rust_link_name,
+                        inputs,
+                        output: _,
+                    },
+            } => {
+                // I'd have preferred to do this work directly in the template file, but the following won't parse...
+                // {% let args = (0..sig.inputs.len()).map(|_| "uint8_t *, ").join(" ") %}
+                // https://github.com/askama-rs/askama-old/issues/284
+                let args = (0..inputs.len()).map(|_| "uint8_t *, ").join(" ");
+                format!(
+                    "void {rust_link_name}(uint8_t *data,
+                                         void destructor(uint8_t *),
+                                         void call(uint8_t *, {args} uint8_t *),
+                                         uint8_t *o);"
+                )
+            }
+            CppTraitDefinition::Normal {
+                link_name,
+                link_name_ref,
+                ..
+            } => {
+                format!(
+                    "void {link_name}(uint8_t *data, void destructor(uint8_t *), uint8_t *o);
+                   void {link_name_ref}(uint8_t *data, uint8_t *o);"
+                )
+            }
+        }
+    }
+
     fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
         match self {
             CppTraitDefinition::Fn {
@@ -1203,7 +1340,7 @@ namespace rust {{
             } = c;
             writeln!(
                 state,
-                "inline {fn_name}({input_defs}) noexcept {{
+                "inline {fn_name}({input_defs}){noexcept} {{
             ::rust::__zngur_internal_assume_init(*this);
             {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(*this));
             {deinits}
@@ -1219,6 +1356,11 @@ namespace rust {{
                 deinits = (0..inputs.len())
                     .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
                     .join("\n"),
+                noexcept = if state.panic_to_exception {
+                    ""
+                } else {
+                    " noexcept"
+                },
             )?;
         }
         match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
@@ -1304,7 +1446,7 @@ return o;
                 link_name: _,
                 link_name_ref,
             }) => {
-                for ref_kind in ["Ref", " RefMut"] {
+                for ref_kind in ["Ref", "RefMut"] {
                     writeln!(
                         state,
                         r#"
@@ -1347,7 +1489,7 @@ auto data_as_impl = &args;
                     writeln!(
                         state,
                         "template<size_t OFFSET>
-                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const noexcept {{
+                        inline {output} rust::{field_kind}< {ty}, OFFSET >::{method_name}({input_defs}) const{noexcept} {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1360,7 +1502,8 @@ auto data_as_impl = &args;
                             .join(", "),
                         input_args = (0..inputs.len() - 1)
                             .map(|n| format!(", ::std::move(i{n})"))
-                            .join("")
+                            .join(""),
+                        noexcept = if state.panic_to_exception { "" } else { " noexcept" },
                     )?;
                 }
                 for ref_kind in ref_kinds {
@@ -1371,7 +1514,7 @@ auto data_as_impl = &args;
                     } = &method.sig;
                     writeln!(
                         state,
-                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const noexcept {{
+                        "inline {output} rust::{ref_kind}< {ty} >::{method_name}({input_defs}) const{noexcept} {{
                     return {fn_name}(*this{input_args});
                 }}",
                         ty = &self.ty,
@@ -1384,7 +1527,8 @@ auto data_as_impl = &args;
                             .join(", "),
                         input_args = (0..inputs.len() - 1)
                             .map(|n| format!(", ::std::move(i{n})"))
-                            .join("")
+                            .join(""),
+                        noexcept = if state.panic_to_exception { "" } else { " noexcept" },
                     )?;
                 }
             }
@@ -1399,7 +1543,7 @@ auto data_as_impl = &args;
                 } = &method.sig;
                 writeln!(
                     state,
-                    "inline {output} {fn_name}({input_defs}) {const_kw} noexcept {{
+                    "inline {output} {fn_name}({input_defs}) {const_kw}{noexcept} {{
                     return {fn_name}({this_arg}{input_args});
                 }}",
                     this_arg = match method.kind {
@@ -1420,6 +1564,11 @@ auto data_as_impl = &args;
                         ""
                     } else {
                         "const"
+                    },
+                    noexcept = if state.panic_to_exception {
+                        ""
+                    } else {
+                        " noexcept"
                     },
                 )?;
             }
@@ -1516,6 +1665,19 @@ auto data_as_impl = &args;
             }
         }
         Ok(())
+    }
+
+    pub(crate) fn emit_cpp_fn_defs_template(
+        &self,
+        traits: &HashMap<RustTrait, CppTraitDefinition>,
+        panic_to_exception: bool,
+    ) -> String {
+        let mut state = State {
+            text: String::new(),
+            panic_to_exception,
+        };
+        self.emit_cpp_fn_defs(&mut state, traits).unwrap();
+        state.text
     }
 
     fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {

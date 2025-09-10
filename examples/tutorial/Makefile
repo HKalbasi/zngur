@@ -1,5 +1,5 @@
 a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/libexample_tutorial.a
-	${CXX} -Werror main.cpp -g -L ../../target/release/ -l example_tutorial
+	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/release/ -l example_tutorial
 
 ../../target/release/libexample_tutorial.a: FORCE
 	cargo build --release
