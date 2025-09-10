@@ -1,5 +1,5 @@
 a.out: main.cpp generated1.h src/generated1.rs generated2.h src/generated2.rs src/lib.rs ../../target/release/libexample_multiple_zngur_files.a
-	${CXX} -Werror main.cpp -g -L ../../target/release/ -l example_multiple_zngur_files
+	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/release/ -l example_multiple_zngur_files
 
 ../../target/release/libexample_multiple_zngur_files.a: FORCE
 	cargo build --release
