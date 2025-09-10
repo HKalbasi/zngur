@@ -379,6 +379,10 @@ name = "example-memory_management"
 version = "0.7.0"
 
 [[package]]
+name = "example-multiple-zngur-files"
+version = "0.7.0"
+
+[[package]]
 name = "example-rayon"
 version = "0.7.0"
 dependencies = [
