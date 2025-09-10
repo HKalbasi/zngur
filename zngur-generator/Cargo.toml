@@ -11,5 +11,6 @@ license.workspace = true
 
 [dependencies]
 itertools = "0.11"
+askama = "0.14.0"
 zngur-parser = { version = "=0.7.0", path = "../zngur-parser" }
 zngur-def = { version = "=0.7.0", path = "../zngur-def" }
