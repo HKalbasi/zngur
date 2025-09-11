@@ -1,8 +1,8 @@
 use crate::cpp::PanicToExceptionSymbols;
-use askama::Template;
+use sailfish::Template;
 
 #[derive(Template)]
-#[template(path = "cpp_header.askama", escape = "none")]
+#[template(path = "cpp_header.sptl", escape = false)]
 pub(crate) struct CppHeaderTemplate {
     pub(crate) panic_to_exception: Option<PanicToExceptionSymbols>,
     pub(crate) additional_includes: String,

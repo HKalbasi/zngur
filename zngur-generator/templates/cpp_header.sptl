@@ -9,17 +9,17 @@
 #include <functional>
 #include <math.h>
 
-{{ additional_includes }}
+<%= self.additional_includes %>
 
-{%- if let Some(symbols) = panic_to_exception -%}
+<% if let Some(symbols) = &self.panic_to_exception { %>
 namespace rust {
     class Panic {};
 }
 extern "C" {
-    uint8_t {{ symbols.detect_panic }}();
-    void {{ symbols.take_panic }}();
+    uint8_t <%= symbols.detect_panic %>();
+    void <%= symbols.take_panic %>();
 }
-{%- endif -%}
+<% } %>
 
 #define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 
@@ -116,122 +116,122 @@ namespace rust {
         return ::std::forward<T>(input);
     }
 
-{%- for ty in builtin_types() -%}
-{% let needs_endif = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float") %}
-{% if needs_endif %}
+<% for ty in self.builtin_types() { %>
+<% let needs_endif = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
+<% if needs_endif { %>
 #if defined(__APPLE__) || defined(__wasm__)
-{% endif %}
+<% } %>
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {{ ty }} >(const {{ ty }}& t) noexcept {
+    inline uint8_t* __zngur_internal_data_ptr< <%= ty %> >(const <%= ty %>& t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
 
     template<>
-    inline void __zngur_internal_assume_init< {{ ty }} >({{ ty }}&) noexcept {}
+    inline void __zngur_internal_assume_init< <%= ty %> >(<%= ty %>&) noexcept {}
     template<>
-    inline void __zngur_internal_assume_deinit< {{ ty }} >({{ ty }}&) noexcept {}
+    inline void __zngur_internal_assume_deinit< <%= ty %> >(<%= ty %>&) noexcept {}
 
     template<>
-    inline size_t __zngur_internal_size_of< {{ ty }} >() noexcept {
-        return sizeof({{ ty }});
+    inline size_t __zngur_internal_size_of< <%= ty %> >() noexcept {
+        return sizeof(<%= ty %>);
     }
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {{ ty }}*>({{ ty }}* const & t) noexcept {
+    inline uint8_t* __zngur_internal_data_ptr< <%= ty %>*>(<%= ty %>* const & t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
 
     template<>
-    inline void __zngur_internal_assume_init< {{ ty }}*>({{ ty }}*&) noexcept {}
+    inline void __zngur_internal_assume_init< <%= ty %>*>(<%= ty %>*&) noexcept {}
     template<>
-    inline void __zngur_internal_assume_deinit< {{ ty }}*>({{ ty }}*&) noexcept {}
+    inline void __zngur_internal_assume_deinit< <%= ty %>*>(<%= ty %>*&) noexcept {}
 
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< {{ ty }} const*>({{ ty }} const* const & t) noexcept {
+    inline uint8_t* __zngur_internal_data_ptr< <%= ty %> const*>(<%= ty %> const* const & t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
 
     template<>
-    inline void __zngur_internal_assume_init< {{ ty }} const*>({{ ty }} const*&) noexcept {}
+    inline void __zngur_internal_assume_init< <%= ty %> const*>(<%= ty %> const*&) noexcept {}
     template<>
-    inline void __zngur_internal_assume_deinit< {{ ty }} const*>({{ ty }} const*&) noexcept {}
+    inline void __zngur_internal_assume_deinit< <%= ty %> const*>(<%= ty %> const*&) noexcept {}
 
     template<>
-    struct Ref< {{ ty }} > {
+    struct Ref< <%= ty %> > {
         Ref() {
             data = 0;
         }
-        Ref(const {{ ty }}& t) {
+        Ref(const <%= ty %>& t) {
             data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }
 
          template<size_t OFFSET>
-         Ref(const FieldOwned< {{ ty }}, OFFSET >& f) {
+         Ref(const FieldOwned< <%= ty %>, OFFSET >& f) {
              data = reinterpret_cast<size_t>(&f) + OFFSET;
          }
 
          template<size_t OFFSET>
-         Ref(const FieldRef< {{ ty }}, OFFSET >& f) {
+         Ref(const FieldRef< <%= ty %>, OFFSET >& f) {
              data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
          }
 
          template<size_t OFFSET>
-         Ref(const FieldRefMut< {{ ty }}, OFFSET >& f) {
+         Ref(const FieldRefMut< <%= ty %>, OFFSET >& f) {
              data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
          }
 
-        {{ ty }}& operator*() {
-            return *reinterpret_cast< {{ ty }}*>(data);
+        <%= ty %>& operator*() {
+            return *reinterpret_cast< <%= ty %>*>(data);
         }
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< {{ ty }} > >(const ::rust::Ref< {{ ty }} >& t) noexcept ;
-        friend ::rust::ZngurPrettyPrinter< Ref< {{ ty }} > >;
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< <%= ty %> > >(const ::rust::Ref< <%= ty %> >& t) noexcept ;
+        friend ::rust::ZngurPrettyPrinter< Ref< <%= ty %> > >;
     };
 
     template<>
-    struct RefMut< {{ ty }} > {
+    struct RefMut< <%= ty %> > {
         RefMut() {
             data = 0;
         }
-        RefMut({{ ty }}& t) {
+        RefMut(<%= ty %>& t) {
             data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
         }
 
          template<size_t OFFSET>
-         RefMut(const FieldOwned< {{ ty }}, OFFSET >& f) {
+         RefMut(const FieldOwned< <%= ty %>, OFFSET >& f) {
              data = reinterpret_cast<size_t>(&f) + OFFSET;
          }
 
          template<size_t OFFSET>
-         RefMut(const FieldRefMut< {{ ty }}, OFFSET >& f) {
+         RefMut(const FieldRefMut< <%= ty %>, OFFSET >& f) {
              data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
          }
 
-        {{ ty }}& operator*() {
-            return *reinterpret_cast< {{ ty }}*>(data);
+        <%= ty %>& operator*() {
+            return *reinterpret_cast< <%= ty %>*>(data);
         }
         private:
             size_t data;
-        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< {{ ty }} > >(const ::rust::RefMut< {{ ty }} >& t) noexcept ;
-        friend ::rust::ZngurPrettyPrinter< Ref< {{ ty }} > >;
+        friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< <%= ty %> > >(const ::rust::RefMut< <%= ty %> >& t) noexcept ;
+        friend ::rust::ZngurPrettyPrinter< Ref< <%= ty %> > >;
     };
 
-    {% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float") %}
-    {% if printable %}
+    <% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
+    <% if printable { %>
     template<>
-    struct ZngurPrettyPrinter< {{ ty }} > {
-        static inline void print({{ ty }} const& t) {
+    struct ZngurPrettyPrinter< <%= ty %> > {
+        static inline void print(<%= ty %> const& t) {
             ::std::cerr << t << ::std::endl;
         }
     };
-    {% endif %}
+    <% } %>
 
-    {% if needs_endif %}
+    <% if needs_endif { %>
 #endif
-{% endif %}
+<% } %>
 
-{%- endfor -%}
+<% } %>
 
 } // namespace rust

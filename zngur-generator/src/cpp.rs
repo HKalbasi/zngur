@@ -8,7 +8,7 @@ use itertools::Itertools;
 use zngur_def::{CppRef, CppValue, Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
 
 use crate::{ZngurWellknownTraitData, rust::IntoCpp, template::CppHeaderTemplate};
-use askama::Template;
+use sailfish::Template;
 
 #[derive(Debug)]
 pub struct CppPath(pub Vec<String>);
