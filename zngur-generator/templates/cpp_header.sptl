@@ -235,3 +235,103 @@ namespace rust {
 <% } %>
 
 } // namespace rust
+
+extern "C" {
+  <% for f in self.fn_deps { %>
+    void <%= f.sig.rust_link_name %> (
+      <% for n in 0..f.sig.inputs.len() { %>
+        uint8_t* i<%= n %>,
+      <% } %>
+      uint8_t* o
+    ) noexcept ;
+  <% } %>
+
+  <% for td in self.type_defs { %>
+    <% /*TODO: This duplicates the logic above. It's not clear whether repetition is better or worse for understandability*/ %>
+    <% for method in &td.methods { %>
+      void <%= method.sig.rust_link_name %> (
+        <% for n in 0..method.sig.inputs.len() { %>
+          uint8_t* i<%= n %>,
+        <% } %>
+        uint8_t* o
+      ) noexcept ;
+    <% } %>
+
+    <% for constructor in &td.constructors { %>
+      void <%= constructor.rust_link_name %> (
+        <% for n in 0..constructor.inputs.len() { %>
+          uint8_t* i<%= n %>,
+        <% } %>
+        uint8_t* o
+      ) noexcept ;
+    <% } %>
+
+    <% if let Some(cpp_value) = &td.cpp_value { %>
+      ::rust::ZngurCppOpaqueOwnedObject* <%= cpp_value.0 %>(uint8_t*);
+    <% } %>
+
+    <% if let CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } = &td.layout { %>
+      size_t <%= size_fn %>();
+      uint8_t* <%= alloc_fn %>();
+      void <%= free_fn %>(uint8_t*);
+    <% } %>
+
+    <% for tr in &td.wellknown_traits { %>
+      <% /* TODO: sailfish match is pretty bad. Raise an issue. */ %>
+      <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print } = tr { %>
+        void <%= pretty_print %>(uint8_t*);
+        void <%= debug_print %>(uint8_t*);
+      <% } else if let ZngurWellknownTraitData::Drop { drop_in_place } = tr { %>
+        void <%= drop_in_place %>(uint8_t*);
+      <% } else if let ZngurWellknownTraitData::Unsized | ZngurWellknownTraitData::Copy = tr { %>
+        <% /* No output for Unsized and Copy traits */ %>
+      <% } %>
+    <% } %>
+
+    <% for (_, td) in self.trait_defs { %>
+      <% if let CppTraitDefinition::Fn { sig } = td { %>
+        void <%= sig.rust_link_name %>(uint8_t* data, void destructor(uint8_t *),
+                                       void call(uint8_t *,
+                                          <% for n in 0..sig.inputs.len() { %> uint8_t *i<%= n %>, <% } %>uint8_t *o)
+        );
+      <% } else if let CppTraitDefinition::Normal { link_name, link_name_ref, .. } = td { %>
+        void <%= link_name %>(uint8_t *data, void destructor(uint8_t *), uint8_t *o);
+        void <%= link_name_ref %>(uint8_t *data, uint8_t *o);
+      <% } %>
+    <% } %>
+
+  <% } %>
+
+} // extern "C"
+
+<% for td in self.type_defs { %>
+  <%= td.ty.header() %>
+<% } %>
+
+<% for imp in self.exported_impls { %>
+  <%= imp.ty.header() %>
+  <% if let Some(tr) = &imp.tr { %>
+    <%= tr.header() %>
+  <% } %>
+<% } %>
+
+<% for (_, td) in self.trait_defs { %>
+  <% if let CppTraitDefinition::Normal { as_ty, methods, .. } = td { %>
+    <%= as_ty.path.open_namespace() %>
+    <% if as_ty.generic_args.is_empty() { %>
+      struct <%= as_ty.path.name() %> {
+    <% } else { %>
+      template <>
+      struct <%= as_ty.path.name() %> < <%= as_ty.generic_args.iter().join(", ") %> > {
+    <% } %>
+      public:
+          virtual ~<%= as_ty.path.name() %>() {};
+          <% for method in methods { %>
+            virtual <%= method.output %> <%= method.name %> (
+              <%= method.inputs.iter().enumerate().map(|(n, x)| format!("{x} i{n}")).join(", ") %>
+            ) = 0;
+          <% } %>
+      };
+    <%= as_ty.path.close_namespace() %>
+  <% } %>
+<% } %>

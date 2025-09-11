@@ -18,6 +18,33 @@ impl CppPath {
         self.0.split_last().unwrap().1
     }
 
+    pub(crate) fn open_namespace(&self) -> String {
+        self.namespace()
+            .iter()
+            .enumerate()
+            .map(|(i, x)| format!("{:indent$}namespace {} {{", "", x, indent = i * 4))
+            .join("\n")
+    }
+
+    pub(crate) fn close_namespace(&self) -> String {
+        self.namespace()
+            .iter()
+            .enumerate()
+            .map(|(i, x)| format!("{:indent$}}} // namespace {}", "", x, indent = i * 4))
+            .join("\n")
+    }
+
+    #[allow(dead_code)]
+    /// Wraps `content` in properly nested namespaces.
+    pub(crate) fn wrap_in_namespace(&self, content: String) -> String {
+        format!(
+            "{}{}{}",
+            self.open_namespace(),
+            content,
+            self.close_namespace()
+        )
+    }
+
     fn emit_in_namespace(
         &self,
         state: &mut State,
@@ -33,7 +60,7 @@ impl CppPath {
         Ok(())
     }
 
-    fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         self.0.split_last().unwrap().0
     }
 
@@ -80,6 +107,19 @@ pub struct CppType {
     pub generic_args: Vec<CppType>,
 }
 
+impl sailfish::runtime::Render for CppType {
+    fn render(
+        &self,
+        b: &mut sailfish::runtime::Buffer,
+    ) -> std::result::Result<(), sailfish::runtime::RenderError> {
+        write!(b, "{}", self.path)?;
+        if !self.generic_args.is_empty() {
+            write!(b, "< {} >", self.generic_args.iter().join(", "))?;
+        }
+        Ok(())
+    }
+}
+
 impl CppType {
     pub fn into_ref(self) -> CppType {
         CppType {
@@ -102,19 +142,39 @@ impl CppType {
         Ok(())
     }
 
-    fn emit_header(&self, state: &mut State) -> std::fmt::Result {
+    fn header_helper(&self, state: &mut impl Write) -> std::fmt::Result {
+        // Note: probably need to keep this out of the template because it's recursive.
         for x in &self.generic_args {
-            x.emit_header(state)?;
+            x.header_helper(state)?;
         }
+
         if !self.path.need_header() {
             return Ok(());
         }
-        self.path.emit_in_namespace(state, |state| {
-            if !self.generic_args.is_empty() {
-                writeln!(state, "template<typename ...T>")?;
-            }
-            writeln!(state, "struct {};", self.path.name())
-        })
+
+        for p in self.path.namespace() {
+            writeln!(state, "namespace {} {{", p)?;
+        }
+
+        if !self.generic_args.is_empty() {
+            writeln!(state, "template<typename ...T>")?;
+        }
+
+        writeln!(state, "struct {};", self.path.name())?;
+
+        for _ in self.path.namespace() {
+            writeln!(state, "}}")?;
+        }
+
+        Ok(())
+    }
+
+    pub(crate) fn header(&self) -> String {
+        let mut state = String::new();
+
+        self.header_helper(&mut state).unwrap();
+
+        state
     }
 }
 
@@ -240,12 +300,6 @@ impl CppFnSig {
         Ok(())
     }
 
-    fn emit_rust_link_decl(&self, state: &mut State) -> std::fmt::Result {
-        self.emit_rust_link(state)?;
-        writeln!(state, " noexcept ;")?;
-        Ok(())
-    }
-
     fn emit_cpp_header(&self, state: &mut State, fn_name: &str) -> std::fmt::Result {
         let CppFnSig {
             inputs,
@@ -345,84 +399,6 @@ pub enum CppTraitDefinition {
 }
 
 impl CppTraitDefinition {
-    fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
-        match self {
-            CppTraitDefinition::Fn {
-                sig:
-                    CppFnSig {
-                        rust_link_name,
-                        inputs,
-                        output: _,
-                    },
-            } => {
-                writeln!(
-                    state,
-                    "void {rust_link_name}(uint8_t *data, void destructor(uint8_t *),
-                void call(uint8_t *, {} uint8_t *),
-                uint8_t *o);",
-                    (0..inputs.len()).map(|_| "uint8_t *, ").join(" ")
-                )?;
-            }
-            CppTraitDefinition::Normal {
-                link_name,
-                link_name_ref,
-                ..
-            } => {
-                writeln!(
-                    state,
-                    "void {link_name}(uint8_t *data, void destructor(uint8_t *), uint8_t *o);"
-                )?;
-                writeln!(state, "void {link_name_ref}(uint8_t *data, uint8_t *o);")?;
-            }
-        }
-        Ok(())
-    }
-
-    fn emit(&self, state: &mut State) -> std::fmt::Result {
-        let CppTraitDefinition::Normal {
-            as_ty,
-            methods,
-            link_name: _,
-            link_name_ref: _,
-        } = self
-        else {
-            return Ok(());
-        };
-        as_ty.path.emit_in_namespace(state, |state| {
-            as_ty.emit_specialization_decl(state)?;
-            write!(
-                state,
-                r#"{{
-    public:
-        virtual ~{}() {{}}
-    "#,
-                as_ty.path.name(),
-            )?;
-            for method in methods {
-                write!(
-                    state,
-                    r#"
-            virtual {output} {name}({input}) = 0;
-    "#,
-                    output = method.output,
-                    name = method.name,
-                    input = method
-                        .inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, x)| format!("{x} i{n}"))
-                        .join(", "),
-                )?;
-            }
-            write!(
-                state,
-                r#"
-    }};
-    "#,
-            )
-        })
-    }
-
     fn emit_cpp(&self, state: &mut State) -> std::fmt::Result {
         match self {
             CppTraitDefinition::Fn { .. } => (),
@@ -1518,48 +1494,6 @@ auto data_as_impl = &args;
         }
         Ok(())
     }
-
-    fn emit_rust_links(&self, state: &mut State) -> std::fmt::Result {
-        for method in &self.methods {
-            method.sig.emit_rust_link_decl(state)?;
-        }
-        for c in &self.constructors {
-            c.emit_rust_link_decl(state)?;
-        }
-        if let Some(cpp_value) = &self.cpp_value {
-            writeln!(
-                state,
-                "::rust::ZngurCppOpaqueOwnedObject* {}(uint8_t*);",
-                cpp_value.0
-            )?;
-        }
-        if let CppLayoutPolicy::HeapAllocated {
-            size_fn,
-            alloc_fn,
-            free_fn,
-        } = &self.layout
-        {
-            writeln!(state, "size_t {size_fn}();")?;
-            writeln!(state, "uint8_t* {alloc_fn}();")?;
-            writeln!(state, "void {free_fn}(uint8_t*);")?;
-        }
-        for tr in &self.wellknown_traits {
-            match tr {
-                ZngurWellknownTraitData::Debug {
-                    pretty_print,
-                    debug_print,
-                } => {
-                    writeln!(state, "void {pretty_print}(uint8_t *data);")?;
-                    writeln!(state, "void {debug_print}(uint8_t *data);")?;
-                }
-                ZngurWellknownTraitData::Unsized | ZngurWellknownTraitData::Copy => (),
-                ZngurWellknownTraitData::Drop { drop_in_place } => {
-                    writeln!(state, "void {drop_in_place}(uint8_t *data);")?;
-                }
-            }
-        }
-        Ok(())
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -1583,33 +1517,14 @@ pub struct CppFile {
 impl CppFile {
     fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
         let template = CppHeaderTemplate {
-            panic_to_exception: self.panic_to_exception.clone(),
-            additional_includes: self.additional_includes.clone(),
+            panic_to_exception: &self.panic_to_exception,
+            additional_includes: &self.additional_includes,
+            fn_deps: &self.fn_defs,
+            type_defs: &self.type_defs,
+            trait_defs: &self.trait_defs,
+            exported_impls: &self.exported_impls,
         };
         state.text += template.render().unwrap().as_str();
-        writeln!(state, "\nextern \"C\" {{")?;
-        for f in &self.fn_defs {
-            f.sig.emit_rust_link_decl(state)?;
-        }
-        for td in &self.type_defs {
-            td.emit_rust_links(state)?;
-        }
-        for (_, td) in &self.trait_defs {
-            td.emit_rust_links(state)?;
-        }
-        writeln!(state, "}}")?;
-        for td in &self.type_defs {
-            td.ty.emit_header(state)?;
-        }
-        for imp in &self.exported_impls {
-            imp.ty.emit_header(state)?;
-            if let Some(tr) = &imp.tr {
-                tr.emit_header(state)?;
-            }
-        }
-        for (_, td) in &self.trait_defs {
-            td.emit(state)?;
-        }
         for td in &self.type_defs {
             td.emit(state)?;
         }
