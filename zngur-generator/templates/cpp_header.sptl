@@ -318,12 +318,7 @@ extern "C" {
 <% for (_, td) in self.trait_defs { %>
   <% if let CppTraitDefinition::Normal { as_ty, methods, .. } = td { %>
     <%= as_ty.path.open_namespace() %>
-    <% if as_ty.generic_args.is_empty() { %>
-      struct <%= as_ty.path.name() %> {
-    <% } else { %>
-      template <>
-      struct <%= as_ty.path.name() %> < <%= as_ty.generic_args.iter().join(", ") %> > {
-    <% } %>
+    <%= as_ty.specialization_decl() %> {
       public:
           virtual ~<%= as_ty.path.name() %>() {};
           <% for method in methods { %>

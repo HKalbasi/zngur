@@ -128,6 +128,18 @@ impl CppType {
         }
     }
 
+    pub(crate) fn specialization_decl(&self) -> String {
+        if self.generic_args.is_empty() {
+            format!("struct {}", self.path.name())
+        } else {
+            format!(
+                "template<> struct {}< {} >",
+                self.path.name(),
+                self.generic_args.iter().join(", ")
+            )
+        }
+    }
+
     fn emit_specialization_decl(&self, state: &mut State) -> std::fmt::Result {
         if self.generic_args.is_empty() {
             write!(state, "struct {}", self.path.name())?;
