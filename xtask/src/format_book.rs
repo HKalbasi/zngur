@@ -14,21 +14,6 @@ pub fn main(fix: bool) -> Result<()> {
         bail!("Book source directory 'book/src' not found");
     }
 
-    println!("Checking for dprint...");
-
-    // Try to use dprint directly first
-    let dprint_available = cmd!(sh, "dprint --version").read().is_ok();
-
-    if !dprint_available {
-        println!("dprint not found, installing via cargo...");
-        cmd!(sh, "cargo install dprint --locked")
-            .run()
-            .with_context(|| "Failed to install dprint via cargo install")?;
-        println!("✓ dprint installed successfully");
-    } else {
-        println!("✓ dprint is available");
-    }
-
     // Check if plugins need to be initialized/updated
     println!("Initializing dprint plugins...");
     if let Err(e) = cmd!(sh, "dprint upgrade").run() {
