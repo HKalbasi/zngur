@@ -1,0 +1,15 @@
+{
+  "markdown": {
+    "lineWidth": 100,
+    "emphasisKind": "asterisks",
+    "strongKind": "asterisks",
+    "textWrap": "maintain",
+    "ignoreDirective": "dprint-ignore",
+    "ignoreFileDirective": "dprint-ignore-file",
+    "ignoreStartDirective": "dprint-ignore-start",
+    "ignoreEndDirective": "dprint-ignore-end"
+  },
+  "includes": ["book/src/**/*.md", "*.md"],
+  "excludes": [],
+  "plugins": ["https://plugins.dprint.dev/markdown-0.17.8.wasm"]
+}
