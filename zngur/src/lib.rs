@@ -152,11 +152,10 @@ impl AutoZngur {
 
     pub fn generate(
         self,
-        cr: rustdoc_types::Crate,
+        crate_map: HashMap<u32, rustdoc_types::Crate>,
         sizes: HashMap<String, LayoutPolicy>,
-        rcore: HashMap<&str, rustdoc_types::Crate>,
     ) {
-        let spec = ZngurSpec::from_crate(cr, sizes);
+        let spec = ZngurSpec::from_crate(crate_map, sizes);
         let file = ZngurGenerator::build_from_zng(spec);
 
         let (rust, h, cpp) = file.render();

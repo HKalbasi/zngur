@@ -1,4 +1,5 @@
 use rustdoc_json::*;
+use rustdoc_types::Crate;
 use std::{
     collections::HashMap,
     fs::{self, read_to_string},
@@ -9,6 +10,13 @@ use zngur_def::LayoutPolicy;
 
 use clap::{Args, Parser};
 use zngur::{AutoZngur, SizeInfo, Zngur};
+
+const ALLOC: &str = include_str!("../stdjson/alloc.json");
+const CORE: &str = include_str!("../stdjson/core.json");
+const PROC_MACRO: &str = include_str!("../stdjson/proc_macro.json");
+const STD: &str = include_str!("../stdjson/std.json");
+const STD_DETECT: &str = include_str!("../stdjson/std_detect.json");
+const TEST: &str = include_str!("../stdjson/test.json");
 
 #[derive(Parser)]
 #[command(version)]
@@ -56,12 +64,6 @@ enum Command {
 
 fn main() {
     let cmd = Command::parse();
-    const ALLOC: &str = include_str!("../stdjson/alloc.json");
-    const CORE: &str = include_str!("../stdjson/core.json");
-    const PROC_MACRO: &str = include_str!("../stdjson/proc_macro.json");
-    const STD: &str = include_str!("../stdjson/std.json");
-    const STD_DETECT: &str = include_str!("../stdjson/std_detect.json");
-    const TEST: &str = include_str!("../stdjson/test.json");
     match cmd {
         Command::Generate {
             path,
