@@ -7,6 +7,7 @@ use crate::cpp::{
 use sailfish::Template;
 use zngur_def::{RustTrait, ZngurWellknownTraitData};
 
+use crate::rust::IntoCpp;
 use itertools::Itertools;
 
 #[derive(Template)]

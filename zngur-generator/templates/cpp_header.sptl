@@ -357,13 +357,11 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
     {
       public:
         <%= td.ty.path.name() %>() = delete;
-    <% }
-    CppLayoutPolicy::StackAllocated { size, align } => { %>
+    <% } CppLayoutPolicy::StackAllocated { size, align } => { %>
     {
       private:
         alignas(<%= align %>) mutable ::std::array< ::uint8_t, <%= size %>> data;
-    <% }
-    CppLayoutPolicy::HeapAllocated { .. } => { %>
+    <% } CppLayoutPolicy::HeapAllocated { .. } => { %>
     {
       private:
         ::uint8_t* data;
@@ -371,26 +369,111 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
 } %>
 
 <% match td.layout {
+  CppLayoutPolicy::OnlyByRef => { %>
+  <% }
   CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
   friend uint8_t* ::rust::__zngur_internal_data_ptr< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
   friend void ::rust::__zngur_internal_check_init< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
   friend void ::rust::__zngur_internal_assume_init< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
   friend void ::rust::__zngur_internal_assume_deinit< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
   friend ::rust::ZngurPrettyPrinter< <%= td.ty %> >;
-  <% }
-  CppLayoutPolicy::OnlyByRef => { %>
+
+  <% if td.ty.path.to_string() == "::rust::Bool" { %>
+    public:
+      operator bool() {
+        return data[0];
+      }
+      Bool(bool b) {
+        data[0] = b;
+      }
+    <% } %>
+
+    <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
+    <% if !is_copy { %>
+      bool drop_flag;
+    <% } %>
+
+    <% let (alloc_heap, free_heap, copy_data) = match &td.layout {
+      CppLayoutPolicy::StackAllocated { .. } => (
+        "".to_owned(),
+        "".to_owned(),
+        "this->data = other.data;".to_owned(),
+      ),
+      CppLayoutPolicy::HeapAllocated { .. } => (
+        "data = ::rust::alloc_fn();".to_owned(),
+        "::rust::free_fn(data);".to_owned(),
+        "memcpy(this->data, other.data, ::rust::size_fn());".to_owned(),
+      ),
+      CppLayoutPolicy::OnlyByRef => unreachable!(),
+    }; %>
+
+    public:
+    <% if is_copy { %>
+      <%= td.ty.path.name() %>() { <%= alloc_heap %> }
+      ~<%= td.ty.path.name() %>() { <%= free_heap %> }
+      <%= td.ty.path.name() %>(const <%= td.ty.path.name() %>& other) {
+        <%= alloc_heap %>
+        <%= copy_data %>
+      }
+      <%= td.ty.path.name() %>& operator=(const <%= td.ty.path.name() %>& other) {
+        <%= copy_data %> return *this;
+      }
+      <%= td.ty.path.name() %>(<%= td.ty.path.name() %>&& other) {
+        <%= alloc_heap %>
+        <%= copy_data %>
+      }
+      <%= td.ty.path.name() %>& operator=(<%= td.ty.path.name() %>&& other) {
+        <%= copy_data %>
+        return *this;
+      }
+    <% } else { /* !is_copy */ %>
+      <% let drop_in_place = td.wellknown_traits.iter().find_map(|x| match x {
+        ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
+        _ => None,
+      }).unwrap(); %>
+
+      <%= td.ty.path.name() %>() : drop_flag(false) { <%= alloc_heap %> }
+      ~<%= td.ty.path.name() %>() {
+        if (drop_flag) {
+          <%= drop_in_place %>(&data[0]);
+        }
+        <%= free_heap %>
+      }
+      <%= td.ty.path.name() %>(const <%= td.ty.path.name() %>& other) = delete;
+      <%= td.ty.path.name() %>& operator=(const <%= td.ty.path.name() %>& other) = delete;
+      <%= td.ty.path.name() %>(<%= td.ty.path.name() %>&& other) : drop_flag(false) {
+        <%= alloc_heap %>
+        *this = ::std::move(other);
+      }
+      <%= td.ty.path.name() %>& operator=(<%= td.ty.path.name() %>&& other) {
+        if (this != &other) {
+          if (drop_flag) {
+            <%= drop_in_place %>(&data[0]);
+          }
+          this->drop_flag = other.drop_flag;
+          <%= copy_data %>
+          other.drop_flag = false;
+        }
+        return *this;
+      }
+    <% } %>
+
+    <% match &td.from_trait {
+      Some(RustTrait::Fn { inputs, output, .. }) => { %>
+        static inline <%= td.ty.path.name() %> make_box(
+          ::std::function< <%= output.into_cpp() %> (<%= inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
+        );
+      <% }
+      Some(RustTrait::Normal{..}) => { %>
+        template<typename T, typename... Args>
+        static inline <%= td.ty.path.name() %> make_box(Args&&... args);
+      <% }
+      None => { %>
+      <% }
+    } %>
+
   <% }
 } %>
-
-<% if td.ty.path.to_string() == "::rust::Bool" { %>
-public:
-  operator bool() {
-    return data[0];
-  }
-  Bool(bool b) {
-    data[0] = b;
-  }
-<% } %>
 
 <% } %>
 
