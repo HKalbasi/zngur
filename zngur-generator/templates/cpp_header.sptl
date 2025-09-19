@@ -330,3 +330,70 @@ extern "C" {
     <%= as_ty.path.close_namespace() %>
   <% } %>
 <% } %>
+
+<% for td in self.type_defs { %>
+
+namespace rust {
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
+  template<>
+  inline void __zngur_internal_check_init< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
+  template<>
+  inline void __zngur_internal_assume_init< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
+  template<>
+  inline void __zngur_internal_assume_deinit< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
+  template<>
+  inline size_t __zngur_internal_size_of< <%= td.ty %> >() noexcept ;
+}
+
+<%= td.ty.path.open_namespace() %>
+
+<% if td.ty.path.0 == ["rust", "Unit"] { %>
+template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
+<% } else { %>
+<%= td.ty.specialization_decl() %>
+<% match td.layout {
+    CppLayoutPolicy::OnlyByRef => { %>
+    {
+      public:
+        <%= td.ty.path.name() %>() = delete;
+    <% }
+    CppLayoutPolicy::StackAllocated { size, align } => { %>
+    {
+      private:
+        alignas(<%= align %>) mutable ::std::array< ::uint8_t, <%= size %>> data;
+    <% }
+    CppLayoutPolicy::HeapAllocated { .. } => { %>
+    {
+      private:
+        ::uint8_t* data;
+    <% }
+} %>
+
+<% match td.layout {
+  CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
+  friend uint8_t* ::rust::__zngur_internal_data_ptr< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
+  friend void ::rust::__zngur_internal_check_init< <%= td.ty %> >(const <%= td.ty %>& t) noexcept ;
+  friend void ::rust::__zngur_internal_assume_init< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
+  friend void ::rust::__zngur_internal_assume_deinit< <%= td.ty %> >(<%= td.ty %>& t) noexcept ;
+  friend ::rust::ZngurPrettyPrinter< <%= td.ty %> >;
+  <% }
+  CppLayoutPolicy::OnlyByRef => { %>
+  <% }
+} %>
+
+<% if td.ty.path.to_string() == "::rust::Bool" { %>
+public:
+  operator bool() {
+    return data[0];
+  }
+  Bool(bool b) {
+    data[0] = b;
+  }
+<% } %>
+
+<% } %>
+
+<%= self.emit_type_old(td) %>
+
+<% } %>

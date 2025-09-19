@@ -139,20 +139,6 @@ impl CppType {
         }
     }
 
-    fn emit_specialization_decl(&self, state: &mut State) -> std::fmt::Result {
-        if self.generic_args.is_empty() {
-            write!(state, "struct {}", self.path.name())?;
-        } else {
-            write!(
-                state,
-                "template<> struct {}< {} >",
-                self.path.name(),
-                self.generic_args.iter().join(", ")
-            )?;
-        }
-        Ok(())
-    }
-
     fn header_helper(&self, state: &mut impl Write) -> std::fmt::Result {
         // Note: probably need to keep this out of the template because it's recursive.
         for x in &self.generic_args {
@@ -250,9 +236,10 @@ impl From<&str> for CppType {
     }
 }
 
-struct State {
-    text: String,
-    panic_to_exception: Option<PanicToExceptionSymbols>,
+// pub(crate) just for migration
+pub(crate) struct State {
+    pub(crate) text: String,
+    pub(crate) panic_to_exception: Option<PanicToExceptionSymbols>,
 }
 
 impl State {
@@ -809,102 +796,14 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
         Ok(())
     }
 
-    fn emit(&self, state: &mut State) -> std::fmt::Result {
+    pub(crate) fn emit(&self, state: &mut State) -> std::fmt::Result {
         let is_copy = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);
-        writeln!(
-            state,
-            r#"
-namespace rust {{
-    template<>
-    inline uint8_t* __zngur_internal_data_ptr< {ty} >(const {ty}& t) noexcept ;
-    template<>
-    inline void __zngur_internal_check_init< {ty} >(const {ty}& t) noexcept ;
-    template<>
-    inline void __zngur_internal_assume_init< {ty} >({ty}& t) noexcept ;
-    template<>
-    inline void __zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept ;
-    template<>
-    inline size_t __zngur_internal_size_of< {ty} >() noexcept ;
-}}"#,
-            ty = self.ty,
-        )?;
-        self.ty.path.emit_open_namespace(state)?;
-        if self.ty.path.0 == ["rust", "Unit"] {
-            write!(
-                state,
-                "template<> struct Tuple<> {{ ::std::array< ::uint8_t, 1> data; }};"
-            )?;
-        } else {
-            self.ty.emit_specialization_decl(state)?;
+        if self.ty.path.0 != ["rust", "Unit"] {
             match self.layout {
-                CppLayoutPolicy::OnlyByRef => {
-                    writeln!(
-                        state,
-                        r#"
-{{
-public:
-    {ty}() = delete;
-    "#,
-                        ty = self.ty.path.name(),
-                    )?;
-                }
+                CppLayoutPolicy::OnlyByRef => (),
                 CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => {
-                    match self.layout {
-                        CppLayoutPolicy::StackAllocated { size, align } => {
-                            writeln!(
-                                state,
-                                r#"
-{{
-private:
-    alignas({align}) mutable ::std::array<uint8_t, {size}> data;
-            "#,
-                            )?;
-                        }
-                        CppLayoutPolicy::HeapAllocated { .. } => {
-                            writeln!(
-                                state,
-                                r#"
-{{
-private:
-    uint8_t* data;
-            "#,
-                            )?;
-                        }
-                        CppLayoutPolicy::OnlyByRef => unreachable!(),
-                    }
-                    writeln!(
-                        state,
-                        r#"
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< {ty} >(const {ty}& t) noexcept ;
-    friend void ::rust::__zngur_internal_check_init< {ty} >(const {ty}& t) noexcept ;
-    friend void ::rust::__zngur_internal_assume_init< {ty} >({ty}& t) noexcept ;
-    friend void ::rust::__zngur_internal_assume_deinit< {ty} >({ty}& t) noexcept ;
-    friend ::rust::ZngurPrettyPrinter< {ty} >;
-"#,
-                        ty = self.ty,
-                    )?;
-                    if self.ty.path.to_string() == "::rust::Bool" {
-                        assert_eq!(
-                            self.layout,
-                            CppLayoutPolicy::StackAllocated { size: 1, align: 1 }
-                        );
-                        assert!(is_copy);
-                        writeln!(
-                            state,
-                            r#"
-public:
-    operator bool() {{
-        return data[0];
-    }}
-    Bool(bool b) {{
-        data[0] = b;
-    }}
-private:
-    "#,
-                        )?;
-                    }
                     if !is_copy {
                         writeln!(state, "   bool drop_flag;")?;
                     }
@@ -1536,9 +1435,6 @@ impl CppFile {
             exported_impls: &self.exported_impls,
         };
         state.text += template.render().unwrap().as_str();
-        for td in &self.type_defs {
-            td.emit(state)?;
-        }
         for td in &self.type_defs {
             td.emit_cpp_fn_defs(state, &self.trait_defs)?;
         }
