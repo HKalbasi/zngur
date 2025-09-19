@@ -45,15 +45,14 @@ impl CppPath {
         )
     }
 
-    fn emit_in_namespace(
-        &self,
-        state: &mut State,
-        f: impl FnOnce(&mut State) -> std::fmt::Result,
-    ) -> std::fmt::Result {
+    fn emit_open_namespace(&self, state: &mut State) -> std::fmt::Result {
         for p in self.namespace() {
             writeln!(state, "namespace {} {{", p)?;
         }
-        f(state)?;
+        Ok(())
+    }
+
+    fn emit_close_namespace(&self, state: &mut State) -> std::fmt::Result {
         for _ in self.namespace() {
             writeln!(state, "}}")?;
         }
@@ -379,9 +378,10 @@ pub struct CppExportedImplDefinition {
 
 impl CppFnDefinition {
     fn emit_cpp_def(&self, state: &mut State) -> std::fmt::Result {
-        self.name.emit_in_namespace(state, |state| {
-            self.sig.emit_cpp_def(state, self.name.name())
-        })
+        self.name.emit_open_namespace(state)?;
+        self.sig.emit_cpp_def(state, self.name.name())?;
+        self.name.emit_close_namespace(state)?;
+        Ok(())
     }
 }
 
@@ -830,16 +830,14 @@ namespace rust {{
 }}"#,
             ty = self.ty,
         )?;
-        self.ty.path.emit_in_namespace(state, |state| {
-            if self.ty.path.0 == ["rust", "Unit"] {
-                write!(
-                    state,
-                    "template<> struct Tuple<> {{ ::std::array< ::uint8_t, 1> data; }};"
-                )?;
-                return Ok(());
-            } else {
-                self.ty.emit_specialization_decl(state)?;
-            }
+        self.ty.path.emit_open_namespace(state)?;
+        if self.ty.path.0 == ["rust", "Unit"] {
+            write!(
+                state,
+                "template<> struct Tuple<> {{ ::std::array< ::uint8_t, 1> data; }};"
+            )?;
+        } else {
+            self.ty.emit_specialization_decl(state)?;
             match self.layout {
                 CppLayoutPolicy::OnlyByRef => {
                     writeln!(
@@ -1083,8 +1081,9 @@ private:
                     cpp_handle_field_name(&field.name),
                 )?;
             }
-            writeln!(state, "}};")
-        })?;
+            writeln!(state, "}};")?;
+        }
+        self.ty.path.emit_close_namespace(state)?;
         let ty = &self.ty;
         if self.layout != CppLayoutPolicy::OnlyByRef {
             match &self.layout {
