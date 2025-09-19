@@ -78,11 +78,11 @@ fn main() {
             mangling_base,
             cpp_namespace,
         } => {
-            let pp = path.parent().unwrap();
-            let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
-            let h_file = h_file.unwrap_or_else(|| pp.join("generated.h"));
-            let rs_file = rs_file.unwrap_or_else(|| pp.join("src/generated.rs"));
             if auto {
+                let cpp_file = cpp_file.unwrap_or_else(|| path.join("generated.cpp"));
+                let h_file = h_file.unwrap_or_else(|| path.join("generated.h"));
+                let rs_file = rs_file.unwrap_or_else(|| path.join("src/generated.rs"));
+                dbg!(&cpp_file, &h_file, &rs_file);
                 let mut newpath = path.clone();
                 newpath.push("Cargo.toml");
                 let size_info = get_type_sizes(path);
@@ -118,6 +118,10 @@ fn main() {
                     .with_rs_file(rs_file)
                     .generate(crate_map, size_info);
             } else {
+                let pp = path.parent().unwrap();
+                let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
+                let h_file = h_file.unwrap_or_else(|| pp.join("generated.h"));
+                let rs_file = rs_file.unwrap_or_else(|| pp.join("src/generated.rs"));
                 let mut zng = Zngur::from_zng_file(&path)
                     .with_cpp_file(cpp_file)
                     .with_h_file(h_file)
