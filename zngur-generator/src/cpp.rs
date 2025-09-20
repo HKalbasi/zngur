@@ -559,7 +559,7 @@ impl CppTypeDefinition {
     }
 
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
-        for ref_kind in ["RefMut", "Ref"] {
+        for (ref_kind, raw_kind) in [("RefMut", "RawMut"), ("Ref", "Raw")] {
             let is_unsized = self
                 .wellknown_traits
                 .contains(&ZngurWellknownTraitData::Unsized);
@@ -799,6 +799,29 @@ template<>
 inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() noexcept {{
     return {size};
 }}
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr< {raw_kind} < {ty} > >(const {raw_kind}< {ty} >& t) noexcept {{
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+}}
+
+template<>
+inline void __zngur_internal_assume_init< {raw_kind} < {ty} > >({raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline void __zngur_internal_check_init< {raw_kind} < {ty} > >(const {raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline void __zngur_internal_assume_deinit< {raw_kind} < {ty} > >({raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline size_t __zngur_internal_size_of< {raw_kind} < {ty} > >() noexcept {{
+    return {size};
+}}
+
 }}"#,
                 ty = self.ty,
                 size = if is_unsized { 16 } else { 8 },
@@ -1683,6 +1706,14 @@ namespace rust {
     template<typename T, size_t OFFSET>
     struct FieldRefMut {
         inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    };
+
+    template<typename T>
+    struct Raw {
+    };
+
+    template<typename T>
+    struct RawMut {
     };
 
     template<typename... T>

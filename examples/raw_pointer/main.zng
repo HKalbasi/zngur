@@ -1,0 +1,29 @@
+#convert_panic_to_exception
+
+mod ::std {    
+    mod vec {
+        type Vec<i32> {
+            #layout(size = 24, align = 8);
+            wellknown_traits(Debug);
+
+            fn new() -> Vec<i32>;
+            fn push(&mut self, i32);
+            fn clone(&self) -> Vec<i32>;
+            fn reserve(&mut self, usize);
+            fn set_len(&mut self, usize);
+            fn as_mut_ptr(&mut self) -> *mut i32;
+        }
+
+        type Vec<Vec<i32>> {
+            #layout(size = 24, align = 8);
+            wellknown_traits(Debug);
+
+            fn new() -> Vec<Vec<i32>>;
+            fn push(&mut self, Vec<i32>);
+            fn clone(&self) -> Vec<Vec<i32>>;
+            fn reserve(&mut self, usize);
+            fn set_len(&mut self, usize);
+            fn as_mut_ptr(&mut self) -> *mut Vec<i32>;
+        }
+    }
+}
