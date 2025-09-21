@@ -693,10 +693,10 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         inputs: &[RustType],
         output: &RustType,
         use_path: Option<Vec<String>>,
-        deref: bool,
+        deref: Option<Mutability>,
     ) -> String {
         let mut mangled_name = self.mangle_name(rust_name);
-        if deref {
+        if deref.is_some() {
             mangled_name += "_deref_";
             mangled_name += &self.mangle_name(&inputs[0].to_string());
         }
@@ -723,8 +723,10 @@ pub extern "C" fn {mangled_name}("#
                 this,
                 "    ::std::ptr::write(o as *mut {output}, {rust_name}("
             );
-            if deref {
-                w!(this, "&");
+            match deref {
+                Some(Mutability::Mut) => w!(this, "&mut"),
+                Some(Mutability::Not) => w!(this, "&"),
+                None => {}
             }
             for (n, ty) in inputs.iter().enumerate() {
                 w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");

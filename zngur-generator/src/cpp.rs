@@ -1710,10 +1710,57 @@ namespace rust {
 
     template<typename T>
     struct Raw {
+        uint8_t* data;
+
+        Raw() {}
+        Raw(uint8_t* data) : data(data) {
+        }
+
+        Raw<T> offset(size_t n) {
+            return Raw(data + n * __zngur_internal_size_of<T>());
+        }
     };
 
     template<typename T>
     struct RawMut {
+        uint8_t* data;
+
+        RawMut() {}
+        RawMut(RefMut<T> value) {
+            memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+        }
+        RawMut(uint8_t* data) : data(data) {
+        }
+
+        RawMut<T> offset(size_t n) {
+            return RawMut(data + n * __zngur_internal_size_of<T>());
+        }
+
+        T read() {
+            T value;
+            memcpy(__zngur_internal_data_ptr<T>(value), data, __zngur_internal_size_of<T>());
+            __zngur_internal_assume_init<T>(value);
+            return value;
+        }
+
+        Ref<T> read_ref() {
+            Ref<T> value;
+            memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+            __zngur_internal_assume_init<Ref<T>>(value);
+            return value;
+        }
+
+        RefMut<T> read_mut() {
+            RefMut<T> value;
+            memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &data, __zngur_internal_size_of<RefMut<T>>());
+            __zngur_internal_assume_init<RefMut<T>>(value);
+            return value;
+        }
+
+        void write(T value) {
+            memcpy(data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+            __zngur_internal_assume_deinit<T>(value);
+        }
     };
 
     template<typename... T>
