@@ -101,9 +101,9 @@ impl CppType {
         Ok(())
     }
 
-    fn emit_header(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_header(&self, state: &mut State, is_unsized: bool) -> std::fmt::Result {
         for x in &self.generic_args {
-            x.emit_header(state)?;
+            x.emit_header(state, false)?;
         }
         if !self.path.need_header() {
             return Ok(());
@@ -112,7 +112,18 @@ impl CppType {
             if !self.generic_args.is_empty() {
                 writeln!(state, "template<typename ...T>")?;
             }
-            writeln!(state, "struct {};", self.path.name())
+            writeln!(state, "struct {};", self.path.name())?;
+            if is_unsized {
+                writeln!(
+                        state,
+                        r#"
+template<>
+struct zngur_is_unsized< {ty} > : ::std::true_type {{}};
+"#,
+                        ty = self,
+                    )?;
+            }
+            Ok(())
         })
     }
 }
@@ -576,6 +587,21 @@ impl CppTypeDefinition {
                     state,
                     r#"
 namespace rust {{
+"#,
+                )?;
+                if ref_kind == "Ref" {
+//                     writeln!(
+//                         state,
+//                         r#"
+// template<>
+// struct zngur_is_unsized< {ty} > : ::std::true_type {{}};
+// "#,
+//                         ty = self.ty,
+//                     )?;
+                }
+                writeln!(
+                    state,
+                    r#"
 template<>
 struct {ref_kind}< {ty} > {{
     {ref_kind}() {{
@@ -1614,6 +1640,7 @@ impl CppFile {
 #include <array>
 #include <iostream>
 #include <functional>
+#include <type_traits>
 #include <math.h>
 "#;
         state.text += &self.additional_includes;
@@ -1709,11 +1736,19 @@ namespace rust {
     };
 
     template<typename T>
+    struct zngur_is_unsized : std::false_type {};
+
+    template<typename T>
     struct Raw {
-        uint8_t* data;
+        using DataType = typename std::conditional<
+            zngur_is_unsized<T>::value,
+            std::tuple<uint8_t*, size_t>,
+            uint8_t*
+        >::type;
+        DataType data;
 
         Raw() {}
-        Raw(uint8_t* data) : data(data) {
+        Raw(DataType data) : data(data) {
         }
 
         Raw<T> offset(size_t n) {
@@ -1723,13 +1758,18 @@ namespace rust {
 
     template<typename T>
     struct RawMut {
-        uint8_t* data;
+        using DataType = typename std::conditional<
+            zngur_is_unsized<T>::value,
+            std::tuple<uint8_t*, size_t>,
+            uint8_t*
+        >::type;
+        DataType data;
 
         RawMut() {}
         RawMut(RefMut<T> value) {
             memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
         }
-        RawMut(uint8_t* data) : data(data) {
+        RawMut(DataType data) : data(data) {
         }
 
         RawMut<T> offset(size_t n) {
@@ -1945,12 +1985,12 @@ namespace rust {
         }
         writeln!(state, "}}")?;
         for td in &self.type_defs {
-            td.ty.emit_header(state)?;
+            td.ty.emit_header(state, td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized))?;
         }
         for imp in &self.exported_impls {
-            imp.ty.emit_header(state)?;
+            imp.ty.emit_header(state, false)?;
             if let Some(tr) = &imp.tr {
-                tr.emit_header(state)?;
+                tr.emit_header(state, false)?;
             }
         }
         for (_, td) in &self.trait_defs {

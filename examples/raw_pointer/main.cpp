@@ -46,4 +46,8 @@ int main() {
   s4_raw_mut.read_mut().push(5);
   zngur_dbg(s4_raw_mut.read_ref());
   zngur_dbg(ss);
+
+  std::vector<int32_t> v{10, 20, 3, 15};
+  rust::RawMut<rust::Slice<int32_t>> s5_raw_mut{{reinterpret_cast<uint8_t*>(v.data()), 3}};
+  zngur_dbg(s5_raw_mut.read_ref().to_vec());
 }
