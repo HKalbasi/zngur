@@ -334,6 +334,7 @@ extern "C" {
 
 <% for td in self.type_defs { %>
   <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
+  <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
   <% let name = td.ty.path.name(); %>
 
   namespace rust {
@@ -565,106 +566,99 @@ namespace rust {
 
 } // namespace rust
 
-// RefMut specialization
-<% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
-
 namespace rust {
 
-<% if is_unsized { %>
   template<>
   struct RefMut< <%- td.ty %> > {
-      RefMut() {
-          data = {0, 0};
-      }
   private:
-      ::std::array<size_t, 2> data;
-      friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::RefMut< <%- td.ty %> > >(const ::rust::RefMut< <%- td.ty %> >& t) noexcept ;
-      friend ::rust::ZngurPrettyPrinter< ::rust::RefMut< <%- td.ty %> > >;
-<% } else { %>
-  template<>
-  struct RefMut< <%- td.ty %> > {
-    RefMut() {
-      data = 0;
-    }
-<% if !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-    RefMut(const <%- td.ty %>& t) {
-      ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
-      data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
-    }
-<% } %>
-<% for field in &td.fields { %>
-    [[no_unique_address]] ::rust::FieldRefMut<
-        <%- field.ty.into_cpp() %>,
-        <%- field.offset %>
-    > <%- cpp_handle_field_name(&field.name) %>;
-<% } %>
-  private:
-    size_t data;
+    <% if is_unsized { %> ::std::array<size_t, 2> <% } else { %> size_t <% } %> data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::RefMut< <%- td.ty %> > >(const ::rust::RefMut< <%- td.ty %> >& t) noexcept ;
     friend ::rust::ZngurPrettyPrinter< ::rust::RefMut< <%- td.ty %> > >;
-<% } %>
   public:
+    RefMut() {
+      data = <% if is_unsized { %> {0, 0} <% } else { %> 0 <% } %>;
+    }
+
     friend Ref< <%- td.ty %> >;
-<% if !is_unsized { %>
-    template<size_t OFFSET>
-    RefMut(const FieldOwned< <%- td.ty %>, OFFSET >& f) {
-        data = reinterpret_cast<size_t>(&f) + OFFSET;
-    }
-    template<size_t OFFSET>
-    RefMut(const FieldRefMut< <%- td.ty %>, OFFSET >& f) {
-        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
-    }
-<% } %>
-<% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-  <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
-  inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
-  <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-    <% let tr = tr.into_cpp(); %>
-    inline RefMut(<%- tr %>& arg);
-  <% } None => { %>
-  <% }
-} %>
-<% if let Some(cpp_value) = &td.cpp_value { %>
-  inline <%- cpp_value.1 %>& cpp() {
-      return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(data))).as_cpp< <%- cpp_value.1 %> >();
+
+    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
+      <% for field in &td.fields { %>
+        [[no_unique_address]] ::rust::FieldRefMut<
+            <%- field.ty.into_cpp() %>,
+            <%- field.offset %>
+        > <%- cpp_handle_field_name(&field.name) %>;
+      <% } %>
+    <% } %>
+
+    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
+      RefMut(const <%- td.ty %>& t) {
+        ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
+        data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+      }
+    <% } %>
+
+    <% if !is_unsized { %>
+      template<size_t OFFSET>
+      RefMut(const FieldOwned< <%- td.ty %>, OFFSET >& f) {
+          data = reinterpret_cast<size_t>(&f) + OFFSET;
+      }
+      template<size_t OFFSET>
+      RefMut(const FieldRefMut< <%- td.ty %>, OFFSET >& f) {
+          data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+      }
+    <% } %>
+
+    <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
+      <% } Some(tr @ RustTrait::Normal { .. }) => { %>
+        <% let tr = tr.into_cpp(); %>
+        inline RefMut(<%- tr %>& arg);
+      <% } None => { %>
+      <% }
+    } %>
+
+    <% if let Some(cpp_value) = &td.cpp_value { %>
+      inline <%- cpp_value.1 %>& cpp() {
+          return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(data))).as_cpp< <%- cpp_value.1 %> >();
+      }
+    <% } %>
+
+    <% if let Some(cpp_ref) = &td.cpp_ref { %>
+      inline <%- cpp_ref.0 %>& cpp() {
+          return *reinterpret_cast< <%- cpp_ref.0 %>* >(data);
+      }
+      inline RefMut(const <%- cpp_ref.0 %>& t) : data(reinterpret_cast<size_t>(&t)) {}
+    <% } %>
+
+    <% for method in &td.methods { %>
+      <% if let ZngurMethodReceiver::Ref(_) = method.kind { %>
+        <%- method.sig.output %> <%- method.name %>(
+          <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+        ) const noexcept ;
+      <% } %>
+    <% } %>
+
+  }; // struct RefMut< <%- td.ty %> >
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >& t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
   }
-<% } %>
-<% if let Some(cpp_ref) = &td.cpp_ref { %>
-  inline <%- cpp_ref.0 %>& cpp() {
-      return *reinterpret_cast< <%- cpp_ref.0 %>* >(data);
+
+  template<>
+  inline void __zngur_internal_assume_init< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {}
+
+  template<>
+  inline void __zngur_internal_check_init< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >&) noexcept {}
+
+  template<>
+  inline void __zngur_internal_assume_deinit< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {}
+
+  template<>
+  inline size_t __zngur_internal_size_of< RefMut < <%- td.ty %> > >() noexcept {
+      return <% if is_unsized { %>16<% } else { %>8<% } %>;
   }
-  inline RefMut(const <%- cpp_ref.0 %>& t) : data(reinterpret_cast<size_t>(&t)) {}
-<% } %>
-<% for method in &td.methods { %>
-  <% if let ZngurMethodReceiver::Ref(_) = method.kind { %>
-    <%- method.sig.output %> <%- method.name %>(
-      <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
-    ) const noexcept ;
-  <% } %>
-<% } %>
-};
-
-template<>
-inline uint8_t* __zngur_internal_data_ptr< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >& t) noexcept {
-    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
-}
-
-template<>
-inline void __zngur_internal_assume_init< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {
-}
-
-template<>
-inline void __zngur_internal_check_init< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >&) noexcept {
-}
-
-template<>
-inline void __zngur_internal_assume_deinit< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {
-}
-
-template<>
-inline size_t __zngur_internal_size_of< RefMut < <%- td.ty %> > >() noexcept {
-    return <% if is_unsized { %>16<% } else { %>8<% } %>;
-}
 
 } // namespace rust
 
@@ -674,89 +668,89 @@ inline size_t __zngur_internal_size_of< RefMut < <%- td.ty %> > >() noexcept {
 <% } %>
 
 namespace rust {
-<% if is_unsized { %>
-template<>
-struct Ref< <%- td.ty %> > {
-    Ref() {
-        data = {0, 0};
-    }
-private:
-    ::std::array<size_t, 2> data;
+
+  template<>
+  struct Ref< <%- td.ty %> > {
+  private:
+    <% if is_unsized { %> ::std::array<size_t, 2> <% } else { %> size_t <% } %> data;
     friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::Ref< <%- td.ty %> > >(const ::rust::Ref< <%- td.ty %> >& t) noexcept ;
     friend ::rust::ZngurPrettyPrinter< ::rust::Ref< <%- td.ty %> > >;
-<% } else { %>
-template<>
-struct Ref< <%- td.ty %> > {
+  public:
     Ref() {
-        data = 0;
+      data = <% if is_unsized { %> {0, 0} <% } else { %> 0 <% } %>;
     }
-<% if !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-    Ref(const <%- td.ty %>& t) {
+
+    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
+      Ref(const <%- td.ty %>& t) {
         ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
-    }
-<% } %>
-<% for field in &td.fields { %>
-    [[no_unique_address]] ::rust::FieldRef<<%- field.ty.into_cpp() %>, <%- field.offset %>> <%- cpp_handle_field_name(&field.name) %>;
-<% } %>
-private:
-    size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::Ref< <%- td.ty %> > >(const ::rust::Ref< <%- td.ty %> >& t) noexcept ;
-    friend ::rust::ZngurPrettyPrinter< ::rust::Ref< <%- td.ty %> > >;
-<% } %>
-public:
-    Ref(RefMut< <%- td.ty %> > rm) {
-        data = rm.data;
-    }
-<% if !is_unsized { %>
-    template<size_t OFFSET>
-    Ref(const FieldOwned< <%- td.ty %>, OFFSET >& f) {
-        data = reinterpret_cast<size_t>(&f) + OFFSET;
-    }
+      }
 
-    template<size_t OFFSET>
-    Ref(const FieldRef< <%- td.ty %>, OFFSET >& f) {
-        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
-    }
+      <% for field in &td.fields { %>
+          [[no_unique_address]] ::rust::FieldRef<
+              <%- field.ty.into_cpp() %>,
+              <%- field.offset %>
+          > <%- cpp_handle_field_name(&field.name) %>;
+      <% } %>
 
-    template<size_t OFFSET>
-    Ref(const FieldRefMut< <%- td.ty %>, OFFSET >& f) {
-        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
-    }
-<% } %>
-<% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-    <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
-inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
-<% } Some(tr @ RustTrait::Normal { .. }) => { %>
-    <% let tr = tr.into_cpp(); %>
-            inline Ref(<%- tr %>& arg);
-<% } None => { %>
-<% }
-} %>
-<% if let Some(cpp_value) = &td.cpp_value { %>
-                inline <%- cpp_value.1 %>& cpp() {
-                    return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(data))).as_cpp< <%- cpp_value.1 %> >();
-                }
-<% } %>
-<% if let Some(cpp_ref) = &td.cpp_ref { %>
-                inline <%- cpp_ref.0 %>& cpp() {
-                    return *reinterpret_cast< <%- cpp_ref.0 %>* >(data);
-                }
-                inline Ref(const <%- cpp_ref.0 %>& t) : data(reinterpret_cast<size_t>(&t)) {}
-<% } %>
-<% for method in &td.methods { %>
-    <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
-        <% if m != Mutability::Mut { %>
-        <%- method.sig.output %> <%- method.name %>(<%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) const noexcept ;
-        <% } %>
     <% } %>
-<% } %>
-<% if td.ty.path.to_string() == "::rust::Str" { %>
-    friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+
+      Ref(RefMut< <%- td.ty %> > rm) {
+          data = rm.data;
+      }
+
+    <% if !is_unsized { %>
+      template<size_t OFFSET>
+      Ref(const FieldOwned< <%- td.ty %>, OFFSET >& f) {
+          data = reinterpret_cast<size_t>(&f) + OFFSET;
+      }
+
+      template<size_t OFFSET>
+      Ref(const FieldRef< <%- td.ty %>, OFFSET >& f) {
+          data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+      }
+
+      template<size_t OFFSET>
+      Ref(const FieldRefMut< <%- td.ty %>, OFFSET >& f) {
+          data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+      }
+    <% } %>
+
+    <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
+    <% } Some(tr @ RustTrait::Normal { .. }) => { %>
+      <% let tr = tr.into_cpp(); %>
+      inline Ref(<%- tr %>& arg);
+    <% } None => { %>
+    <% }
+    } %>
+
+    <% if let Some(cpp_value) = &td.cpp_value { %>
+      inline <%- cpp_value.1 %>& cpp() {
+        return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(data))).as_cpp< <%- cpp_value.1 %> >();
+      }
+    <% } %>
+
+    <% if let Some(cpp_ref) = &td.cpp_ref { %>
+      inline <%- cpp_ref.0 %>& cpp() {
+        return *reinterpret_cast< <%- cpp_ref.0 %>* >(data);
+      }
+      inline Ref(const <%- cpp_ref.0 %>& t) : data(reinterpret_cast<size_t>(&t)) {}
+    <% } %>
+
+    <% for method in &td.methods { %>
+      <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
+        <% if m != Mutability::Mut { %>
+          <%- method.sig.output %> <%- method.name %>(<%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) const noexcept ;
+        <% } %>
+      <% } %>
+    <% } %>
+
+    <% if td.ty.path.to_string() == "::rust::Str" { %>
+      friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+    <% } %>
 };
-<% } else { %>
-};
-<% } %>
 
 template<>
 inline uint8_t* __zngur_internal_data_ptr< Ref < <%- td.ty %> > >(const Ref< <%- td.ty %> >& t) noexcept {
@@ -764,16 +758,13 @@ inline uint8_t* __zngur_internal_data_ptr< Ref < <%- td.ty %> > >(const Ref< <%-
 }
 
 template<>
-inline void __zngur_internal_assume_init< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {
-}
+inline void __zngur_internal_assume_init< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {}
 
 template<>
-inline void __zngur_internal_check_init< Ref < <%- td.ty %> > >(const Ref< <%- td.ty %> >&) noexcept {
-}
+inline void __zngur_internal_check_init< Ref < <%- td.ty %> > >(const Ref< <%- td.ty %> >&) noexcept {}
 
 template<>
-inline void __zngur_internal_assume_deinit< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {
-}
+inline void __zngur_internal_assume_deinit< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {}
 
 template<>
 inline size_t __zngur_internal_size_of< Ref < <%- td.ty %> > >() noexcept {
@@ -783,30 +774,42 @@ inline size_t __zngur_internal_size_of< Ref < <%- td.ty %> > >() noexcept {
 } // namespace rust
 
 <% if td.ty.path.to_string() == "::rust::Str" { %>
-inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
+  inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
     ::rust::Ref<::rust::Str> o;
     o.data[0] = reinterpret_cast<size_t>(input);
     o.data[1] = len;
     return o;
-}
+  }
 <% } %>
+
+namespace rust {
 
 // Field specializations
 <% for field_kind in &["FieldOwned", "FieldRef", "FieldRefMut"] { %>
-    namespace rust {
-    template<size_t OFFSET>
-    struct <%- field_kind %>< <%- td.ty %>, OFFSET > {
-<% for field in &td.fields { %>
-        [[no_unique_address]] <%- field_kind %><<%- field.ty.into_cpp() %>, OFFSET + <%- field.offset %>> <%- cpp_handle_field_name(&field.name) %>;
-<% } %>
-<% for method in &td.methods { %>
-    <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
+
+  template<size_t OFFSET>
+  struct <%- field_kind %>< <%- td.ty %>, OFFSET > {
+
+    <% for field in &td.fields { %>
+      [[no_unique_address]] <%- field_kind %><
+        <%- field.ty.into_cpp() %>,
+        OFFSET + <%- field.offset %>
+      > <%- cpp_handle_field_name(&field.name) %>;
+    <% } %>
+
+    <% for method in &td.methods { %>
+      <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
         <% if !(m == Mutability::Mut && *field_kind == "FieldRef") { %>
-        <%- method.sig.output %> <%- method.name %>(<%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) const noexcept ;
+          <%- method.sig.output %> <%- method.name %>(
+            <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+          ) const noexcept ;
         <% } %>
     <% } %>
+    <% } %>
+  };
+
 <% } %>
-    };
-    }
-<% } %>
+
+} // namespace rust
+
 <% } %>
