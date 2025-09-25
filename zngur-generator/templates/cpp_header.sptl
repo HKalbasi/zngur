@@ -332,6 +332,8 @@ extern "C" {
 <% } %>
 
 <% for td in self.type_defs { %>
+<% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
+<% let name = td.ty.path.name(); %>
 
 namespace rust {
   template<>
@@ -356,7 +358,7 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
     CppLayoutPolicy::OnlyByRef => { %>
     {
       public:
-        <%= td.ty.path.name() %>() = delete;
+        <%= name %>() = delete;
     <% } CppLayoutPolicy::StackAllocated { size, align } => { %>
     {
       private:
@@ -388,7 +390,7 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
       }
     <% } %>
 
-    <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
+
     <% if !is_copy { %>
       bool drop_flag;
     <% } %>
@@ -409,20 +411,21 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
 
     public:
     <% if is_copy { %>
-      <%= td.ty.path.name() %>() { <%= alloc_heap %> }
-      ~<%= td.ty.path.name() %>() { <%= free_heap %> }
-      <%= td.ty.path.name() %>(const <%= td.ty.path.name() %>& other) {
+      <%= name %>() { <%= alloc_heap %> }
+      ~<%= name %>() { <%= free_heap %> }
+      <%= name %>(const <%= name %>& other) {
         <%= alloc_heap %>
         <%= copy_data %>
       }
-      <%= td.ty.path.name() %>& operator=(const <%= td.ty.path.name() %>& other) {
-        <%= copy_data %> return *this;
+      <%= name %>& operator=(const <%= name %>& other) {
+        <%= copy_data %>
+        return *this;
       }
-      <%= td.ty.path.name() %>(<%= td.ty.path.name() %>&& other) {
+      <%= name %>(<%= name %>&& other) {
         <%= alloc_heap %>
         <%= copy_data %>
       }
-      <%= td.ty.path.name() %>& operator=(<%= td.ty.path.name() %>&& other) {
+      <%= name %>& operator=(<%= name %>&& other) {
         <%= copy_data %>
         return *this;
       }
@@ -432,20 +435,20 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
         _ => None,
       }).unwrap(); %>
 
-      <%= td.ty.path.name() %>() : drop_flag(false) { <%= alloc_heap %> }
-      ~<%= td.ty.path.name() %>() {
+      <%= name %>() : drop_flag(false) { <%= alloc_heap %> }
+      ~<%= name %>() {
         if (drop_flag) {
           <%= drop_in_place %>(&data[0]);
         }
         <%= free_heap %>
       }
-      <%= td.ty.path.name() %>(const <%= td.ty.path.name() %>& other) = delete;
-      <%= td.ty.path.name() %>& operator=(const <%= td.ty.path.name() %>& other) = delete;
-      <%= td.ty.path.name() %>(<%= td.ty.path.name() %>&& other) : drop_flag(false) {
+      <%= name %>(const <%= name %>& other) = delete;
+      <%= name %>& operator=(const <%= name %>& other) = delete;
+      <%= name %>(<%= name %>&& other) : drop_flag(false) {
         <%= alloc_heap %>
         *this = ::std::move(other);
       }
-      <%= td.ty.path.name() %>& operator=(<%= td.ty.path.name() %>&& other) {
+      <%= name %>& operator=(<%= name %>&& other) {
         if (this != &other) {
           if (drop_flag) {
             <%= drop_in_place %>(&data[0]);
@@ -460,13 +463,13 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
 
     <% match &td.from_trait {
       Some(RustTrait::Fn { inputs, output, .. }) => { %>
-        static inline <%= td.ty.path.name() %> make_box(
+        static inline <%= name %> make_box(
           ::std::function< <%= output.into_cpp() %> (<%= inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
         );
       <% }
       Some(RustTrait::Normal{..}) => { %>
         template<typename T, typename... Args>
-        static inline <%= td.ty.path.name() %> make_box(Args&&... args);
+        static inline <%= name %> make_box(Args&&... args);
       <% }
       None => { %>
       <% }
