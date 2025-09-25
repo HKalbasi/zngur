@@ -2,8 +2,12 @@ use std::{collections::HashMap, fmt::Display};
 
 use itertools::Itertools;
 
+mod rdoc;
+use rdoc::*;
+
 mod merge;
 pub use merge::{Merge, MergeFailure, MergeResult};
+use rustdoc_types::{ItemEnum, Primitive};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mutability {
@@ -182,6 +186,55 @@ pub enum PrimitiveRustType {
     Bool,
     Str,
     ZngurCppOpaqueOwnedObject,
+}
+
+// TODO:NRB isize and char
+impl From<Primitive> for PrimitiveRustType {
+    fn from(value: Primitive) -> Self {
+        match value.name.as_str() {
+            "u8" => PrimitiveRustType::Uint(8),
+            "u16" => PrimitiveRustType::Uint(16),
+            "u32" => PrimitiveRustType::Uint(32),
+            "u64" => PrimitiveRustType::Uint(64),
+            "u128" => PrimitiveRustType::Uint(128),
+            "i8" => PrimitiveRustType::Int(8),
+            "i16" => PrimitiveRustType::Int(16),
+            "i32" => PrimitiveRustType::Int(32),
+            "i64" => PrimitiveRustType::Int(64),
+            "i128" => PrimitiveRustType::Int(128),
+            "f32" => PrimitiveRustType::Float(32),
+            "f64" => PrimitiveRustType::Float(64),
+            "usize" => PrimitiveRustType::Usize,
+            "bool" => PrimitiveRustType::Bool,
+            "str" => PrimitiveRustType::Str,
+            _ => panic!("Unknown primitive type: {}", value.name),
+        }
+    }
+}
+
+impl From<String> for PrimitiveRustType {
+    fn from(value: String) -> Self {
+        match value.as_str() {
+            "u8" => PrimitiveRustType::Uint(8),
+            "u16" => PrimitiveRustType::Uint(16),
+            "u32" => PrimitiveRustType::Uint(32),
+            "u64" => PrimitiveRustType::Uint(64),
+            "u128" => PrimitiveRustType::Uint(128),
+            "i8" => PrimitiveRustType::Int(8),
+            "i16" => PrimitiveRustType::Int(16),
+            "i32" => PrimitiveRustType::Int(32),
+            "i64" => PrimitiveRustType::Int(64),
+            "i128" => PrimitiveRustType::Int(128),
+            "f32" => PrimitiveRustType::Float(32),
+            "f64" => PrimitiveRustType::Float(64),
+            "usize" => PrimitiveRustType::Usize,
+            "bool" => PrimitiveRustType::Bool,
+            "str" => PrimitiveRustType::Str,
+            //TODO:NRB better impl
+            "isize" => PrimitiveRustType::Int(64),
+            _ => panic!("Unknown primitive type: {}", value),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

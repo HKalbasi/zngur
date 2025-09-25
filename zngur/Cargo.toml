@@ -11,3 +11,4 @@ license.workspace = true
 
 [dependencies]
 zngur-generator = { version = "=0.7.0", path = "../zngur-generator" }
+rustdoc-types = "0.55.0"
