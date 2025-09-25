@@ -458,11 +458,6 @@ impl Default for CppTypeDefinition {
 }
 
 impl CppTypeDefinition {
-    pub(crate) fn emit(&self, _state: &mut State) -> std::fmt::Result {
-        // All specializations are now handled by the template
-        Ok(())
-    }
-
     fn emit_cpp_fn_defs(
         &self,
         state: &mut State,
