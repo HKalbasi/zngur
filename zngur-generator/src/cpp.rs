@@ -298,6 +298,7 @@ impl CppFnSig {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn emit_cpp_header(&self, state: &mut State, fn_name: &str) -> std::fmt::Result {
         let CppFnSig {
             inputs,
@@ -800,70 +801,70 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
         let is_copy = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);
-        if self.ty.path.0 != ["rust", "Unit"] {
-            for method in &self.methods {
-                writeln!(
-                    state,
-                    "static {output} {fn_name}({input_defs}) noexcept ;",
-                    output = method.sig.output,
-                    fn_name = &method.name,
-                    input_defs = method
-                        .sig
-                        .inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, ty)| format!("{ty} i{n}"))
-                        .join(", "),
-                )?;
-                if method.kind != ZngurMethodReceiver::Static {
-                    let CppFnSig {
-                        rust_link_name: _,
-                        inputs,
-                        output,
-                    } = &method.sig;
-                    writeln!(
-                        state,
-                        "{output} {fn_name}({input_defs}) {const_kw} noexcept ;",
-                        fn_name = &method.name,
-                        input_defs = inputs
-                            .iter()
-                            .skip(1)
-                            .enumerate()
-                            .map(|(n, ty)| format!("{ty} i{n}"))
-                            .join(", "),
-                        const_kw = if method.kind != ZngurMethodReceiver::Ref(Mutability::Not) {
-                            ""
-                        } else {
-                            "const"
-                        },
-                    )?;
-                }
-            }
-            for constructor in &self.constructors {
-                writeln!(
-                    state,
-                    "{fn_name}({input_defs}) noexcept ;",
-                    fn_name = &self.ty.path.0.last().unwrap(),
-                    input_defs = constructor
-                        .inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, ty)| format!("{ty} i{n}"))
-                        .join(", "),
-                )?;
-            }
-            for field in &self.fields {
-                writeln!(
-                    state,
-                    "[[no_unique_address]] ::rust::FieldOwned<{}, {}> {};",
-                    field.ty.into_cpp(),
-                    field.offset,
-                    cpp_handle_field_name(&field.name),
-                )?;
-            }
-            writeln!(state, "}};")?;
-        }
-        self.ty.path.emit_close_namespace(state)?;
+        // if self.ty.path.0 != ["rust", "Unit"] {
+        // for method in &self.methods {
+        //     writeln!(
+        //         state,
+        //         "static {output} {fn_name}({input_defs}) noexcept ;",
+        //         output = method.sig.output,
+        //         fn_name = &method.name,
+        //         input_defs = method
+        //             .sig
+        //             .inputs
+        //             .iter()
+        //             .enumerate()
+        //             .map(|(n, ty)| format!("{ty} i{n}"))
+        //             .join(", "),
+        //     )?;
+        //     if method.kind != ZngurMethodReceiver::Static {
+        //         let CppFnSig {
+        //             rust_link_name: _,
+        //             inputs,
+        //             output,
+        //         } = &method.sig;
+        //         writeln!(
+        //             state,
+        //             "{output} {fn_name}({input_defs}) {const_kw} noexcept ;",
+        //             fn_name = &method.name,
+        //             input_defs = inputs
+        //                 .iter()
+        //                 .skip(1)
+        //                 .enumerate()
+        //                 .map(|(n, ty)| format!("{ty} i{n}"))
+        //                 .join(", "),
+        //             const_kw = if method.kind != ZngurMethodReceiver::Ref(Mutability::Not) {
+        //                 ""
+        //             } else {
+        //                 "const"
+        //             },
+        //         )?;
+        //     }
+        // }
+        //     for constructor in &self.constructors {
+        //         writeln!(
+        //             state,
+        //             "{fn_name}({input_defs}) noexcept ;",
+        //             fn_name = &self.ty.path.0.last().unwrap(),
+        //             input_defs = constructor
+        //                 .inputs
+        //                 .iter()
+        //                 .enumerate()
+        //                 .map(|(n, ty)| format!("{ty} i{n}"))
+        //                 .join(", "),
+        //         )?;
+        //     }
+        //     for field in &self.fields {
+        //         writeln!(
+        //             state,
+        //             "[[no_unique_address]] ::rust::FieldOwned<{}, {}> {};",
+        //             field.ty.into_cpp(),
+        //             field.offset,
+        //             cpp_handle_field_name(&field.name),
+        //         )?;
+        //     }
+        //     writeln!(state, "}};")?;
+        // }
+        // self.ty.path.emit_close_namespace(state)?;
         let ty = &self.ty;
         if self.layout != CppLayoutPolicy::OnlyByRef {
             match &self.layout {

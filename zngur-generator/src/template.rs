@@ -2,10 +2,10 @@ use std::collections::HashMap;
 
 use crate::cpp::{
     CppExportedImplDefinition, CppFnDefinition, CppLayoutPolicy, CppTraitDefinition,
-    CppTypeDefinition, PanicToExceptionSymbols,
+    CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
 };
 use sailfish::Template;
-use zngur_def::{RustTrait, ZngurWellknownTraitData};
+use zngur_def::*;
 
 use crate::rust::IntoCpp;
 use itertools::Itertools;
