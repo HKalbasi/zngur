@@ -475,6 +475,12 @@ template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
       <% }
     } %>
 
+    <% if let Some(cpp_value) = &td.cpp_value { %>
+        inline <%= cpp_value.1 %>& cpp() {
+            return (*<%= cpp_value.0 %>(&data[0])).as_cpp< <%= cpp_value.1 %> >();
+        }
+    <% } %>
+
   <% }
 } %>
 

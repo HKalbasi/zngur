@@ -801,18 +801,20 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);
         if self.ty.path.0 != ["rust", "Unit"] {
-            if let Some(CppValue(rust_link_name, cpp_ty)) = &self.cpp_value {
+            for method in &self.methods {
                 writeln!(
                     state,
-                    r#"
-                    inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}(&data[0])).as_cpp< {cpp_ty} >();
-                    }}"#
+                    "static {output} {fn_name}({input_defs}) noexcept ;",
+                    output = method.sig.output,
+                    fn_name = &method.name,
+                    input_defs = method
+                        .sig
+                        .inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
                 )?;
-            }
-            for method in &self.methods {
-                write!(state, "static ")?;
-                method.sig.emit_cpp_header(state, &method.name)?;
                 if method.kind != ZngurMethodReceiver::Static {
                     let CppFnSig {
                         rust_link_name: _,
