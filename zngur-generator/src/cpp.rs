@@ -101,9 +101,9 @@ impl CppType {
         Ok(())
     }
 
-    fn emit_header(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_header(&self, state: &mut State, is_unsized: bool) -> std::fmt::Result {
         for x in &self.generic_args {
-            x.emit_header(state)?;
+            x.emit_header(state, false)?;
         }
         if !self.path.need_header() {
             return Ok(());
@@ -112,8 +112,22 @@ impl CppType {
             if !self.generic_args.is_empty() {
                 writeln!(state, "template<typename ...T>")?;
             }
-            writeln!(state, "struct {};", self.path.name())
-        })
+            writeln!(state, "struct {};", self.path.name())?;
+            Ok(())
+        })?;
+        if is_unsized {
+            writeln!(
+                state,
+                r#"
+namespace rust {{
+    template<>
+    struct zngur_is_unsized< {ty} > : ::std::true_type {{}};
+}}
+"#,
+                ty = self,
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -559,7 +573,7 @@ impl CppTypeDefinition {
     }
 
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
-        for ref_kind in ["RefMut", "Ref"] {
+        for (ref_kind, raw_kind) in [("RefMut", "RawMut"), ("Ref", "Raw")] {
             let is_unsized = self
                 .wellknown_traits
                 .contains(&ZngurWellknownTraitData::Unsized);
@@ -576,6 +590,11 @@ impl CppTypeDefinition {
                     state,
                     r#"
 namespace rust {{
+"#,
+                )?;
+                writeln!(
+                    state,
+                    r#"
 template<>
 struct {ref_kind}< {ty} > {{
     {ref_kind}() {{
@@ -799,6 +818,29 @@ template<>
 inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() noexcept {{
     return {size};
 }}
+
+template<>
+inline uint8_t* __zngur_internal_data_ptr< {raw_kind} < {ty} > >(const {raw_kind}< {ty} >& t) noexcept {{
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+}}
+
+template<>
+inline void __zngur_internal_assume_init< {raw_kind} < {ty} > >({raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline void __zngur_internal_check_init< {raw_kind} < {ty} > >(const {raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline void __zngur_internal_assume_deinit< {raw_kind} < {ty} > >({raw_kind}< {ty} >&) noexcept {{
+}}
+
+template<>
+inline size_t __zngur_internal_size_of< {raw_kind} < {ty} > >() noexcept {{
+    return {size};
+}}
+
 }}"#,
                 ty = self.ty,
                 size = if is_unsized { 16 } else { 8 },
@@ -1591,6 +1633,7 @@ impl CppFile {
 #include <array>
 #include <iostream>
 #include <functional>
+#include <type_traits>
 #include <math.h>
 "#;
         state.text += &self.additional_includes;
@@ -1683,6 +1726,92 @@ namespace rust {
     template<typename T, size_t OFFSET>
     struct FieldRefMut {
         inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    };
+
+    template<typename T>
+    struct zngur_is_unsized : std::false_type {};
+
+    struct zngur_fat_pointer {
+        uint8_t* data;
+        size_t metadata;
+    };
+
+    template<typename T>
+    struct Raw {
+        using DataType = typename std::conditional<
+            zngur_is_unsized<T>::value,
+            zngur_fat_pointer,
+            uint8_t*
+        >::type;
+        DataType data;
+
+        Raw() {}
+        Raw(Ref<T> value) {
+            memcpy(&data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+        }
+        Raw(RefMut<T> value) {
+            memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+        }
+        Raw(DataType data) : data(data) {
+        }
+
+        Raw<T> offset(ssize_t n) {
+            return Raw(data + n * __zngur_internal_size_of<T>());
+        }
+
+        Ref<T> read_ref() {
+            Ref<T> value;
+            memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+            __zngur_internal_assume_init<Ref<T>>(value);
+            return value;
+        }
+    };
+
+    template<typename T>
+    struct RawMut {
+        using DataType = typename std::conditional<
+            zngur_is_unsized<T>::value,
+            zngur_fat_pointer,
+            uint8_t*
+        >::type;
+        DataType data;
+
+        RawMut() {}
+        RawMut(RefMut<T> value) {
+            memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+        }
+        RawMut(DataType data) : data(data) {
+        }
+
+        RawMut<T> offset(ssize_t n) {
+            return RawMut(data + n * __zngur_internal_size_of<T>());
+        }
+
+        T read() {
+            T value;
+            memcpy(__zngur_internal_data_ptr<T>(value), data, __zngur_internal_size_of<T>());
+            __zngur_internal_assume_init<T>(value);
+            return value;
+        }
+
+        Ref<T> read_ref() {
+            Ref<T> value;
+            memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+            __zngur_internal_assume_init<Ref<T>>(value);
+            return value;
+        }
+
+        RefMut<T> read_mut() {
+            RefMut<T> value;
+            memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &data, __zngur_internal_size_of<RefMut<T>>());
+            __zngur_internal_assume_init<RefMut<T>>(value);
+            return value;
+        }
+
+        void write(T value) {
+            memcpy(data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+            __zngur_internal_assume_deinit<T>(value);
+        }
     };
 
     template<typename... T>
@@ -1867,12 +1996,16 @@ namespace rust {
         }
         writeln!(state, "}}")?;
         for td in &self.type_defs {
-            td.ty.emit_header(state)?;
+            td.ty.emit_header(
+                state,
+                td.wellknown_traits
+                    .contains(&ZngurWellknownTraitData::Unsized),
+            )?;
         }
         for imp in &self.exported_impls {
-            imp.ty.emit_header(state)?;
+            imp.ty.emit_header(state, false)?;
             if let Some(tr) = &imp.tr {
-                tr.emit_header(state)?;
+                tr.emit_header(state, false)?;
             }
         }
         for (_, td) in &self.trait_defs {

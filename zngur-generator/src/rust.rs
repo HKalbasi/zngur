@@ -106,7 +106,13 @@ impl IntoCpp for RustType {
                 path: CppPath::from("rust::Slice"),
                 generic_args: vec![s.into_cpp()],
             },
-            RustType::Raw(_, _) => todo!(),
+            RustType::Raw(m, t) => CppType {
+                path: match m {
+                    Mutability::Mut => CppPath::from("rust::RawMut"),
+                    Mutability::Not => CppPath::from("rust::Raw"),
+                },
+                generic_args: vec![t.into_cpp()],
+            },
             RustType::Adt(pg) => pg.into_cpp(),
             RustType::Tuple(v) => {
                 if v.is_empty() {
@@ -687,10 +693,10 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         inputs: &[RustType],
         output: &RustType,
         use_path: Option<Vec<String>>,
-        deref: bool,
+        deref: Option<Mutability>,
     ) -> String {
         let mut mangled_name = self.mangle_name(rust_name);
-        if deref {
+        if deref.is_some() {
             mangled_name += "_deref_";
             mangled_name += &self.mangle_name(&inputs[0].to_string());
         }
@@ -717,8 +723,10 @@ pub extern "C" fn {mangled_name}("#
                 this,
                 "    ::std::ptr::write(o as *mut {output}, {rust_name}("
             );
-            if deref {
-                w!(this, "&");
+            match deref {
+                Some(Mutability::Mut) => w!(this, "&mut"),
+                Some(Mutability::Not) => w!(this, "&"),
+                None => {}
             }
             for (n, ty) in inputs.iter().enumerate() {
                 w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");

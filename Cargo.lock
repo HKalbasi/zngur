@@ -383,6 +383,10 @@ name = "example-multiple-zngur-files"
 version = "0.7.0"
 
 [[package]]
+name = "example-raw-pointer"
+version = "0.7.0"
+
+[[package]]
 name = "example-rayon"
 version = "0.7.0"
 dependencies = [

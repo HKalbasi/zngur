@@ -5,7 +5,7 @@ type [u8] {
     fn len(&self) -> usize;
 }
 
-type ::core::primitive::str {
+type str {
     wellknown_traits(?Sized);
 
     fn as_ptr(&self) -> *const u8;
@@ -29,7 +29,7 @@ mod crate {
 
     trait BlobStoreTrait {
         fn put(&self, &mut MultiBuf) -> u64;
-        fn tag(&self, u64, &::core::primitive::str);
+        fn tag(&self, u64, &str);
         fn metadata(&self, u64) -> BlobMetadata;
     }
 
