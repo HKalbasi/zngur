@@ -1,5 +1,15 @@
 #convert_panic_to_exception
 
+type str {
+    wellknown_traits(?Sized);
+
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    #heap_allocated;
+}
+
 type [i32] {
     wellknown_traits(?Sized);
 
@@ -41,6 +51,7 @@ mod ::std {
             fn reserve(&mut self, usize);
             fn set_len(&mut self, usize);
             fn as_mut_ptr(&mut self) -> *mut Vec<i32>;
+            fn as_ptr(&self) -> *const Vec<i32>;
         }
     }
 }
