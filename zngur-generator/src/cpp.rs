@@ -7,7 +7,7 @@ use std::{
 use itertools::Itertools;
 use zngur_def::{CppRef, CppValue, Mutability, RustTrait, ZngurField, ZngurMethodReceiver};
 
-use crate::{ZngurWellknownTraitData, rust::IntoCpp, template::CppHeaderTemplate};
+use crate::{ZngurWellknownTraitData, template::CppHeaderTemplate};
 use sailfish::Template;
 
 #[derive(Debug)]
@@ -458,56 +458,8 @@ impl Default for CppTypeDefinition {
 }
 
 impl CppTypeDefinition {
-    fn emit_field_specialization(&self, state: &mut State) -> std::fmt::Result {
-        for field_kind in ["FieldOwned", "FieldRef", "FieldRefMut"] {
-            writeln!(
-                state,
-                r#"
-    namespace rust {{
-    template<size_t OFFSET>
-    struct {field_kind}< {ty}, OFFSET > {{
-                "#,
-                ty = self.ty,
-            )?;
-            for field in &self.fields {
-                writeln!(
-                    state,
-                    "[[no_unique_address]] {field_kind}<{}, OFFSET + {}> {};",
-                    field.ty.into_cpp(),
-                    field.offset,
-                    cpp_handle_field_name(&field.name),
-                )?;
-            }
-            for method in &self.methods {
-                if let ZngurMethodReceiver::Ref(m) = method.kind {
-                    if m == Mutability::Mut && field_kind == "FieldRef" {
-                        continue;
-                    }
-                    let CppFnSig {
-                        rust_link_name: _,
-                        inputs,
-                        output,
-                    } = &method.sig;
-                    writeln!(
-                        state,
-                        "{output} {fn_name}({input_defs}) const noexcept ;",
-                        fn_name = &method.name,
-                        input_defs = inputs
-                            .iter()
-                            .skip(1)
-                            .enumerate()
-                            .map(|(n, ty)| format!("{ty} i{n}"))
-                            .join(", "),
-                    )?;
-                }
-            }
-            writeln!(state, "}};\n}}")?;
-        }
-        Ok(())
-    }
-
-    pub(crate) fn emit(&self, state: &mut State) -> std::fmt::Result {
-        self.emit_field_specialization(state)?;
+    pub(crate) fn emit(&self, _state: &mut State) -> std::fmt::Result {
+        // All specializations are now handled by the template
         Ok(())
     }
 

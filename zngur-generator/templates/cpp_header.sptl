@@ -785,6 +785,25 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
 }
 <% } %>
 
+// Field specializations
+<% for field_kind in &["FieldOwned", "FieldRef", "FieldRefMut"] { %>
+    namespace rust {
+    template<size_t OFFSET>
+    struct <%= field_kind %>< <%= td.ty %>, OFFSET > {
+<% for field in &td.fields { %>
+        [[no_unique_address]] <%= field_kind %><<%= field.ty.into_cpp() %>, OFFSET + <%= field.offset %>> <%= cpp_handle_field_name(&field.name) %>;
+<% } %>
+<% for method in &td.methods { %>
+    <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
+        <% if !(m == Mutability::Mut && *field_kind == "FieldRef") { %>
+        <%= method.sig.output %> <%= method.name %>(<%= method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) const noexcept ;
+        <% } %>
+    <% } %>
+<% } %>
+    };
+    }
+<% } %>
+
 <%= self.emit_type_old(td) %>
 
 <% } %>
