@@ -507,95 +507,93 @@ impl CppTypeDefinition {
     }
 
     fn emit_ref_specialization(&self, state: &mut State) -> std::fmt::Result {
-        for ref_kind in ["RefMut", "Ref"] {
-            let is_unsized = self
-                .wellknown_traits
-                .contains(&ZngurWellknownTraitData::Unsized);
-            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
-                writeln!(
-                    state,
-                    r#"
+        let is_unsized = self
+            .wellknown_traits
+            .contains(&ZngurWellknownTraitData::Unsized);
+        if self.ty.path.to_string() == "::rust::Str" {
+            writeln!(
+                state,
+                r#"
     auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
 "#,
-                )?;
-            }
-            if is_unsized {
-                writeln!(
-                    state,
-                    r#"
+            )?;
+        }
+        if is_unsized {
+            writeln!(
+                state,
+                r#"
 namespace rust {{
 template<>
-struct {ref_kind}< {ty} > {{
-    {ref_kind}() {{
+struct Ref< {ty} > {{
+    Ref() {{
         data = {{0, 0}};
     }}
 private:
     ::std::array<size_t, 2> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t) noexcept ;
-    friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::Ref< {ty} > >(const ::rust::Ref< {ty} >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< ::rust::Ref< {ty} > >;
 "#,
-                    ty = self.ty,
-                )?;
-            } else {
-                writeln!(
-                    state,
-                    r#"
+                ty = self.ty,
+            )?;
+        } else {
+            writeln!(
+                state,
+                r#"
 namespace rust {{
 template<>
-struct {ref_kind}< {ty} > {{
-    {ref_kind}() {{
+struct Ref< {ty} > {{
+    Ref() {{
         data = 0;
     }}
 "#,
-                    ty = self.ty,
-                )?;
-                if !matches!(self.layout, CppLayoutPolicy::OnlyByRef) {
-                    writeln!(
-                        state,
-                        r#"
-    {ref_kind}(const {ty}& t) {{
+                ty = self.ty,
+            )?;
+            if !matches!(self.layout, CppLayoutPolicy::OnlyByRef) {
+                writeln!(
+                    state,
+                    r#"
+    Ref(const {ty}& t) {{
         ::rust::__zngur_internal_check_init< {ty} >(t);
         data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }}
 "#,
-                        ty = self.ty,
-                    )?;
-                }
-                for field in &self.fields {
-                    writeln!(
-                        state,
-                        "[[no_unique_address]] ::rust::Field{ref_kind}<{}, {}> {};",
-                        field.ty.into_cpp(),
-                        field.offset,
-                        cpp_handle_field_name(&field.name),
-                    )?;
-                }
-                writeln!(
-                    state,
-                    r#"
-private:
-    size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::{ref_kind}< {ty} > >(const ::rust::{ref_kind}< {ty} >& t) noexcept ;
-    friend ::rust::ZngurPrettyPrinter< ::rust::{ref_kind}< {ty} > >;
-"#,
                     ty = self.ty,
                 )?;
             }
-            writeln!(state, "public:")?;
-            if ref_kind == "Ref" {
+            for field in &self.fields {
                 writeln!(
                     state,
-                    r#"
+                    "[[no_unique_address]] ::rust::FieldRef<{}, {}> {};",
+                    field.ty.into_cpp(),
+                    field.offset,
+                    cpp_handle_field_name(&field.name),
+                )?;
+            }
+            writeln!(
+                state,
+                r#"
+private:
+    size_t data;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::Ref< {ty} > >(const ::rust::Ref< {ty} >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< ::rust::Ref< {ty} > >;
+"#,
+                ty = self.ty,
+            )?;
+        }
+        writeln!(state, "public:")?;
+        writeln!(
+            state,
+            r#"
     Ref(RefMut< {ty} > rm) {{
         data = rm.data;
     }}
     "#,
-                    ty = self.ty,
-                )?;
-                if !is_unsized {
-                    writeln!(
-                        state,
-                        r#"
+            ty = self.ty,
+        )?;
+        if !is_unsized {
+            writeln!(
+                state,
+                r#"
     template<size_t OFFSET>
     Ref(const FieldOwned< {ty}, OFFSET >& f) {{
         data = reinterpret_cast<size_t>(&f) + OFFSET;
@@ -611,150 +609,124 @@ private:
         data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
     }}
     "#,
-                        ty = self.ty,
-                    )?;
-                }
-            } else {
+                ty = self.ty,
+            )?;
+        }
+        match &self.from_trait_ref {
+            Some(RustTrait::Fn { inputs, output, .. }) => {
+                let as_std_function = format!(
+                    "::std::function< {}({})>",
+                    output.into_cpp(),
+                    inputs.iter().map(|x| x.into_cpp()).join(", ")
+                );
                 writeln!(
                     state,
                     r#"
-    friend Ref< {ty} >;
-    "#,
-                    ty = self.ty,
-                )?;
-                if !is_unsized {
-                    writeln!(
-                        state,
-                        r#"
-    template<size_t OFFSET>
-    RefMut(const FieldOwned< {ty}, OFFSET >& f) {{
-        data = reinterpret_cast<size_t>(&f) + OFFSET;
-    }}
-
-    template<size_t OFFSET>
-    RefMut(const FieldRefMut< {ty}, OFFSET >& f) {{
-        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
-    }}
-    "#,
-                        ty = self.ty,
-                    )?;
-                }
-            }
-            match &self.from_trait_ref {
-                Some(RustTrait::Fn { inputs, output, .. }) => {
-                    let as_std_function = format!(
-                        "::std::function< {}({})>",
-                        output.into_cpp(),
-                        inputs.iter().map(|x| x.into_cpp()).join(", ")
-                    );
-                    writeln!(
-                        state,
-                        r#"
 inline {ty}({as_std_function} f);
 "#,
-                        ty = self.ty.path.name(),
-                    )?;
-                }
-                Some(tr @ RustTrait::Normal { .. }) => {
-                    let tr = tr.into_cpp();
-                    writeln!(
-                        state,
-                        r#"
-            inline {ref_kind}({tr}& arg);
+                    ty = self.ty.path.name(),
+                )?;
+            }
+            Some(tr @ RustTrait::Normal { .. }) => {
+                let tr = tr.into_cpp();
+                writeln!(
+                    state,
+                    r#"
+            inline Ref({tr}& arg);
             "#,
-                    )?;
-                }
-                None => (),
-            }
-            if let Some(CppValue(rust_link_name, cpp_ty)) = &self.cpp_value {
-                writeln!(
-                    state,
-                    r#"
-                inline {cpp_ty}& cpp() {{
-                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp< {cpp_ty} >();
-                }}"#
                 )?;
             }
-            if let Some(cpp_ty) = &self.cpp_ref {
-                writeln!(
-                    state,
-                    r#"
-                inline {cpp_ty}& cpp() {{
-                    return *reinterpret_cast< {cpp_ty}* >(data);
-                }}"#
-                )?;
-                writeln!(
-                    state,
-                    r#"
-                inline {ref_kind}(const {cpp_ty}& t) : data(reinterpret_cast<size_t>(&t)) {{}}"#
-                )?;
-            }
-            for method in &self.methods {
-                if let ZngurMethodReceiver::Ref(m) = method.kind {
-                    if m == Mutability::Mut && ref_kind == "Ref" {
-                        continue;
-                    }
-                    let CppFnSig {
-                        rust_link_name: _,
-                        inputs,
-                        output,
-                    } = &method.sig;
-                    writeln!(
-                        state,
-                        "{output} {fn_name}({input_defs}) const noexcept ;",
-                        fn_name = &method.name,
-                        input_defs = inputs
-                            .iter()
-                            .skip(1)
-                            .enumerate()
-                            .map(|(n, ty)| format!("{ty} i{n}"))
-                            .join(", "),
-                    )?;
-                }
-            }
-            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
-                writeln!(
-                    state,
-                    r#"
-    friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
-}};
-"#,
-                )?;
-            } else {
-                writeln!(state, "}};")?;
-            }
+            None => (),
+        }
+        if let Some(CppValue(rust_link_name, cpp_ty)) = &self.cpp_value {
             writeln!(
                 state,
                 r#"
+                inline {cpp_ty}& cpp() {{
+                    return (*{rust_link_name}(reinterpret_cast<uint8_t*>(data))).as_cpp< {cpp_ty} >();
+                }}"#
+            )?;
+        }
+        if let Some(cpp_ty) = &self.cpp_ref {
+            writeln!(
+                state,
+                r#"
+                inline {cpp_ty}& cpp() {{
+                    return *reinterpret_cast< {cpp_ty}* >(data);
+                }}"#
+            )?;
+            writeln!(
+                state,
+                r#"
+                inline Ref(const {cpp_ty}& t) : data(reinterpret_cast<size_t>(&t)) {{}}"#
+            )?;
+        }
+        for method in &self.methods {
+            if let ZngurMethodReceiver::Ref(m) = method.kind {
+                if m == Mutability::Mut {
+                    continue;
+                }
+                let CppFnSig {
+                    rust_link_name: _,
+                    inputs,
+                    output,
+                } = &method.sig;
+                writeln!(
+                    state,
+                    "{output} {fn_name}({input_defs}) const noexcept ;",
+                    fn_name = &method.name,
+                    input_defs = inputs
+                        .iter()
+                        .skip(1)
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", "),
+                )?;
+            }
+        }
+        if self.ty.path.to_string() == "::rust::Str" {
+            writeln!(
+                state,
+                r#"
+    friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+}};
+"#,
+            )?;
+        } else {
+            writeln!(state, "}};")?;
+        }
+        writeln!(
+            state,
+            r#"
 template<>
-inline uint8_t* __zngur_internal_data_ptr< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >& t) noexcept {{
+inline uint8_t* __zngur_internal_data_ptr< Ref < {ty} > >(const Ref< {ty} >& t) noexcept {{
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }}
 
 template<>
-inline void __zngur_internal_assume_init< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) noexcept {{
+inline void __zngur_internal_assume_init< Ref < {ty} > >(Ref< {ty} >&) noexcept {{
 }}
 
 template<>
-inline void __zngur_internal_check_init< {ref_kind} < {ty} > >(const {ref_kind}< {ty} >&) noexcept {{
+inline void __zngur_internal_check_init< Ref < {ty} > >(const Ref< {ty} >&) noexcept {{
 }}
 
 template<>
-inline void __zngur_internal_assume_deinit< {ref_kind} < {ty} > >({ref_kind}< {ty} >&) noexcept {{
+inline void __zngur_internal_assume_deinit< Ref < {ty} > >(Ref< {ty} >&) noexcept {{
 }}
 
 template<>
-inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() noexcept {{
+inline size_t __zngur_internal_size_of< Ref < {ty} > >() noexcept {{
     return {size};
 }}
 }}"#,
-                ty = self.ty,
-                size = if is_unsized { 16 } else { 8 },
-            )?;
-            if self.ty.path.to_string() == "::rust::Str" && ref_kind == "Ref" {
-                writeln!(
-                    state,
-                    r#"
+            ty = self.ty,
+            size = if is_unsized { 16 } else { 8 },
+        )?;
+        if self.ty.path.to_string() == "::rust::Str" {
+            writeln!(
+                state,
+                r#"
 inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
     ::rust::Ref<::rust::Str> o;
     o.data[0] = reinterpret_cast<size_t>(input);
@@ -762,8 +734,7 @@ inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {{
     return o;
 }}
                     "#,
-                )?;
-            }
+            )?;
         }
         Ok(())
     }
