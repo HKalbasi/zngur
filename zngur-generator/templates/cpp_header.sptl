@@ -472,6 +472,9 @@ extern "C" {
             }
         <% } %>
 
+      <% }
+      } %>
+
         <% for method in &td.methods { %>
             static <%= method.sig.output %> <%= method.name %>(
               <%= method.sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
@@ -497,15 +500,69 @@ extern "C" {
           > <%= cpp_handle_field_name(&field.name) %>;
         <% } %>
 
-      <% }
-      } %>
-
     }; // <%= td.ty.specialization_decl() %>
 
     // end !rust unit
     <% } %>
 
 <%= td.ty.path.close_namespace() %>
+
+namespace rust {
+
+<% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
+  template<>
+  inline size_t __zngur_internal_size_of< <%= td.ty %> >() noexcept {
+      return <%= size %>;
+  }
+<% } CppLayoutPolicy::HeapAllocated { size_fn, .. } => { %>
+  template<>
+  inline size_t __zngur_internal_size_of< <%= td.ty %> >() noexcept {
+      return <%= size_fn %>();
+  }
+<% } CppLayoutPolicy::OnlyByRef => { %>
+  <% /* OnlyByRef types don't need these template specializations */ %>
+<% }
+} %>
+
+<% if td.layout != CppLayoutPolicy::OnlyByRef { %>
+  <% if is_copy { %>
+    template<>
+    inline void __zngur_internal_check_init< <%= td.ty %> >(const <%= td.ty %>&) noexcept {}
+
+    template<>
+    inline void __zngur_internal_assume_init< <%= td.ty %> >(<%= td.ty %>&) noexcept {}
+
+    template<>
+    inline void __zngur_internal_assume_deinit< <%= td.ty %> >(<%= td.ty %>&) noexcept {}
+  <% } else { %>
+    template<>
+    inline void __zngur_internal_check_init< <%= td.ty %> >(const <%= td.ty %>& t) noexcept {
+        if (!t.drop_flag) {
+            ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type <%= td.ty %>" << ::std::endl;
+            while (true) raise(SIGSEGV);
+        }
+    }
+
+    template<>
+    inline void __zngur_internal_assume_init< <%= td.ty %> >(<%= td.ty %>& t) noexcept {
+        t.drop_flag = true;
+    }
+
+    template<>
+    inline void __zngur_internal_assume_deinit< <%= td.ty %> >(<%= td.ty %>& t) noexcept {
+        ::rust::__zngur_internal_check_init< <%= td.ty %> >(t);
+        t.drop_flag = false;
+    }
+  <% } %>
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< <%= td.ty %> >(<%= td.ty %> const & t) noexcept {
+      return const_cast<uint8_t*>(&t.data[0]);
+  }
+
+<% } %>
+
+} // namespace rust
 
 <%= self.emit_type_old(td) %>
 
