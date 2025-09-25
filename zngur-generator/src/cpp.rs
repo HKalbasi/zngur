@@ -458,7 +458,7 @@ impl Default for CppTypeDefinition {
 }
 
 impl CppTypeDefinition {
-    fn emit_cpp_fn_defs(
+    pub(crate) fn emit_cpp_fn_defs(
         &self,
         state: &mut State,
         traits: &HashMap<RustTrait, CppTraitDefinition>,
@@ -468,106 +468,7 @@ impl CppTypeDefinition {
             .contains(&ZngurWellknownTraitData::Unsized);
         let cpp_type = &self.ty.to_string();
         let my_name = cpp_type.strip_prefix("::").unwrap();
-        for c in &self.constructors {
-            let fn_name = my_name.to_owned() + "::" + self.ty.path.0.last().unwrap();
-            let CppFnSig {
-                inputs,
-                output: _,
-                rust_link_name,
-            } = c;
-            writeln!(
-                state,
-                "inline {fn_name}({input_defs}) noexcept {{
-            ::rust::__zngur_internal_assume_init(*this);
-            {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(*this));
-            {deinits}
-        }}",
-                input_defs = inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, ty)| format!("{ty} i{n}"))
-                    .join(", "),
-                input_args = (0..inputs.len())
-                    .map(|n| format!("::rust::__zngur_internal_data_ptr(i{n}), "))
-                    .join(""),
-                deinits = (0..inputs.len())
-                    .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
-                    .join("\n"),
-            )?;
-        }
-        match self.from_trait.as_ref().and_then(|k| traits.get(k)) {
-            Some(CppTraitDefinition::Fn { sig }) => {
-                let as_std_function = format!(
-                    "::std::function< {}({})>",
-                    sig.output,
-                    sig.inputs.iter().join(", ")
-                );
-                let ii_names = sig
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust< {x} >(i{n})"))
-                    .join(", ");
-                let uint8_t_ix = sig
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, _)| format!("uint8_t* i{n},"))
-                    .join(" ");
-                let out_ty = &sig.output;
-                writeln!(
-                    state,
-                    r#"
-{my_name} {my_name}::make_box({as_std_function} f) {{
-auto data = new {as_std_function}(f);
-{my_name} o;
-::rust::__zngur_internal_assume_init(o);
-{link_name}(
-reinterpret_cast<uint8_t*>(data),
-[](uint8_t *d) {{ delete reinterpret_cast< {as_std_function}*>(d); }},
-[](uint8_t *d, {uint8_t_ix} uint8_t *o) {{
-auto dd = reinterpret_cast< {as_std_function} *>(d);
-{out_ty} oo = (*dd)({ii_names});
-::rust::__zngur_internal_move_to_rust< {out_ty} >(o, oo);
-}},
-::rust::__zngur_internal_data_ptr(o));
-return o;
-}}
-"#,
-                    link_name = sig.rust_link_name,
-                )?;
-            }
-            Some(CppTraitDefinition::Normal {
-                as_ty,
-                methods: _,
-                link_name,
-                link_name_ref: _,
-            }) => {
-                writeln!(
-                    state,
-                    r#"
-template<typename T, typename... Args>
-{my_name} {my_name}::make_box(Args&&... args) {{
-auto data = new T(::std::forward<Args>(args)...);
-auto data_as_impl = dynamic_cast< {as_ty}*>(data);
-{my_name} o;
-::rust::__zngur_internal_assume_init(o);
-{link_name}(
-reinterpret_cast<uint8_t*>(data_as_impl),
-[](uint8_t *d) {{ delete reinterpret_cast< {as_ty} *>(d); }},
-"#,
-                )?;
-                writeln!(
-                    state,
-                    r#"
-::rust::__zngur_internal_data_ptr(o));
-return o;
-}}
-"#,
-                )?;
-            }
-            None => (),
-        }
+
         match self.from_trait_ref.as_ref().and_then(|k| traits.get(k)) {
             Some(CppTraitDefinition::Fn { .. }) => {
                 todo!()
@@ -822,9 +723,9 @@ impl CppFile {
             exported_impls: &self.exported_impls,
         };
         state.text += template.render().unwrap().as_str();
-        for td in &self.type_defs {
-            td.emit_cpp_fn_defs(state, &self.trait_defs)?;
-        }
+        // for td in &self.type_defs {
+        //     td.emit_cpp_fn_defs(state, &self.trait_defs)?;
+        // }
         for fd in &self.fn_defs {
             fd.emit_cpp_def(state)?;
         }

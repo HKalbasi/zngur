@@ -804,12 +804,79 @@ namespace rust {
             <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
           ) const noexcept ;
         <% } %>
+      <% } %>
     <% } %>
-    <% } %>
-  };
 
-<% } %>
+  }; // struct <%- field_kind %>< <%- td.ty %>, OFFSET >
+<% } /* for field_kind in &[...] */ %>
 
 } // namespace rust
+
+<% } /* for td in self.type_defs */ %>
+
+<% for td in self.type_defs { %>
+
+  <% let cpp_type = td.ty.to_string(); %>
+  <% let name = cpp_type.strip_prefix("::").unwrap(); %>
+
+  <% for c in &td.constructors { %>
+    <% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap(); %>
+    inline <%- fn_name %>(<%- c.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) noexcept {
+      ::rust::__zngur_internal_assume_init(*this);
+      <%- c.rust_link_name %>(
+        <% for n in 0..c.inputs.len() { %>
+          ::rust::__zngur_internal_data_ptr(i<%- n %>),
+        <% } %>
+        ::rust::__zngur_internal_data_ptr(*this)
+      );
+      <% for n in 0..c.inputs.len() { %>
+        ::rust::__zngur_internal_assume_deinit(i<%- n %>);
+      <% } %>
+    }
+  <% } %>
+
+  <% let tr = &td.from_trait.as_ref().and_then(|k| self.trait_defs.get(k)); %>
+  <% match tr { Some(CppTraitDefinition::Fn { sig }) => { %>
+    <% let as_std_function = format!("::std::function< {}({})>", sig.output, sig.inputs.iter().join(", ")); %>
+    <% let ii_names = sig.inputs.iter().enumerate().map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust< {x} >(i{n})")).join(", "); %>
+    <% let uint8_t_ix = sig.inputs.iter().enumerate().map(|(n, _)| format!("uint8_t* i{n},")).join(" "); %>
+    <% let out_ty = &sig.output; %>
+
+    <%- name %>(<%- as_std_function %> f) {
+      auto data = new <%- as_std_function %>(f);
+      <%- name %> o;
+      ::rust::__zngur_internal_assume_init(o);
+      <%- sig.rust_link_name %> (
+        reinterpret_cast<uint8_t*>(data),
+        [](uint8_t *d) { delete reinterpret_cast< <%- as_std_function %>*>(d); },
+        [](uint8_t *d, <%- uint8_t_ix %> uint8_t* o) {
+          <%- out_ty %> oo = (*dd)(<%- ii_names %>);
+          ::rust::__zngur_internal_move_to_rust< <%- out_ty %> >(o, oo);
+        },
+        ::rust::__zngur_internal_data_ptr(o)
+      );
+      return o;
+    }
+
+  <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name, link_name_ref: _ }) => { %>
+    template <typename T, typename... Args>
+    <%- name %> <%- name %>::make_box(Args&&... args) {
+      auto data = new T(::std::forward<Args>(args)...);
+      auto data_as_impl = dynamic_cast< <%- as_ty %>*>(data);
+      <%- name %> o;
+      ::rust::__zngur_internal_assume_init(o);
+      <%- link_name %> (
+        reinterpret_cast<uint8_t*>(data_as_impl),
+        [](uint8_t *d) { delete reinterpret_cast< <%- as_ty %>*>(d); },
+        ::rust::__zngur_internal_data_ptr(o)
+      );
+      return o;
+    }
+
+  <% } None => { %>
+  <% }
+  } %>
+
+  <%= self.cpp_fn_defs(&td) %>
 
 <% } %>

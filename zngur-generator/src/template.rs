@@ -44,12 +44,12 @@ impl<'a> CppHeaderTemplate<'a> {
             .collect()
     }
 
-    // fn emit_type_old(&self, td: &CppTypeDefinition) -> String {
-    //     let mut state = crate::cpp::State {
-    //         text: String::new(),
-    //         panic_to_exception: self.panic_to_exception.clone(),
-    //     };
-    //     td.emit(&mut state).unwrap();
-    //     state.text
-    // }
+    fn cpp_fn_defs(&self, td: &CppTypeDefinition) -> String {
+        let mut state = crate::cpp::State {
+            text: String::new(),
+            panic_to_exception: self.panic_to_exception.clone(),
+        };
+        td.emit_cpp_fn_defs(&mut state, &self.trait_defs).unwrap();
+        state.text
+    }
 }
