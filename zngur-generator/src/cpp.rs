@@ -7,7 +7,10 @@ use std::{
 use itertools::Itertools;
 use zngur_def::{CppRef, CppValue, RustTrait, ZngurField, ZngurMethodReceiver};
 
-use crate::{ZngurWellknownTraitData, template::CppHeaderTemplate};
+use crate::{
+    ZngurWellknownTraitData,
+    template::{CppHeaderTemplate, CppSourceTemplate},
+};
 use sailfish::Template;
 
 #[derive(Debug)]
@@ -423,14 +426,19 @@ impl CppFile {
     }
 
     fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
-        writeln!(state, r#"#include "{}""#, self.header_file_name)?;
-        writeln!(state, "extern \"C\" {{")?;
+        let template = CppSourceTemplate {
+            header_file_name: &self.header_file_name,
+        };
+        state.text += template.render().unwrap().as_str();
+
+        *is_really_needed = !self.trait_defs.is_empty()
+            || !self.exported_fn_defs.is_empty()
+            || !self.exported_impls.is_empty();
+
         for t in &self.trait_defs {
-            *is_really_needed = true;
             t.1.emit_cpp(state)?;
         }
         for func in &self.exported_fn_defs {
-            *is_really_needed = true;
             func.sig.emit_rust_link(state)?;
             writeln!(state, "{{")?;
             writeln!(
@@ -451,7 +459,6 @@ impl CppFile {
             writeln!(state, "}}")?;
         }
         for imp in &self.exported_impls {
-            *is_really_needed = true;
             for (name, sig) in &imp.methods {
                 sig.emit_rust_link(state)?;
                 writeln!(state, "{{")?;

@@ -1,0 +1,3 @@
+#include "<%- self.header_file_name %>"
+
+extern "C" {

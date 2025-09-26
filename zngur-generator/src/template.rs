@@ -62,3 +62,9 @@ impl<'a> CppHeaderTemplate<'a> {
         }
     }
 }
+
+#[derive(Template)]
+#[template(path = "cpp_source.sptl", escape = false)]
+pub(crate) struct CppSourceTemplate<'a> {
+    pub(crate) header_file_name: &'a String,
+}
