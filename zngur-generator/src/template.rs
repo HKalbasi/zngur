@@ -1,11 +1,12 @@
 use std::collections::HashMap;
 
 use crate::cpp::{
-    CppExportedImplDefinition, CppFnDefinition, CppLayoutPolicy, CppTraitDefinition,
+    CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy, CppTraitDefinition,
     CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
 };
 use sailfish::Template;
 use zngur_def::*;
+use zngur_def::{Mutability, ZngurMethodReceiver, ZngurWellknownTraitData};
 
 use crate::rust::IntoCpp;
 use itertools::Itertools;
@@ -44,12 +45,28 @@ impl<'a> CppHeaderTemplate<'a> {
             .collect()
     }
 
-    fn cpp_fn_defs(&self, td: &CppTypeDefinition) -> String {
-        let mut state = crate::cpp::State {
-            text: String::new(),
-            panic_to_exception: self.panic_to_exception.clone(),
-        };
-        td.emit_cpp_fn_defs(&mut state, &self.trait_defs).unwrap();
-        state.text
+    fn panic_handler(&self) -> String {
+        if let Some(symbols) = &self.panic_to_exception {
+            format!(
+                r#"
+            if ({}()) {{
+                {}();
+                throw ::rust::Panic{{}};
+            }}
+            "#,
+                symbols.detect_panic, symbols.take_panic,
+            )
+        } else {
+            "".to_owned()
+        }
     }
+
+    // fn cpp_fn_defs(&self, td: &CppTypeDefinition) -> String {
+    //     let mut state = crate::cpp::State {
+    //         text: String::new(),
+    //         panic_to_exception: self.panic_to_exception.clone(),
+    //     };
+    //     td.emit_cpp_fn_defs(&mut state, &self.trait_defs).unwrap();
+    //     state.text
+    // }
 }

@@ -877,6 +877,167 @@ namespace rust {
   <% }
   } %>
 
-  <%= self.cpp_fn_defs(&td) %>
+  <% let tr = &td.from_trait_ref.as_ref().and_then(|k| self.trait_defs.get(k)); %>
+  <% match tr { Some(CppTraitDefinition::Fn { .. }) => { %>
+    <# TODO: Implement this #>
+  <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name: _, link_name_ref }) => { %>
+    <% for ref_kind in ["Ref", "RefMut"] { %>
+      rust::<%- ref_kind %> <%- name %>::<%- ref_kind %>(<%- as_ty %>& args) {
+        auto data_as_impl = &args;
+        ::rust::__zngur_internal_assume_init(*this);
+        <%- link_name_ref %>(
+          (uint8_t *)data_as_impl,
+          ::rust::__zngur_internal_data_ptr(*this)
+        );
+      }
+    <% } %>
+  <% } None => { %>
+  <% }
+  } %>
+
+  <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
+  <% for method in &td.methods { %>
+    <% let fn_name = name.to_owned() + "::" + &method.name; %>
+    <% let inputs = &method.sig.inputs; %>
+    inline <%- method.sig.output %> <%- fn_name %> (
+      <%- inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+    ) noexcept {
+      <%- method.sig.output %> o{};
+      <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
+      <%- method.sig.rust_link_name %> (
+        <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_data_ptr(i<%- n %>), <% } %>
+        ::rust::__zngur_internal_data_ptr(o)
+      );
+      <%- self.panic_handler() %>
+      ::rust::__zngur_internal_assume_init(o);
+      return o;
+    }
+
+    <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
+      <% let ref_kinds: &[&str] = match m {
+        Mutability::Mut => &["RefMut"],
+        Mutability::Not => &["Ref", "RefMut"],
+      }; %>
+      <% let field_kinds: &[&str] = match m {
+        Mutability::Mut => &["FieldOwned", "FieldRefMut"],
+        Mutability::Not => &["FieldOwned", "FieldRefMut", "FieldRef"],
+      }; %>
+
+      <% for field_kind in field_kinds { %>
+        <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
+        template<size_t OFFSET>
+        inline <%- output %> rust::<%- field_kind %>< <%- td.ty %>, OFFSET >::<%- method.name %>(
+          <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+        ) const noexcept {
+          return <%- fn_name %>(
+            *this
+            <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
+          );
+        }
+      <% } %>
+
+      <% for ref_kind in ref_kinds { %>
+        <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
+        inline <%- output %> rust::<%- ref_kind %>< <%- td.ty %> >::<%- method.name %>(
+          <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+        ) const noexcept {
+          return <%- fn_name %>(
+            *this
+            <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
+          );
+        }
+      <% } %>
+
+    <% } %>
+
+    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) && method.kind != ZngurMethodReceiver::Static { %>
+      <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
+      <% let this_arg = match method.kind {
+        ZngurMethodReceiver::Ref(_) => "*this",
+        ZngurMethodReceiver::Move => "::std::move(*this)",
+        ZngurMethodReceiver::Static => unreachable!(),
+      }; %>
+
+      inline <%- output %> <%- fn_name %>(
+        <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+      ) <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept {
+        return <%- fn_name %>(
+          <%- this_arg %>
+          <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
+        );
+      }
+    <% }%>
+  <% } %>
+
+namespace rust {
+
+  <% for tr in &td.wellknown_traits { %>
+    <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print: _ } = tr { %>
+      <% if !is_unsized { %>
+        template<>
+        struct ZngurPrettyPrinter< <%- td.ty %> > {
+          static inline void print( <%- td.ty %> const& t) {
+            ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
+            <%- pretty_print %>(&t.data[0]);
+          }
+        };
+
+        template<>
+        struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
+          static inline void print(Ref< <%- td.ty %> > const& t) {
+            ::rust::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
+            <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.data));
+          }
+        };
+
+        template<>
+        struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
+          static inline void print(RefMut< <%- td.ty %> > const& t) {
+            ::rust::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
+            <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.data));
+          }
+        };
+
+        template<size_t OFFSET>
+        struct ZngurPrettyPrinter< FieldOwned< <%- td.ty %>, OFFSET > > {
+          static inline void print(FieldOwned< <%- td.ty %>, OFFSET > const& t) {
+            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
+          }
+        };
+
+        template<size_t OFFSET>
+        struct ZngurPrettyPrinter< FieldRef< <%- td.ty %>, OFFSET > > {
+          static inline void print(FieldRef< <%- td.ty %>, OFFSET > const& t) {
+            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
+          }
+        };
+
+        template<size_t OFFSET>
+        struct ZngurPrettyPrinter< FieldRefMut< <%- td.ty %>, OFFSET > > {
+          static inline void print(FieldRefMut< <%- td.ty %>, OFFSET > const& t) {
+            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
+          }
+        };
+      <% } else { %>
+        template<>
+        struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
+          static inline void print(Ref< <%- td.ty %> > const& t) {
+            ::rust::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
+            <%- pretty_print %>(::rust::__zngur_internal_data_ptr< Ref< <%- td.ty %> > >(t));
+          }
+        };
+
+        template<>
+        struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
+          static inline void print(RefMut< <%- td.ty %> > const& t) {
+            ::rust::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
+            <%- pretty_print %>(::rust::__zngur_internal_data_ptr< RefMut< <%- td.ty %> > >(t));
+          }
+        };
+      <% } %>
+    <% } %>
+  <% } %>
+
+} // namespace rust
 
 <% } %>
