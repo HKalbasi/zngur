@@ -1057,5 +1057,31 @@ namespace rust {
     }
   <%- fd.name.close_namespace() %>
 <% } %>
-
 <% } %>
+
+namespace rust {
+namespace exported_functions {
+
+<% for func in self.exported_fn_defs { %>
+  <%- func.sig.output %> <%- func.name %>(
+    <%- func.sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+  );
+<% } %>
+
+} // namespace exported_functions
+
+<% for imp in self.exported_impls { %>
+  <% let x = match &imp.tr { Some(x) => format!("{x}"), None => "::rust::Inherent".to_string() }; %>
+
+  template<>
+  class Impl< <%- imp.ty %>, <%- x %> > {
+    public:
+      <% for (name, sig) in &imp.methods { %>
+        static <%- sig.output %> <%- name %>(
+          <%- sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+        );
+      <% } %>
+  };
+<% } %>
+
+} // namespace rust

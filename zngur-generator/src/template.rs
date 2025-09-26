@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 
 use crate::cpp::{
-    CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy, CppTraitDefinition,
-    CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
+    CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy,
+    CppTraitDefinition, CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
 };
 use sailfish::Template;
 use zngur_def::*;
@@ -20,6 +20,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
     pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
 }
 
 impl<'a> CppHeaderTemplate<'a> {
@@ -60,13 +61,4 @@ impl<'a> CppHeaderTemplate<'a> {
             "".to_owned()
         }
     }
-
-    // fn cpp_fn_defs(&self, td: &CppTypeDefinition) -> String {
-    //     let mut state = crate::cpp::State {
-    //         text: String::new(),
-    //         panic_to_exception: self.panic_to_exception.clone(),
-    //     };
-    //     td.emit_cpp_fn_defs(&mut state, &self.trait_defs).unwrap();
-    //     state.text
-    // }
 }

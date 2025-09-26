@@ -416,42 +416,9 @@ impl CppFile {
             type_defs: &self.type_defs,
             trait_defs: &self.trait_defs,
             exported_impls: &self.exported_impls,
+            exported_fn_defs: &self.exported_fn_defs,
         };
         state.text += template.render().unwrap().as_str();
-        for func in &self.exported_fn_defs {
-            writeln!(state, "namespace rust {{ namespace exported_functions {{")?;
-            write!(state, "   {} {}(", func.sig.output, func.name)?;
-            for (n, ty) in func.sig.inputs.iter().enumerate() {
-                if n != 0 {
-                    write!(state, ", ")?;
-                }
-                write!(state, "{ty} i{n}")?;
-            }
-            writeln!(state, ");")?;
-            writeln!(state, "}} }}")?;
-        }
-        for imp in &self.exported_impls {
-            writeln!(
-                state,
-                "namespace rust {{ template<> class Impl< {}, {} > {{ public:",
-                imp.ty,
-                match &imp.tr {
-                    Some(x) => format!("{x}"),
-                    None => "::rust::Inherent".to_string(),
-                }
-            )?;
-            for (name, sig) in &imp.methods {
-                write!(state, "   static {} {}(", sig.output, name)?;
-                for (n, ty) in sig.inputs.iter().enumerate() {
-                    if n != 0 {
-                        write!(state, ", ")?;
-                    }
-                    write!(state, "{ty} i{n}")?;
-                }
-                writeln!(state, ");")?;
-            }
-            writeln!(state, "}}; }}")?;
-        }
         Ok(())
     }
 
