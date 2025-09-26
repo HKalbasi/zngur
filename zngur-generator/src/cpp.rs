@@ -250,16 +250,7 @@ pub struct CppFnSig {
     pub output: CppType,
 }
 
-impl CppFnSig {
-    fn emit_rust_link(&self, state: &mut State) -> std::fmt::Result {
-        write!(state, "void {}(", self.rust_link_name)?;
-        for n in 0..self.inputs.len() {
-            write!(state, "uint8_t* i{n},")?;
-        }
-        write!(state, "uint8_t* o)")?;
-        Ok(())
-    }
-}
+impl CppFnSig {}
 
 pub struct CppFnDefinition {
     pub name: CppPath,
@@ -304,48 +295,7 @@ pub enum CppTraitDefinition {
     },
 }
 
-impl CppTraitDefinition {
-    fn emit_cpp(&self, state: &mut State) -> std::fmt::Result {
-        match self {
-            CppTraitDefinition::Fn { .. } => (),
-            CppTraitDefinition::Normal {
-                as_ty,
-                methods,
-                link_name: _,
-                link_name_ref: _,
-            } => {
-                for method in methods {
-                    write!(state, "void {}(uint8_t* data", method.rust_link_name)?;
-                    for arg in 0..method.inputs.len() {
-                        write!(state, ", uint8_t* i{arg}")?;
-                    }
-                    writeln!(state, ", uint8_t* o) {{")?;
-                    writeln!(
-                        state,
-                        "   {as_ty}* data_typed = reinterpret_cast< {as_ty}* >(data);"
-                    )?;
-                    write!(
-                        state,
-                        "   {} oo = data_typed->{}({});",
-                        method.output,
-                        method.name,
-                        method
-                            .inputs
-                            .iter()
-                            .enumerate()
-                            .map(|(n, ty)| {
-                                format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
-                            })
-                            .join(", ")
-                    )?;
-                    writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
-                    writeln!(state, "}}")?;
-                }
-            }
-        }
-        Ok(())
-    }
-}
+impl CppTraitDefinition {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CppLayoutPolicy {
@@ -428,6 +378,9 @@ impl CppFile {
     fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
         let template = CppSourceTemplate {
             header_file_name: &self.header_file_name,
+            trait_defs: &self.trait_defs,
+            exported_fn_defs: &self.exported_fn_defs,
+            exported_impls: &self.exported_impls,
         };
         state.text += template.render().unwrap().as_str();
 
@@ -435,56 +388,6 @@ impl CppFile {
             || !self.exported_fn_defs.is_empty()
             || !self.exported_impls.is_empty();
 
-        for t in &self.trait_defs {
-            t.1.emit_cpp(state)?;
-        }
-        for func in &self.exported_fn_defs {
-            func.sig.emit_rust_link(state)?;
-            writeln!(state, "{{")?;
-            writeln!(
-                state,
-                "   {} oo = ::rust::exported_functions::{}({});",
-                func.sig.output,
-                func.name,
-                func.sig
-                    .inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, ty)| {
-                        format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
-                    })
-                    .join(", "),
-            )?;
-            writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
-            writeln!(state, "}}")?;
-        }
-        for imp in &self.exported_impls {
-            for (name, sig) in &imp.methods {
-                sig.emit_rust_link(state)?;
-                writeln!(state, "{{")?;
-                writeln!(
-                    state,
-                    "   {} oo = ::rust::Impl< {}, {} >::{}({});",
-                    sig.output,
-                    imp.ty,
-                    match &imp.tr {
-                        Some(x) => format!("{x}"),
-                        None => "::rust::Inherent".to_string(),
-                    },
-                    name,
-                    sig.inputs
-                        .iter()
-                        .enumerate()
-                        .map(|(n, ty)| {
-                            format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")
-                        })
-                        .join(", "),
-                )?;
-                writeln!(state, "   ::rust::__zngur_internal_move_to_rust(o, oo);")?;
-                writeln!(state, "}}")?;
-            }
-        }
-        writeln!(state, "}}")?;
         Ok(())
     }
 

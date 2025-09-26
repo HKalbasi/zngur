@@ -67,4 +67,7 @@ impl<'a> CppHeaderTemplate<'a> {
 #[template(path = "cpp_source.sptl", escape = false)]
 pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) header_file_name: &'a String,
+    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
+    pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
 }
