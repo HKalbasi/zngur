@@ -324,7 +324,7 @@ extern "C" {
         virtual ~<%- as_ty.path.name() %>() {};
         <% for method in methods { %>
           virtual <%- method.output %> <%- method.name %> (
-            <%- method.inputs.iter().enumerate().map(|(n, x)| format!("{x} i{n}")).join(", ") %>
+            <%- splat!(&method.inputs, |n, x|, "{x} i{n}") %>
           ) = 0;
         <% } %>
       };
@@ -478,11 +478,11 @@ extern "C" {
 
       <% for method in &td.methods { %>
           static <%- method.sig.output %> <%- method.name %>(
-            <%- method.sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+            <%- splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") %>
           ) noexcept ;
           <% if method.kind != ZngurMethodReceiver::Static { %>
               <%- method.sig.output %> <%- method.name %>(
-                <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+                <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
               )
               <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept ;
           <% } %>
@@ -490,7 +490,7 @@ extern "C" {
 
       <% for constructor in &td.constructors { %>
         <%- td.ty.path.0.last().unwrap() %>(
-          <%- constructor.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+          <%- splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") %>
         ) noexcept ;
       <% } %>
 
@@ -634,7 +634,7 @@ namespace rust {
     <% for method in &td.methods { %>
       <% if let ZngurMethodReceiver::Ref(_) = method.kind { %>
         <%- method.sig.output %> <%- method.name %>(
-          <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+          <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
         ) const noexcept ;
       <% } %>
     <% } %>
@@ -801,7 +801,7 @@ namespace rust {
       <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
         <% if !(m == Mutability::Mut && *field_kind == "FieldRef") { %>
           <%- method.sig.output %> <%- method.name %>(
-            <%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+            <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
           ) const noexcept ;
         <% } %>
       <% } %>
@@ -821,7 +821,7 @@ namespace rust {
 
   <% for c in &td.constructors { %>
     <% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap(); %>
-    inline <%- fn_name %>(<%- c.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) noexcept {
+    inline <%- fn_name %>(<%- splat!(&c.inputs, |n, ty|, "{ty} i{n}") %>) noexcept {
       ::rust::__zngur_internal_assume_init(*this);
       <%- c.rust_link_name %>(
         <% for n in 0..c.inputs.len() { %>
@@ -838,8 +838,8 @@ namespace rust {
   <% let tr = &td.from_trait.as_ref().and_then(|k| self.trait_defs.get(k)); %>
   <% match tr { Some(CppTraitDefinition::Fn { sig }) => { %>
     <% let as_std_function = format!("::std::function< {}({})>", sig.output, sig.inputs.iter().join(", ")); %>
-    <% let ii_names = sig.inputs.iter().enumerate().map(|(n, x)| format!("::rust::__zngur_internal_move_from_rust< {x} >(i{n})")).join(", "); %>
-    <% let uint8_t_ix = sig.inputs.iter().enumerate().map(|(n, _)| format!("uint8_t* i{n},")).join(" "); %>
+    <% let ii_names = splat!(&sig.inputs, |n, x|, "::rust::__zngur_internal_move_from_rust< {x} >(i{n})"); %>
+    <% let uint8_t_ix = splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n},"); %>
     <% let out_ty = &sig.output; %>
 
     <%- name %>(<%- as_std_function %> f) {
@@ -900,12 +900,12 @@ namespace rust {
     <% let fn_name = name.to_owned() + "::" + &method.name; %>
     <% let inputs = &method.sig.inputs; %>
     inline <%- method.sig.output %> <%- fn_name %> (
-      <%- inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+      <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
     ) noexcept {
       <%- method.sig.output %> o{};
       <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
       <%- method.sig.rust_link_name %> (
-        <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_data_ptr(i<%- n %>), <% } %>
+        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::rust::__zngur_internal_data_ptr(i{n})") %>,<% } %>
         ::rust::__zngur_internal_data_ptr(o)
       );
       <%- self.panic_handler() %>
@@ -927,7 +927,7 @@ namespace rust {
         <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
         template<size_t OFFSET>
         inline <%- output %> rust::<%- field_kind %>< <%- td.ty %>, OFFSET >::<%- method.name %>(
-          <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
         ) const noexcept {
           return <%- fn_name %>(
             *this
@@ -939,7 +939,7 @@ namespace rust {
       <% for ref_kind in ref_kinds { %>
         <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
         inline <%- output %> rust::<%- ref_kind %>< <%- td.ty %> >::<%- method.name %>(
-          <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
         ) const noexcept {
           return <%- fn_name %>(
             *this
@@ -959,7 +959,7 @@ namespace rust {
       }; %>
 
       inline <%- output %> <%- fn_name %>(
-        <%- inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
       ) <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept {
         return <%- fn_name %>(
           <%- this_arg %>
@@ -1043,12 +1043,12 @@ namespace rust {
   <%- fd.name.open_namespace() %>
     <% let CppFnSig { rust_link_name, inputs, output } = &fd.sig; %>
     inline <%- output %> <%- fd.name.name() %>(
-      <%- inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+      <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
     ) noexcept {
       <%- output %> o{};
       <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
       <%- rust_link_name %> (
-        <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_data_ptr(i<%- n %>), <% } %>
+        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::rust::__zngur_internal_data_ptr(i{n})") %>,<% } %>
         ::rust::__zngur_internal_data_ptr(o)
       );
       <%- self.panic_handler() %>
@@ -1064,7 +1064,7 @@ namespace exported_functions {
 
 <% for func in self.exported_fn_defs { %>
   <%- func.sig.output %> <%- func.name %>(
-    <%- func.sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+    <%- splat!(&func.sig.inputs, |n, ty|, "{ty} i{n}") %>
   );
 <% } %>
 
@@ -1078,7 +1078,7 @@ namespace exported_functions {
     public:
       <% for (name, sig) in &imp.methods { %>
         static <%- sig.output %> <%- name %>(
-          <%- sig.inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+          <%- splat!(&sig.inputs, |n, ty|, "{ty} i{n}") %>
         );
       <% } %>
   };

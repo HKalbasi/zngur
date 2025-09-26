@@ -250,8 +250,6 @@ pub struct CppFnSig {
     pub output: CppType,
 }
 
-impl CppFnSig {}
-
 pub struct CppFnDefinition {
     pub name: CppPath,
     pub sig: CppFnSig,
@@ -268,17 +266,10 @@ pub struct CppExportedImplDefinition {
     pub methods: Vec<(String, CppFnSig)>,
 }
 
-impl CppFnDefinition {}
-
 #[derive(Debug)]
 pub struct CppMethod {
     pub name: String,
     pub kind: ZngurMethodReceiver,
-    pub sig: CppFnSig,
-}
-
-#[derive(Debug)]
-pub struct BuildFromFunction {
     pub sig: CppFnSig,
 }
 
@@ -294,8 +285,6 @@ pub enum CppTraitDefinition {
         link_name_ref: String,
     },
 }
-
-impl CppTraitDefinition {}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CppLayoutPolicy {

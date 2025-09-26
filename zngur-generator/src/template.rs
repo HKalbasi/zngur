@@ -11,6 +11,40 @@ use zngur_def::{Mutability, ZngurMethodReceiver, ZngurWellknownTraitData};
 use crate::rust::IntoCpp;
 use itertools::Itertools;
 
+/// Macro for template string interpolation over iterables with enumeration
+///
+/// Usage:
+/// - splat!(items, |idx, ty|, "{ty} param{idx}")
+/// - splat!(items.iter().skip(1), |n, t|, "{t} i{n}")
+/// - splat!(items, "{el} i{n}")  // Default names: n (index), el (element)
+macro_rules! splat {
+    // Closure-style with custom variable names
+    ($inputs:expr, |$n:ident, $el:ident|, $pattern:literal) => {{
+        use itertools::Itertools;
+        $inputs
+            .into_iter()
+            .enumerate()
+            .map(|($n, $el)| format!($pattern))
+            .join(", ")
+    }};
+
+    ($inputs:expr, |$n:ident, _|, $pattern:literal) => {{
+      use itertools::Itertools;
+      $inputs
+          .into_iter()
+          .enumerate()
+          .map(|($n, _)| format!($pattern))
+          .join(", ")
+  }};
+
+    // Default names fallback
+    ($inputs:expr, $pattern:literal) => {
+        splat!($inputs, |n, el|, $pattern)
+    };
+}
+
+pub(crate) use splat;
+
 #[derive(Template)]
 #[template(path = "cpp_header.sptl", escape = false)]
 pub(crate) struct CppHeaderTemplate<'a> {
