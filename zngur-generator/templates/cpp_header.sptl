@@ -1037,7 +1037,25 @@ namespace rust {
       <% } %>
     <% } %>
   <% } %>
-
 } // namespace rust
+
+<% for fd in self.fn_deps { %>
+  <%- fd.name.open_namespace() %>
+    <% let CppFnSig { rust_link_name, inputs, output } = &fd.sig; %>
+    inline <%- output %> <%- fd.name.name() %>(
+      <%- inputs.iter().enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>
+    ) noexcept {
+      <%- output %> o{};
+      <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
+      <%- rust_link_name %> (
+        <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_data_ptr(i<%- n %>), <% } %>
+        ::rust::__zngur_internal_data_ptr(o)
+      );
+      <%- self.panic_handler() %>
+      ::rust::__zngur_internal_assume_init(o);
+      return o;
+    }
+  <%- fd.name.close_namespace() %>
+<% } %>
 
 <% } %>

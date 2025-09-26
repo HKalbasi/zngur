@@ -34,20 +34,6 @@ impl CppPath {
             .join("\n")
     }
 
-    fn emit_open_namespace(&self, state: &mut State) -> std::fmt::Result {
-        for p in self.namespace() {
-            writeln!(state, "namespace {} {{", p)?;
-        }
-        Ok(())
-    }
-
-    fn emit_close_namespace(&self, state: &mut State) -> std::fmt::Result {
-        for _ in self.namespace() {
-            writeln!(state, "}}")?;
-        }
-        Ok(())
-    }
-
     pub(crate) fn name(&self) -> &str {
         self.0.split_last().unwrap().0
     }
@@ -232,22 +218,6 @@ pub(crate) struct State {
 }
 
 impl State {
-    fn panic_handler(&self) -> String {
-        if let Some(symbols) = &self.panic_to_exception {
-            format!(
-                r#"
-            if ({}()) {{
-                {}();
-                throw ::rust::Panic{{}};
-            }}
-            "#,
-                symbols.detect_panic, symbols.take_panic,
-            )
-        } else {
-            "".to_owned()
-        }
-    }
-
     fn remove_no_except_in_panic(&mut self) {
         if self.panic_to_exception.is_some() {
             self.text = self.text.replace(" noexcept ", " ");
@@ -286,37 +256,6 @@ impl CppFnSig {
         write!(state, "uint8_t* o)")?;
         Ok(())
     }
-
-    fn emit_cpp_def(&self, state: &mut State, fn_name: &str) -> std::fmt::Result {
-        let CppFnSig {
-            inputs,
-            output,
-            rust_link_name,
-        } = self;
-        writeln!(
-            state,
-            "inline {output} {fn_name}({input_defs}) noexcept {{
-            {output} o{{}};
-            {deinits}
-            {rust_link_name}({input_args}::rust::__zngur_internal_data_ptr(o));
-            {panic_handler}
-            ::rust::__zngur_internal_assume_init(o);
-            return o;
-        }}",
-            input_defs = inputs
-                .iter()
-                .enumerate()
-                .map(|(n, ty)| format!("{ty} i{n}"))
-                .join(", "),
-            input_args = (0..inputs.len())
-                .map(|n| format!("::rust::__zngur_internal_data_ptr(i{n}), "))
-                .join(""),
-            panic_handler = state.panic_handler(),
-            deinits = (0..inputs.len())
-                .map(|n| format!("::rust::__zngur_internal_assume_deinit(i{n});"))
-                .join("\n"),
-        )
-    }
 }
 
 pub struct CppFnDefinition {
@@ -335,14 +274,7 @@ pub struct CppExportedImplDefinition {
     pub methods: Vec<(String, CppFnSig)>,
 }
 
-impl CppFnDefinition {
-    fn emit_cpp_def(&self, state: &mut State) -> std::fmt::Result {
-        self.name.emit_open_namespace(state)?;
-        self.sig.emit_cpp_def(state, self.name.name())?;
-        self.name.emit_close_namespace(state)?;
-        Ok(())
-    }
-}
+impl CppFnDefinition {}
 
 #[derive(Debug)]
 pub struct CppMethod {
@@ -486,9 +418,6 @@ impl CppFile {
             exported_impls: &self.exported_impls,
         };
         state.text += template.render().unwrap().as_str();
-        for fd in &self.fn_defs {
-            fd.emit_cpp_def(state)?;
-        }
         for func in &self.exported_fn_defs {
             writeln!(state, "namespace rust {{ namespace exported_functions {{")?;
             write!(state, "   {} {}(", func.sig.output, func.name)?;
