@@ -292,7 +292,8 @@ extern "C" {
       <% if let CppTraitDefinition::Fn { sig } = td { %>
         void <%- sig.rust_link_name %>(uint8_t* data, void destructor(uint8_t *),
                                        void call(uint8_t *,
-                                          <% for n in 0..sig.inputs.len() { %> uint8_t *i<%- n %>, <% } %>uint8_t *o)
+                                          <% for n in 0..sig.inputs.len() { %> uint8_t *i<%- n %>, <% } %>uint8_t *o),
+                                       uint8_t *o
         );
       <% } else if let CppTraitDefinition::Normal { link_name, link_name_ref, .. } = td { %>
         void <%- link_name %>(uint8_t *data, void destructor(uint8_t *), uint8_t *o);
@@ -396,10 +397,10 @@ extern "C" {
           "".to_owned(),
           "this->data = other.data;".to_owned(),
         ),
-        CppLayoutPolicy::HeapAllocated { .. } => (
-          "data = ::rust::alloc_fn();".to_owned(),
-          "::rust::free_fn(data);".to_owned(),
-          "memcpy(this->data, other.data, ::rust::size_fn());".to_owned(),
+        CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } => (
+          format!("data = {}();", alloc_fn),
+          format!("{}(data);", free_fn),
+          format!("memcpy(this->data, other.data, {}());", size_fn),
         ),
         CppLayoutPolicy::OnlyByRef => unreachable!(),
       }; %>
@@ -842,7 +843,7 @@ namespace rust {
     <% let uint8_t_ix = splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n},"); %>
     <% let out_ty = &sig.output; %>
 
-    <%- name %>(<%- as_std_function %> f) {
+    inline <%- name %> <%- name %>::make_box(<%- as_std_function %> f) {
       auto data = new <%- as_std_function %>(f);
       <%- name %> o;
       ::rust::__zngur_internal_assume_init(o);
@@ -850,6 +851,7 @@ namespace rust {
         reinterpret_cast<uint8_t*>(data),
         [](uint8_t *d) { delete reinterpret_cast< <%- as_std_function %>*>(d); },
         [](uint8_t *d, <%- uint8_t_ix %> uint8_t* o) {
+          auto dd = reinterpret_cast< <%- as_std_function %> *>(d);
           <%- out_ty %> oo = (*dd)(<%- ii_names %>);
           ::rust::__zngur_internal_move_to_rust< <%- out_ty %> >(o, oo);
         },
@@ -882,7 +884,7 @@ namespace rust {
     <# TODO: Implement this #>
   <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name: _, link_name_ref }) => { %>
     <% for ref_kind in ["Ref", "RefMut"] { %>
-      rust::<%- ref_kind %> <%- name %>::<%- ref_kind %>(<%- as_ty %>& args) {
+      rust::<%- ref_kind %>< <%- name %> >::<%- ref_kind %>(<%- as_ty %>& args) {
         auto data_as_impl = &args;
         ::rust::__zngur_internal_assume_init(*this);
         <%- link_name_ref %>(
@@ -1039,6 +1041,8 @@ namespace rust {
   <% } %>
 } // namespace rust
 
+<% } %>
+
 <% for fd in self.fn_deps { %>
   <%- fd.name.open_namespace() %>
     <% let CppFnSig { rust_link_name, inputs, output } = &fd.sig; %>
@@ -1056,7 +1060,6 @@ namespace rust {
       return o;
     }
   <%- fd.name.close_namespace() %>
-<% } %>
 <% } %>
 
 namespace rust {
