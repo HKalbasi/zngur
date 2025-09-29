@@ -15,7 +15,15 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
     let examples = cmd!(sh, "ls").read()?;
     for example in examples.lines() {
         sh.change_dir(example);
+
         if CARGO_PROJECTS.contains(&example) {
+            // Clean generated files for Cargo projects
+            let _ = cmd!(
+                sh,
+                "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
+            )
+            .run();
+            cmd!(sh, "cargo clean").run()?;
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
@@ -24,6 +32,10 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 .run()
                 .with_context(|| format!("Running example `{example}` failed"))?;
         } else {
+            // Clean generated files for Make projects
+            cmd!(sh, "make clean")
+                .run()
+                .with_context(|| format!("Cleaning example `{example}` failed"))?;
             cmd!(sh, "make")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
