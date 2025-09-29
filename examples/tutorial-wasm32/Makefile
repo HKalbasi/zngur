@@ -53,3 +53,6 @@ clean:
 install-deps: wasm32-wasip1-target
 
 FORCE: ;
+
+clean:
+	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt

@@ -17,3 +17,6 @@ generated2.h ./src/generated2.rs: main.zng
 		--cpp-namespace=m2
 
 FORCE: ;
+
+clean:
+	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
