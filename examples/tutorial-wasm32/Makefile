@@ -85,7 +85,7 @@ clean:
 # Legacy target for manual dependency installation (now automatic)
 install-deps: wasi-sdk-installed wasm32-wasip1-target
 
-FORCE: ;
+.PHONY: clean
 
 clean:
 	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
