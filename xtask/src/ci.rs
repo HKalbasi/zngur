@@ -29,7 +29,6 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
             )
             .run();
-            cmd!(sh, "cargo clean").run()?;
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
