@@ -141,14 +141,14 @@ impl ZngurGenerator {
                 let rust_link_name = rust_file.add_function(
                     &format!(
                         "<{}>::{}::<{}>",
-                        deref.as_ref().unwrap_or(&ty),
+                        deref.as_ref().map(|x| &x.0).unwrap_or(&ty),
                         method.name,
                         method.generics.iter().join(", "),
                     ),
                     &rusty_inputs,
                     &method.output,
                     use_path,
-                    deref.is_some(),
+                    deref.map(|x| x.1),
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
@@ -212,7 +212,7 @@ impl ZngurGenerator {
                 &func.inputs,
                 &func.output,
                 None,
-                false,
+                None,
             );
             cpp_file.fn_defs.push(CppFnDefinition {
                 name: CppPath::from_rust_path(&func.path.path),

@@ -410,6 +410,20 @@ impl ProcessedItem<'_> {
                             use_path,
                             deref,
                         } => {
+                            let deref = deref.map(|x| {
+                                let deref_type = x.to_zngur(aliases, base);
+                                let receiver_mutability = match data.receiver {
+                                    ZngurMethodReceiver::Ref(mutability) => mutability,
+                                    ZngurMethodReceiver::Static | ZngurMethodReceiver::Move => {
+                                        create_and_emit_error(
+                                            ctx,
+                                            "Deref needs reference receiver",
+                                            item_span,
+                                        );
+                                    }
+                                };
+                                (deref_type, receiver_mutability)
+                            });
                             methods.push(ZngurMethodDetails {
                                 data: data.to_zngur(aliases, base),
                                 use_path: use_path.map(|x| {
@@ -421,7 +435,7 @@ impl ProcessedItem<'_> {
                                         .cloned()
                                         .unwrap_or_else(|| x.to_zngur(base))
                                 }),
-                                deref: deref.map(|x| x.to_zngur(aliases, base)),
+                                deref,
                             });
                         }
                         ParsedTypeItem::CppValue { field, cpp_type } => {

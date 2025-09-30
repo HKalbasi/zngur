@@ -1,0 +1,15 @@
+[tools.dprint]
+version = "0.50.1"
+backend = "aqua:dprint/dprint"
+
+[tools.emsdk]
+version = "4.0.14"
+backend = "asdf:emsdk"
+
+[tools.wasi-sdk]
+version = "27"
+backend = "asdf:wasi-sdk"
+
+[tools.wasmtime]
+version = "36.0.2"
+backend = "aqua:bytecodealliance/wasmtime"

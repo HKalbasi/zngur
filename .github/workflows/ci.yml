@@ -16,7 +16,7 @@ jobs:
       fail-fast: false
     steps:
       - uses: actions/checkout@v3
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: jdx/mise-action@v3
       - name: Install Rust stable
         run: |
           rustup toolchain install stable
@@ -24,9 +24,8 @@ jobs:
           rustup component add rustfmt
       - name: Install Clang 19
         run: brew install llvm@19
-      - name: Install wasmtime
-        uses: bytecodealliance/actions/wasmtime/setup@v1
-      - run: CC=$(brew --prefix llvm@19)/bin/clang CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
+      - name: Run `cargo xtask ci`
+        run: CC=$(brew --prefix llvm@19)/bin/clang CXX=$(brew --prefix llvm@19)/bin/clang++ cargo xtask ci
 
   build:
     runs-on: ubuntu-latest
@@ -40,7 +39,7 @@ jobs:
       CXX: ${{ matrix.cpp_compiler }}
     steps:
       - uses: actions/checkout@v3
-      - uses: mymindstorm/setup-emsdk@v14
+      - uses: jdx/mise-action@v3
       - name: Install Rust stable
         run: |
           rustup toolchain install stable
@@ -51,13 +50,6 @@ jobs:
       - name: Install LLD for clang++
         if: matrix.cpp_compiler == 'clang++'
         run: sudo apt-get update && sudo apt-get install -y lld
-      - name: Install wasmtime
-        uses: bytecodealliance/actions/wasmtime/setup@v1
-      - name: Cache WASI SDK
-        uses: actions/cache@v3
-        with:
-          path: examples/tutorial-wasm32/wasi-sdk-25.0-x86_64-linux
-          key: wasi-sdk-25.0-x86_64-linux-v1
       - name: Run CI (clang++)
         if: matrix.cpp_compiler == 'clang++'
         run: CC=clang cargo xtask ci

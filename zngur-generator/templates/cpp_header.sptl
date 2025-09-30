@@ -93,6 +93,79 @@ namespace rust {
     inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
   };
 
+  template<typename T>
+  struct zngur_is_unsized : std::false_type {};
+  struct zngur_fat_pointer {
+    uint8_t* data;
+    size_t metadata;
+  };
+  template<typename T>
+  struct Raw {
+      using DataType = typename std::conditional<
+          zngur_is_unsized<T>::value,
+          zngur_fat_pointer,
+          uint8_t*
+      >::type;
+      DataType data;
+      Raw() {}
+      Raw(Ref<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+      }
+      Raw(RefMut<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      Raw(DataType data) : data(data) {
+      }
+      Raw<T> offset(ssize_t n) {
+          return Raw(data + n * __zngur_internal_size_of<T>());
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+  };
+  template<typename T>
+  struct RawMut {
+      using DataType = typename std::conditional<
+          zngur_is_unsized<T>::value,
+          zngur_fat_pointer,
+          uint8_t*
+      >::type;
+      DataType data;
+      RawMut() {}
+      RawMut(RefMut<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      RawMut(DataType data) : data(data) {
+      }
+      RawMut<T> offset(ssize_t n) {
+          return RawMut(data + n * __zngur_internal_size_of<T>());
+      }
+      T read() {
+          T value;
+          memcpy(__zngur_internal_data_ptr<T>(value), data, __zngur_internal_size_of<T>());
+          __zngur_internal_assume_init<T>(value);
+          return value;
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+      RefMut<T> read_mut() {
+          RefMut<T> value;
+          memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &data, __zngur_internal_size_of<RefMut<T>>());
+          __zngur_internal_assume_init<RefMut<T>>(value);
+          return value;
+      }
+      void write(T value) {
+          memcpy(data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+          __zngur_internal_assume_deinit<T>(value);
+      }
+  };
   template<typename... T>
   struct Tuple;
 
@@ -114,7 +187,7 @@ namespace rust {
   }
 
 <% for ty in self.builtin_types() { %>
-  <% let needs_endif = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
+  <% let needs_endif = ty == "::size_t"; %>
   <% if needs_endif { %>
     #if defined(__APPLE__) || defined(__wasm__)
   <% } %>
@@ -131,7 +204,11 @@ namespace rust {
 
   template<>
   inline size_t __zngur_internal_size_of< <%- ty %> >() noexcept {
+    <% if !ty.starts_with("::rust::Ref") { %>
     return sizeof(<%- ty %>);
+    <% } else { %>
+    return 8;
+    <% } %>
   }
 
   template<>
@@ -316,6 +393,17 @@ extern "C" {
     <%- tr.header() %>
   <% } %>
 <% } %>
+
+namespace rust {
+
+<% for td in self.type_defs {
+    if td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) { %>
+        template<>
+        struct zngur_is_unsized< <%- td.ty %> > : ::std::true_type {};
+<%  } 
+} %>
+
+}
 
 <% for (_, td) in self.trait_defs { %>
   <% if let CppTraitDefinition::Normal { as_ty, methods, .. } = td { %>
@@ -753,24 +841,28 @@ namespace rust {
     <% } %>
 };
 
+<% for ref_kind in ["Ref", "Raw", "RawMut"] { %>
+
 template<>
-inline uint8_t* __zngur_internal_data_ptr< Ref < <%- td.ty %> > >(const Ref< <%- td.ty %> >& t) noexcept {
+inline uint8_t* __zngur_internal_data_ptr< <%- ref_kind %> < <%- td.ty %> > >(const <%- ref_kind %> < <%- td.ty %> >& t) noexcept {
     return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
 }
 
 template<>
-inline void __zngur_internal_assume_init< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {}
+inline void __zngur_internal_assume_init< <%- ref_kind %> < <%- td.ty %> > >(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
 
 template<>
-inline void __zngur_internal_check_init< Ref < <%- td.ty %> > >(const Ref< <%- td.ty %> >&) noexcept {}
+inline void __zngur_internal_check_init< <%- ref_kind %> < <%- td.ty %> > >(const <%- ref_kind %> < <%- td.ty %> >&) noexcept {}
 
 template<>
-inline void __zngur_internal_assume_deinit< Ref < <%- td.ty %> > >(Ref< <%- td.ty %> >&) noexcept {}
+inline void __zngur_internal_assume_deinit< <%- ref_kind %> < <%- td.ty %> > >(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
 
 template<>
-inline size_t __zngur_internal_size_of< Ref < <%- td.ty %> > >() noexcept {
+inline size_t __zngur_internal_size_of< <%- ref_kind %> < <%- td.ty %> > >() noexcept {
     return <% if is_unsized { %>16<% } else { %>8<% } %>;
 }
+
+<% } %>
 
 } // namespace rust
 

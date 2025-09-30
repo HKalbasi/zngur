@@ -3,7 +3,7 @@
 A Zngur project consists of 3 things:
 
 - An IDL (interface definition language) file named `main.zng`
-- A Rust crate (that can be everything, binary, rlib, static-lib, cdy-lib, ...)
+- A Rust crate (that can be anything: binary, rlib, static-lib, cdy-lib, ...)
 - A C++ project.
 
 To start, install Zngur:
@@ -12,14 +12,16 @@ To start, install Zngur:
 cargo install zngur-cli
 ```
 
-Then generate a new `staticlib` crate using `cargo init --lib` and appending this to the `Cargo.toml`:
+Then generate a new `staticlib` crate using `cargo init --lib`
+and by appending this to `Cargo.toml`:
 
 ```Toml
 [lib]
 crate-type = ["staticlib"]
 ```
 
-And create an empty `main.cpp` and `main.zng` file. Your directory tree should look like this:
+And create an empty `main.cpp` and `main.zng` file.
+Your directory tree should look like this:
 
 ```
 ├── Cargo.toml
@@ -54,7 +56,8 @@ impl Inventory {
 }
 ```
 
-Copy it into `src/lib.rs`. Now we need to declare things that we need to access in C++ in the `main.zng` file:
+Copy it into `src/lib.rs`.
+Now we need to declare things that we need to access in C++ in the `main.zng` file:
 
 ```
 type crate::Inventory {
@@ -64,15 +67,18 @@ type crate::Inventory {
 }
 ```
 
-Zngur needs to know the size and align of the types inside the bridge. You can figure it out using the rust-analyzer (by hovering
-over the struct or type alias) or fill it with some random number and then fix it from the compiler error.
+Zngur needs to know the size and alignment of the types inside the bridge.
+You can find these using rust-analyzer (by hovering over the struct or type alias)
+or fill it with some random number and then fix it from the compiler error.
 
-> **Note:** Ideally `main.zng` file should be auto-generated, but we are not there yet. Also, Zngur can work without explicit size and
-> align (with some caveats), see [layout policies](./call_rust_from_cpp/layout_policy.md) for more details.
+> **Note:** Ideally `main.zng` should be auto-generated, but we are not there yet.
+> Also, Zngur can work without explicit size and alignment (with some caveats),
+> see [layout policies](./call_rust_from_cpp/layout_policy.md) for more details.
 
-Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files. It will generate a `./generated.h` C++ header file, and a
-`./src/generated.rs` file. Add a `mod generated;` to your `lib.rs` file to include the generated Rust file. Then fill `main.cpp` file
-with the following content:
+Now, run `zngur g ./main.zng` to generate the C++ and Rust glue files.
+It will generate a `./generated.h` C++ header file, and a `./src/generated.rs` file.
+Add a `mod generated;` to your `lib.rs` file to include the generated Rust file.
+Then fill `main.cpp` file with the following content:
 
 ```C++
 #include "./generated.h"
@@ -82,17 +88,19 @@ int main() {
 }
 ```
 
-Zngur will add every Rust item with its full path in the `rust` namespace, so for example `String` will become `rust::std::string::String` in the
-C++ side.
+Zngur will add every Rust item with its full path in the `rust` namespace,
+so for example `String` will become `rust::std::string::String` in the C++ side.
 
-To build it, you need to first build the Rust code using `cargo build`, which will generate a `libyourcrate.a` in the `./target/debug` folder, and
-you can build your C++ code by linking to it:
+To build it, you first need to build the Rust code using `cargo build`,
+which will generate a `libyourcrate.a` in the `./target/debug` folder,
+and then you can build your C++ code by linking to it:
 
 ```bash
 clang++ main.cpp -g -L ./target/debug/ -l your_crate
 ```
 
-To ensure that everything works, let's add a `#[derive(Debug)]` to `Inventory` and use `zngur_dbg` to see it:
+To ensure that everything works,
+let's add a `#[derive(Debug)]` to `Inventory` and use `zngur_dbg` to see it:
 
 ```
 type crate::Inventory {
@@ -110,10 +118,11 @@ int main() {
 }
 ```
 
-There are some traits that Zngur has special support for them, and `Debug` is among them. [This page](./call_rust_from_cpp/wellknown_traits.md) has the
-complete list of them.
+There are some traits that Zngur has special support for them, and `Debug` is among them.
+[This page](./call_rust_from_cpp/wellknown_traits.md) has the complete list of them.
 
-Assuming that everything works correctly, you should see something like this after executing the program:
+Assuming that everything works correctly,
+you should see something like this after executing the program:
 
 ```
 [main.cpp:5] inventory = Inventory {
@@ -184,8 +193,8 @@ int main() {
 }
 ```
 
-Bridging the `add_item` method requires a little more effort. We need to declare `crate::Item` type as well since it is an argument
-of that function:
+Bridging the `add_item` method requires a little more effort.
+We need to declare `crate::Item` type as well since it is an argument of that function:
 
 ```
 // ...
@@ -200,8 +209,9 @@ type crate::Inventory {
 }
 ```
 
-But using that alone we can't use the `add_item` since there is no way to obtain a `rust::crate::Item` in the C++ side. To fix that, we
-need to add the constructor for the `Item`:
+But using that alone we can't use the `add_item`
+since there is no way to obtain a `rust::crate::Item` in the C++ side.
+To fix that, we need to add the constructor for the `Item`:
 
 ```
 type ::std::string::String {
@@ -215,8 +225,8 @@ type crate::Item {
 }
 ```
 
-But it doesn't solve the problem, since we can't create a `String` so we can't call the constructor. To creating a `String`, we declare the
-primitive type `str` and its `to_owned` method:
+But it doesn't solve the problem, since we can't create a `String` so we can't call the constructor.
+To creating a `String`, we declare the primitive type `str` and its `to_owned` method:
 
 ```
 type str {
@@ -226,14 +236,17 @@ type str {
 }
 ```
 
-There are some new things here. First, since `str` is a primitive it doesn't need full path. Then there is `wellknown_traits(?Sized)` instead
-of `#layout(size = X, align = Y)` which tells Zngur that this type is unsized and it should consider its references as fat and prevent storing it
-by value.
+There are some new things here.
+First, since `str` is a primitive it doesn't need full path.
+Then there is `wellknown_traits(?Sized)` instead of `#layout(size = X, align = Y)`
+which tells Zngur that this type is unsized and it should consider its references as fat
+and prevent storing it by value.
 
-Now you may wonder how we can obtain a `&str` to make a `String` from it? Fortunately, Zngur has some special support for primitive types and it
-has a `operator""_rs` that creates a `&str` from a zero terminated, valid UTF8 `char*` with the static lifetime. If Zngur didn't
-have this, we could create a `&[u8]` by exporting its `from_raw_parts` and then converting it to a `&str`, but Zngur tries to mimic Rust
-language features in C++ with a similar syntax.
+Now you may wonder how we can obtain a `&str` to make a `String` from it?
+Fortunately, Zngur has some special support for primitive types
+and it has a `operator""_rs` that creates a `&str` from a zero terminated, valid UTF8 `char*` with the static lifetime.
+If Zngur didn't have this, we could create a `&[u8]` by exporting its `from_raw_parts` and then converting it to a `&str`,
+but Zngur tries to mimic Rust language features in C++ with a similar syntax.
 
 So now we can finally use the `add_item` method:
 
@@ -296,8 +309,8 @@ type crate::Inventory {
 }
 ```
 
-Note that this only brings `Vec<Item>`, for using `Vec<i32>` or `Vec<String>` or `Vec<SomethingElse>` you need to add each of
-them separately.
+Note that this only brings `Vec<Item>`,
+for using `Vec<i32>` or `Vec<String>` or `Vec<SomethingElse>` you need to add each of them separately.
 
 Now you can use `into_items` method in C++:
 
@@ -331,8 +344,9 @@ You can see the full code at [`examples/tutorial`](https://github.com/HKalbasi/z
 
 ## Calling C++ from Rust
 
-C++/Rust interop has two sides, and no interop tool is complete without supporting both. Here, we will do the reverse of the
-above task, swapping the Rust and C++ rules. So, let's assume we have this C++ code:
+C++/Rust interop has two sides, and no interop tool is complete without supporting both.
+Here, we will do the reverse of the above task, swapping the Rust and C++ rules.
+So, let's assume we have this C++ code:
 
 ```C++
 #include <string>
@@ -366,8 +380,9 @@ struct Inventory {
 } // namespace cpp_inventory
 ```
 
-Create a new cargo project, this time a binary one since we want to write the main function to live inside Rust. Copy the above code into
-the `inventory.h` file. Then create a `main.zng` file with the following content:
+Create a new cargo project, this time a binary one since we want to write the main function to live inside Rust.
+Copy the above code into the `inventory.h` file.
+Then create a `main.zng` file with the following content:
 
 ```
 #cpp_additional_includes "
@@ -402,8 +417,9 @@ struct Inventory(generated::ZngurCppOpaqueOwnedObject);
 struct Item(generated::ZngurCppOpaqueOwnedObject);
 ```
 
-This time we will use the Zngur generator inside of cargo build script. We could still use the `zngur-cli` but in projects
-where cargo is the boss, using build script is better. Add `zngur` and `cc` to your build dependencies:
+This time we will use the Zngur generator inside of cargo build script.
+We could still use the `zngur-cli` but in projects where cargo is the boss, using build script is better.
+Add `zngur` and `cc` to your build dependencies:
 
 ```toml
 [build-dependencies]
@@ -445,9 +461,11 @@ fn main() {
 }
 ```
 
-Now we have a `crate::Inventory` and a `crate::Item` that can contain their C++ counterparts. But there is no way to use
-them in Rust. In Zngur, the Rust side can't access C++ opaque objects. So to make these types useful in Rust, we can
-add `impl` blocks for these types in C++. Add this to the `main.zng`:
+Now we have a `crate::Inventory` and a `crate::Item` that can contain their C++ counterparts.
+But there is no way to use them in Rust.
+In Zngur, the Rust side can't access C++ opaque objects.
+So to make these types useful in Rust, we can add `impl` blocks for these types in C++.
+Add this to the `main.zng`:
 
 ```
 type str {
@@ -470,7 +488,8 @@ extern "C++" {
 }
 ```
 
-Now we can define these methods in the C++ and use them in Rust. Create a file named `impls.cpp` with this content:
+Now we can define these methods in the C++ and use them in Rust.
+Create a file named `impls.cpp` with this content:
 
 ```C++
 #include "generated.h"
@@ -506,20 +525,26 @@ Item rust::Impl<Item>::new_(rust::Ref<rust::Str> name, uint32_t size) {
 
 These functions look like some unnecessary boilerplate, but writing them has some benefits:
 
-- We can convert C++ types to the Rust equivalents in these functions. For example, converting a pointer and length to a slice, or `&str` to `std::string` that
-  happened in the `Item::new` above.
+- We can convert C++ types to the Rust equivalents in these functions.
+  For example, converting a pointer and length to a slice,
+  or `&str` to `std::string` that happened in the `Item::new` above.
 - We can convert exceptions to Rust `Result` or `Option`.
-- We can control the signature of methods, and use proper lifetimes and mutability for references. In case of mutability, Rust mutability means
-  exclusiveness, which might be too restrictive and we may want to consider the C++ type interior mutable. We can also add nullability with `Option` or
-  make the function `unsafe`.
-- We can choose Rusty names for the functions (like `new` and `len`) or put the functionality in the proper trait (for example implementing the
-  `Iterator` trait instead of exposing the `.begin` and `.end` functions)
+- We can control the signature of methods, and use proper lifetimes and mutability for references.
+  In case of mutability, Rust mutability means exclusiveness,
+  which might be too restrictive and we may want to consider the C++ type interior mutable.
+  We can also add nullability with `Option` or make the function `unsafe`.
+- We can choose Rusty names for the functions (like `new` and `len`)
+  or put the functionality in the proper trait
+  (for example implementing the `Iterator` trait instead of exposing the `.begin` and `.end` functions)
 
-Even in the tools that support calling C++ functions directly, people often end up writing Rust wrappers around C++ types for
-these reasons. In Zngur, that code is the wrapper, which lives in the C++ so it can do whatever C++ does.
+Even in the tools that support calling C++ functions directly,
+people often end up writing Rust wrappers around C++ types for these reasons.
+In Zngur, that code is the wrapper, which lives in the C++ so it can do whatever C++ does.
 
-In the Rust to C++ side, we used `zngur_dbg` macro to see the result. We will do the same here with the `dbg!` macro. To do that, we need to implement
-the `Debug` trait for `crate::Inventory`. Add this to the `main.zng`:
+In the Rust to C++ side, we used `zngur_dbg` macro to see the result.
+We will do the same here with the `dbg!` macro.
+To do that, we need to implement the `Debug` trait for `crate::Inventory`.
+Add this to the `main.zng`:
 
 ```
 // ...

@@ -40,7 +40,7 @@ public:
   }
 
   rust::Unit tag(::uint64_t blob_id,
-                 rust::Ref<rust::core::primitive::str> tag) override {
+                 rust::Ref<rust::Str> tag) override {
     impl.blobs[blob_id].tags.emplace((char *)tag.as_ptr(), tag.len());
     return rust::Unit{};
   }

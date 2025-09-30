@@ -1,0 +1,5 @@
+[tools]
+dprint = "0.50.1"
+emsdk = "4.0.14"
+wasi-sdk = "27"
+wasmtime = "36.0.2"
