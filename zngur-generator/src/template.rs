@@ -1,0 +1,107 @@
+use std::collections::HashMap;
+
+use crate::cpp::{
+    CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy,
+    CppTraitDefinition, CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
+};
+use sailfish::Template;
+use zngur_def::*;
+use zngur_def::{Mutability, ZngurMethodReceiver, ZngurWellknownTraitData};
+
+use crate::rust::IntoCpp;
+use itertools::Itertools;
+
+/// Macro for template string interpolation over iterables with enumeration
+///
+/// Usage:
+/// - splat!(items, |idx, ty|, "{ty} param{idx}")
+/// - splat!(items.iter().skip(1), |n, t|, "{t} i{n}")
+/// - splat!(items, "{el} i{n}")  // Default names: n (index), el (element)
+macro_rules! splat {
+    // Closure-style with custom variable names
+    ($inputs:expr, |$n:ident, $el:ident|, $pattern:literal) => {{
+        use itertools::Itertools;
+        $inputs
+            .into_iter()
+            .enumerate()
+            .map(|($n, $el)| format!($pattern))
+            .join(", ")
+    }};
+
+    ($inputs:expr, |$n:ident, _|, $pattern:literal) => {{
+      use itertools::Itertools;
+      $inputs
+          .into_iter()
+          .enumerate()
+          .map(|($n, _)| format!($pattern))
+          .join(", ")
+  }};
+
+    // Default names fallback
+    ($inputs:expr, $pattern:literal) => {
+        splat!($inputs, |n, el|, $pattern)
+    };
+}
+
+pub(crate) use splat;
+
+#[derive(Template)]
+#[template(path = "cpp_header.sptl", escape = false)]
+pub(crate) struct CppHeaderTemplate<'a> {
+    pub(crate) panic_to_exception: &'a Option<PanicToExceptionSymbols>,
+    pub(crate) additional_includes: &'a String,
+    pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
+    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
+    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
+}
+
+impl<'a> CppHeaderTemplate<'a> {
+    // TODO: Docs - what do these represent? When will we change this list?
+    fn builtin_types(&self) -> Vec<String> {
+        [8, 16, 32, 64]
+            .into_iter()
+            .flat_map(|x| [format!("int{x}_t"), format!("uint{x}_t")])
+            .chain([8, 16, 32, 64].into_iter().flat_map(|x| {
+                [
+                    format!("::rust::Ref<int{x}_t>"),
+                    format!("::rust::Ref<uint{x}_t>"),
+                    format!("::rust::RefMut<int{x}_t>"),
+                    format!("::rust::RefMut<uint{x}_t>"),
+                ]
+            }))
+            .chain([
+                "::rust::ZngurCppOpaqueOwnedObject".to_string(),
+                "::double_t".to_string(),
+                "::float_t".to_string(),
+                "::size_t".to_string(),
+            ])
+            .collect()
+    }
+
+    fn panic_handler(&self) -> String {
+        if let Some(symbols) = &self.panic_to_exception {
+            format!(
+                r#"
+            if ({}()) {{
+                {}();
+                throw ::rust::Panic{{}};
+            }}
+            "#,
+                symbols.detect_panic, symbols.take_panic,
+            )
+        } else {
+            "".to_owned()
+        }
+    }
+}
+
+#[derive(Template)]
+#[template(path = "cpp_source.sptl", escape = false)]
+pub(crate) struct CppSourceTemplate<'a> {
+    pub(crate) header_file_name: &'a String,
+    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
+    pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+}
