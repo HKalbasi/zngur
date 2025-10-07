@@ -1,3 +1,13 @@
+# WASI SDK configuration
+WASI_VERSION := 27
+WASI_VERSION_FULL := $(WASI_VERSION).0
+WASI_ARCH := $(shell uname -m)
+WASI_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]' | sed 's/darwin/macos/')
+WASI_SDK_DIR := wasi-sdk-$(WASI_VERSION_FULL)-$(WASI_ARCH)-$(WASI_OS)
+WASI_SDK_PATH := $(CURDIR)/$(WASI_SDK_DIR)
+# e.g. https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz
+WASI_SDK_URL := https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-$(WASI_VERSION)/wasi-sdk-$(WASI_VERSION_FULL)-$(WASI_ARCH)-$(WASI_OS).tar.gz
+
 # WASI build flags for C++ compilation with wasmtime
 WASIFLAGS = -std=c++14 \
            --target=wasm32-wasi \
@@ -6,7 +16,7 @@ WASIFLAGS = -std=c++14 \
            -lwasi-emulated-signal \
            -fno-exceptions
 
-# Use the WASI SDK C++ compiler
+# Use the WASI SDK C++ compiler, regardless of the CXX set by the user.
 CXX = $(WASI_SDK_PATH)/bin/clang++
 
 # Default target
@@ -22,7 +32,8 @@ a.out: main.wasm
 	@chmod +x $@
 
 main.wasm: main.cpp generated.h generated.cpp \
-           target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
+           target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+           wasi-sdk-installed
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
 	    target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
@@ -42,17 +53,26 @@ wasm32-wasip1-target:
 	}
 	@touch wasm32-wasip1-target
 
+# Ensure WASI SDK is installed
+wasi-sdk-installed: $(WASI_SDK_DIR)
+	@touch wasi-sdk-installed
+
+$(WASI_SDK_DIR):
+	@echo "Downloading WASI SDK $(WASI_VERSION_FULL) for $(WASI_ARCH)-$(WASI_OS)..."
+	@curl -L $(WASI_SDK_URL) -o $(WASI_SDK_DIR).tar.gz
+	@echo "Extracting WASI SDK..."
+	@tar -xzf $(WASI_SDK_DIR).tar.gz
+	@rm $(WASI_SDK_DIR).tar.gz
+	@echo "WASI SDK installed at $(WASI_SDK_PATH)"
+
 clean:
 	cargo clean
 	rm -f generated.h ./src/generated.rs generated.cpp generated.o
-	rm -f main.wasm example_tutorial_wasm32.wasm a.out wasi-sdk-latest.tar.gz
-	rm -f wasm32-wasip1-target
+	rm -f main.wasm example_tutorial_wasm32.wasm a.out
+	rm -f wasm32-wasip1-target wasi-sdk-installed
 	rm -rf wasi-sdk-*
 
-# Legacy target for manual dependency installation (now automatic)
-install-deps: wasm32-wasip1-target
+# Manual WASI SDK installation target
+install-wasi-sdk: wasi-sdk-installed
 
-.PHONY: clean
-
-clean:
-	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
+.PHONY: clean install-wasi-sdk
