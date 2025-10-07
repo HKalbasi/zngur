@@ -7,7 +7,9 @@ fn convert_sailfish_tags_to_comment(mut template: &str) -> Result<(String, Vec<&
     while let Some((before_start, rest)) = template.split_once("<%") {
         result_text.push_str(before_start);
         let comment = format!("/* SAILFISH_TEMPLATE{} */", result_dicts.len());
-        let (tag, rest) = rest.split_once("%>").context("A <% without %> found in template")?;
+        let (tag, rest) = rest
+            .split_once("%>")
+            .context("A <% without %> found in template")?;
         result_dicts.push(tag);
         template = rest;
         result_text.push_str(&comment);
@@ -25,15 +27,17 @@ fn convert_comments_to_sailfish_tag(mut template: String, tags: Vec<&str>) -> St
     template
 }
 
-
 pub fn main(fix: bool) -> Result<()> {
     let sh = Shell::new()?;
 
     let temp_dir = sh.create_temp_dir()?;
 
-    for cpp_template in ["./zngur-generator/templates/cpp_header.sptl", "./zngur-generator/templates/cpp_source.sptl"] {
+    for cpp_template in [
+        "./zngur-generator/templates/cpp_header.sptl",
+        "./zngur-generator/templates/cpp_source.sptl",
+    ] {
         let text = std::fs::read_to_string(cpp_template).context("failed to open template file")?;
-        
+
         let (commented_text, tags) = convert_sailfish_tags_to_comment(&text)?;
 
         let temp_file_path = temp_dir.path().join("template.cpp");
