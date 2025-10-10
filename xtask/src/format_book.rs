@@ -14,13 +14,6 @@ pub fn main(fix: bool) -> Result<()> {
         bail!("Book source directory 'book/src' not found");
     }
 
-    // Check if plugins need to be initialized/updated
-    println!("Initializing dprint plugins...");
-    if let Err(e) = cmd!(sh, "dprint upgrade").run() {
-        eprintln!("Warning: Failed to upgrade dprint plugins: {}", e);
-        eprintln!("Continuing with existing plugins...");
-    }
-
     if fix {
         println!("Formatting markdown files...");
         cmd!(sh, "dprint fmt")

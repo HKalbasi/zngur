@@ -1,15 +1,20 @@
-[tools.dprint]
-version = "0.50.1"
+[[tools.dprint]]
+version = "0.50.2"
 backend = "aqua:dprint/dprint"
 
-[tools.emsdk]
+[tools.dprint.platforms.linux-x64]
+checksum = "sha256:4b0e7911262049ccb8e1ac5968bf7a66dc490968fe1552a123bb2d6dadf2ad95"
+size = 8844803
+url = "https://github.com/dprint/dprint/releases/download/0.50.2/dprint-x86_64-unknown-linux-musl.zip"
+
+[[tools.emsdk]]
 version = "4.0.14"
 backend = "asdf:emsdk"
 
-[tools.wasi-sdk]
+[[tools.wasi-sdk]]
 version = "27"
 backend = "asdf:wasi-sdk"
 
-[tools.wasmtime]
+[[tools.wasmtime]]
 version = "36.0.2"
 backend = "aqua:bytecodealliance/wasmtime"
