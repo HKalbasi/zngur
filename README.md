@@ -120,6 +120,25 @@ cargo install zngur-cli
 
 <br>
 
+## Contributing
+
+Because our examples require invoking a built `zngur` binary, we use `xtask` to orchestrate the build process and validate correctness across all examples.
+
+1. **Install mise**: This project uses `mise` for tool management. Install it from [mise.jdx.dev](https://mise.jdx.dev/) or via your package manager.
+
+2. **Install dependencies**: Run `mise install` to install the required tools. See [`mise.toml`](/mise.toml) for the list of installed tools.
+
+3. **Run the CI locally**: The official command to run our CI is:
+   ```bash
+   CXX=clang++ cargo xtask ci
+   ```
+   You can use any of the C++ compilers mentioned in our CI workflow: `clang++` or `g++`.
+   Other compilers may work, but are not guaranteed to by our CI testing.
+
+### Formatting
+
+You may run `cargo xtask format-book` to run `mdformat` on the `/book` directory.
+
 #### License
 
 <sup>

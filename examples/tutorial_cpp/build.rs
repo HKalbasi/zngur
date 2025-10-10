@@ -12,6 +12,19 @@ fn main() {
     let crate_dir = build::cargo_manifest_dir();
     let out_dir = build::out_dir();
 
+    // Force rerun if generated files don't exist
+    let generated_files = [
+        out_dir.join("generated.cpp"),
+        out_dir.join("generated.h"),
+        out_dir.join("generated.rs"),
+    ];
+    for file in &generated_files {
+        if !file.exists() {
+            println!("cargo:rerun-if-changed=nonexistent_trigger_file");
+            break;
+        }
+    }
+
     Zngur::from_zng_file(crate_dir.join("main.zng"))
         .with_cpp_file(out_dir.join("generated.cpp"))
         .with_h_file(out_dir.join("generated.h"))

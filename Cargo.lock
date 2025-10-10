@@ -447,6 +447,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "filetime"
+version = "0.2.26"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bc0505cd1b6fa6580283f6bdf70a73fcf4aba1184038c90902b92b3dd0df63ed"
+dependencies = [
+ "cfg-if",
+ "libc",
+ "libredox",
+ "windows-sys 0.60.2",
+]
+
+[[package]]
 name = "find-msvc-tools"
 version = "0.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -501,6 +513,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "indexmap"
+version = "2.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4b0f83760fb341a774ed326568e19f5a863af4a952def8c39f9ab92fd95b88e5"
+dependencies = [
+ "equivalent",
+ "hashbrown",
+]
+
+[[package]]
 name = "is-terminal"
 version = "0.4.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -542,6 +564,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "49f1f14873335454500d59611f1cf4a4b0f786f9ac11f4312a78e4cf2566695b"
 
 [[package]]
+name = "itoap"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9028f49264629065d057f340a86acb84867925865f73bbf8d47b4d149a7e88b8"
+
+[[package]]
 name = "js-sys"
 version = "0.3.77"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -556,6 +584,17 @@ name = "libc"
 version = "0.2.175"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a82ae493e598baaea5209805c49bbf2ea7de956d50d7da0da1164f9c6d28543"
+
+[[package]]
+name = "libredox"
+version = "0.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "416f7e718bdb06000964960ffa43b4335ad4012ae8b99060261aa4a8088d5ccb"
+dependencies = [
+ "bitflags 2.9.4",
+ "libc",
+ "redox_syscall",
+]
 
 [[package]]
 name = "linux-raw-sys"
@@ -717,6 +756,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "redox_syscall"
+version = "0.5.17"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5407465600fb0548f1442edf71dd20683c6ed326200ace4b1ef0763521bb3b77"
+dependencies = [
+ "bitflags 2.9.4",
+]
+
+[[package]]
 name = "regex"
 version = "1.11.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -811,6 +859,44 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f3cb5ba0dc43242ce17de99c180e96db90b235b8a9fdc9543c96d2209116bd9f"
 
 [[package]]
+name = "sailfish"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "40efbac4e16ca6b1a5706348ada4d8b67d7b417ac2001aa6c4ae092511bb1763"
+dependencies = [
+ "itoap",
+ "ryu",
+ "sailfish-macros",
+ "version_check",
+]
+
+[[package]]
+name = "sailfish-compiler"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "003c945c249a98ec4488826a3ffe72aa66b0dcf8b0218a6bd87c682cf8c3bba6"
+dependencies = [
+ "filetime",
+ "home",
+ "memchr",
+ "proc-macro2",
+ "quote",
+ "serde",
+ "syn",
+ "toml",
+]
+
+[[package]]
+name = "sailfish-macros"
+version = "0.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2d5c507d85499f2e67cb3c9da7d50741039559afee4ccd137985a188af4d62e6"
+dependencies = [
+ "proc-macro2",
+ "sailfish-compiler",
+]
+
+[[package]]
 name = "same-file"
 version = "1.0.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -854,6 +940,15 @@ dependencies = [
  "itoa",
  "memchr",
  "ryu",
+ "serde",
+]
+
+[[package]]
+name = "serde_spanned"
+version = "0.6.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf41e0cfaf7226dca15e8197172c295a782857fcb97fad1808a166870dee75a3"
+dependencies = [
  "serde",
 ]
 
@@ -925,6 +1020,47 @@ dependencies = [
 ]
 
 [[package]]
+name = "toml"
+version = "0.8.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dc1beb996b9d83529a9e75c17a1686767d148d70663143c7854d8b4a09ced362"
+dependencies = [
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_edit",
+]
+
+[[package]]
+name = "toml_datetime"
+version = "0.6.11"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "22cddaf88f4fbc13c51aebbf5f8eceb5c7c5a9da2ac40a13519eb5b0a0e8f11c"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "toml_edit"
+version = "0.22.27"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "41fe8c660ae4257887cf66394862d21dbca4a6ddd26f04a3560410406a2f819a"
+dependencies = [
+ "indexmap",
+ "serde",
+ "serde_spanned",
+ "toml_datetime",
+ "toml_write",
+ "winnow",
+]
+
+[[package]]
+name = "toml_write"
+version = "0.1.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5d99f8c9a7727884afe522e9bd5edbfc91a3312b36a77b5fb8926e4c31a41801"
+
+[[package]]
 name = "unicode-ident"
 version = "1.0.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -947,6 +1083,12 @@ name = "utf8parse"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "711b9620af191e0cdc7468a8d14e709c3dcdb115b36f838e601583af800a370a"
+
+[[package]]
+name = "version_check"
+version = "0.9.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "vte"
@@ -1297,6 +1439,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "271414315aff87387382ec3d271b52d7ae78726f5d44ac98b4f4030c91880486"
 
 [[package]]
+name = "winnow"
+version = "0.7.13"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "21a0236b59786fed61e2a80582dd500fe61f18b5dca67a4a067d0bc9039339cf"
+dependencies = [
+ "memchr",
+]
+
+[[package]]
 name = "xshell"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1361,6 +1512,7 @@ name = "zngur-generator"
 version = "0.7.0"
 dependencies = [
  "itertools 0.11.0",
+ "sailfish",
  "zngur-def",
  "zngur-parser",
 ]

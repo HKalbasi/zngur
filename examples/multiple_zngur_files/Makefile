@@ -1,7 +1,7 @@
 a.out: main.cpp generated1.h src/generated1.rs generated2.h src/generated2.rs src/lib.rs ../../target/release/libexample_multiple_zngur_files.a
-	${CXX} -Werror main.cpp -g -L ../../target/release/ -l example_multiple_zngur_files
+	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/release/ -l example_multiple_zngur_files
 
-../../target/release/libexample_multiple_zngur_files.a: FORCE
+../../target/release/libexample_multiple_zngur_files.a:
 	cargo build --release
 
 generated1.h ./src/generated1.rs: main.zng
@@ -16,4 +16,7 @@ generated2.h ./src/generated2.rs: main.zng
 		--rs-file=../examples/multiple_zngur_files/src/generated2.rs \
 		--cpp-namespace=m2
 
-FORCE: ;
+.PHONY: ../../target/release/libexample_multiple_zngur_files.a generated1.h generated2.h clean
+
+clean:
+	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
