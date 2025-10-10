@@ -12,12 +12,22 @@ CXX says:
 > Instead, this project is about carving out a reasonably expressive set of functionality
 > about which we can make useful safety guarantees today and maybe extend over time.
 
-Zngur also makes safety guarantees but also tries to be powerful enough to handle arbitrary signatures from Rust code.
-We believe Rust types are expressive enough so that there is no need to support C++ types in Rust.
+Zngur also makes safety guarantees but also tries to be powerful enough to handle arbitrary signatures from Rust code,
+including generics, `impl` and `dyn` traits, and owned objects. So with Zngur you can use almost any Rust library in C++,
+but with CXX you need to write some manual glue code (potentially with runtime costs) to avoid inaccessible types and signatures.
+
+For using C++ in Rust, CXX and Zngur both provide opaque C++ types behind indirection,
+but in CXX that indirection is explicit in the Rust side, usually involving `Pin` and `cxx::UniquePtr`,
+while Zngur forces you to hide C++ types behind some idiomatic and safe Rust api,
+which is a glue code you need to write in C++.
 For example, instead of defining a C++ opaque type and using it in Rust via a `UniquePtr`,
 you can define the behavior of that type in a normal Rust trait,
 implement that trait for your C++ type,
-and then convert that type into a `Box<dyn Trait>` and use it in Rust.
+and then convert that type into a `Box<dyn Trait>` and use it in Rust,
+or define some Rust struct which holds this C++ object using `ZngurCppOpaqueOwned` and write methods
+and implement traits for that struct in C++ (which has access to the underlying C++ object).
+So Zngur and CXX have almost equivalent expressing power in this side, but with different styles.
+
 Zngur's benefits over CXX are:
 
 - Zngur supports owning Rust variables on the C++ stack, saving some unnecessary allocations.
@@ -83,5 +93,48 @@ By writing the glue code in C++, you will become able to construct C++ objects i
 calling their move and copy constructors using `=` operator,
 and ... without hitting any major problems in using Rust types.
 
+### Safety of AutoCXX
+
+Idiomatic Rust libraries encapsulate unsafe, and expose safe functions for user code.
+Safety is another reason that a Rust wrapper should exist between Rust most of their API surface.
+Safe functions in Rust are designed to be memory safe even in presence of adversary safe code.
+(Adversary safe code can exploit soundness bugs in the compiler, but that's the north star Rust follows,
+and it is not that far from it) Almost no C++ API is designed with that level of safety in mind.
+By writing a Rusty wrapper for C++ APIs, we can think about safety and design a safe (in Rust terms) API.
+
+AutoCXX has a pretty hand-wavy approach to safety. It gives you three options:
+
+- Make all functions safe, which is almost always wrong.
+- Make all functions unsafe, which leads to spamming unsafe keyword everywhere, making unsafe lose
+  its meaning.
+- Make all functions which uses C++ references as unsafe, and all other functions safe. The fact that
+  this option exists shows that declaring all functions as safe isn't working very well.
+
+From the AutoCXX docs:
+
+> Irrespective, C++ code is of course unsafe.
+> It’s worth noting that use of C++ can cause unexpected unsafety at a distance in faraway Rust code.
+> As with any use of the unsafe keyword in Rust,
+> you the human are declaring that you’ve analyzed all possible ways that the code can be used
+> and you are guaranteeing to the compiler that no badness can occur. Good luck.
+
+### Using Zngur and AutoCXX together
+
 All being said, if you want to have fully auto-generated bindings for both sides,
 nothing will prevent you from using Zngur and AutoCXX at the same time.
+
+## Crubit
+
+Crubit is similar to AutoCXX, but it heavily integrates with rust and C++ compilers so it can handle owned
+types of other sides without manual annotations.
+The problems of AutoCXX about idiomatic and safe APIs applies to Crubit as well.
+
+Crubit requires heavy control over the Rust and C++ build system,
+but Zngur can work with almost any C++ compiler and any build system, as it only generates some header files.
+
+An auto generator for zng files is planned, which can bridge the gap between Zngur and Crubit in ease of use,
+but currently it does not exist.
+
+At the time of writing this, Crubit is limited to Google build system and is not ready for general use.
+It also lacks some expressive power relative to Zngur, for example it can't handle generics and `dyn` traits,
+but it has plans to change this.
