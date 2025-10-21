@@ -204,11 +204,7 @@ namespace rust {
 
   template<>
   inline size_t __zngur_internal_size_of< <%- ty %> >() noexcept {
-    <% if !ty.starts_with("::rust::Ref") { %>
     return sizeof(<%- ty %>);
-    <% } else { %>
-    return 8;
-    <% } %>
   }
 
   template<>
