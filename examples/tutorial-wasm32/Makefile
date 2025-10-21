@@ -6,7 +6,11 @@ WASIFLAGS = -std=c++14 \
            -lwasi-emulated-signal \
            -fno-exceptions
 
-# Use the WASI SDK C++ compiler
+# Use the mise-installed WASI SDK C++ compiler
+# Load mise environment if WASI_SDK_PATH is not set
+ifeq ($(WASI_SDK_PATH),)
+    $(eval $(shell mise env))
+endif
 CXX = $(WASI_SDK_PATH)/bin/clang++
 
 # Default target
@@ -22,13 +26,13 @@ a.out: main.wasm
 	@chmod +x $@
 
 main.wasm: main.cpp generated.h generated.cpp \
-           target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
+           ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
-	    target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+	    ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
 	    -o $@
 
-target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
+./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
 	cargo build --target=wasm32-wasip1 --release
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
@@ -45,11 +49,7 @@ wasm32-wasip1-target:
 clean:
 	cargo clean
 	rm -f generated.h ./src/generated.rs generated.cpp generated.o
-	rm -f main.wasm example_tutorial_wasm32.wasm a.out wasi-sdk-latest.tar.gz
+	rm -f main.wasm example_tutorial_wasm32.wasm a.out
 	rm -f wasm32-wasip1-target
-	rm -rf wasi-sdk-*
-
-# Legacy target for manual dependency installation (now automatic)
-install-deps: wasm32-wasip1-target
 
 FORCE: ;

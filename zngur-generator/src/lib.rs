@@ -16,6 +16,7 @@ use rust::IntoCpp;
 
 pub mod cpp;
 mod rust;
+mod template;
 
 pub use rust::RustFile;
 pub use zngur_parser::ParsedZngFile;

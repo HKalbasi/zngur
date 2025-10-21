@@ -2,6 +2,7 @@ use clap::Parser;
 
 mod ci;
 mod format_book;
+mod format_templates;
 
 #[derive(Parser)]
 enum Command {
@@ -13,6 +14,10 @@ enum Command {
         #[arg(long)]
         fix: bool,
     },
+    FormatTemplates {
+        #[arg(long)]
+        fix: bool,
+    },
 }
 
 fn main() -> anyhow::Result<()> {
@@ -20,5 +25,6 @@ fn main() -> anyhow::Result<()> {
     match cmd {
         Command::CI { fix } => ci::main(fix),
         Command::FormatBook { fix } => format_book::main(fix),
+        Command::FormatTemplates { fix } => format_templates::main(fix),
     }
 }
