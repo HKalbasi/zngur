@@ -26,13 +26,13 @@ a.out: main.wasm
 	@chmod +x $@
 
 main.wasm: main.cpp generated.h generated.cpp \
-           ../../target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
+           ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
-	    ../../target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+	    ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
 	    -o $@
 
-../../target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
+./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
 	cargo build --target=wasm32-wasip1 --release
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
