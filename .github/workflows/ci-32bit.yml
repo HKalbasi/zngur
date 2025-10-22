@@ -1,0 +1,45 @@
+name: CI - 32-bit platform
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-32bit:
+    runs-on: ubuntu-latest
+    name: Run CI in 32-bit container
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run inside i386/ubuntu container
+        uses: addnab/docker-run-action@v3
+        with:
+          image: i386/ubuntu:22.04
+          options: --rm
+          run: |
+            set -eux
+
+            apt-get update
+            DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+              build-essential ca-certificates curl git wget python3 unzip pkg-config gcc-multilib libssl-dev
+
+            cd /github/workspace
+
+            # Install Rust if this repo uses it
+            if [ -f Cargo.toml ]; then
+              curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+              export PATH="$HOME/.cargo/bin:$PATH"
+              rustup default stable
+            fi
+
+            # Run the project's CI task
+            if [ -f Cargo.toml ]; then
+              echo "Running: cargo xtask ci"
+              cargo xtask ci
+            else
+              echo "No Cargo.toml found; nothing to run"
+              exit 0
+            fi
