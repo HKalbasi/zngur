@@ -18,7 +18,7 @@ jobs:
         uses: addnab/docker-run-action@v3
         with:
           image: i386/ubuntu:20.04
-          options: --rm
+          options: -v ${{ github.workspace }}:/workspace
           run: |
             set -eux
 
@@ -26,7 +26,7 @@ jobs:
             DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
               build-essential ca-certificates curl git wget python3 unzip pkg-config gcc-multilib libssl-dev
 
-            cd /github/workspace
+            cd /workspace
 
             # Install Rust if this repo uses it
             if [ -f Cargo.toml ]; then
