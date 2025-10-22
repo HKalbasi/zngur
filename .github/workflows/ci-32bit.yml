@@ -17,7 +17,7 @@ jobs:
       - name: Run inside i386/ubuntu container
         uses: addnab/docker-run-action@v3
         with:
-          image: i386/ubuntu:22.04
+          image: i386/ubuntu:20.04
           options: --rm
           run: |
             set -eux
