@@ -56,6 +56,56 @@ struct ParsedPath<'a> {
     span: Span,
 }
 
+#[derive(Debug, Clone)]
+struct Scope<'a> {
+    aliases: Vec<ParsedAlias<'a>>,
+    base: Vec<String>,
+}
+
+impl<'a> Scope<'a> {
+    /// Create a new root scope containing the specified aliases.
+    fn new_root(aliases: Vec<ParsedAlias<'a>>) -> Scope<'a> {
+        Scope {
+            aliases,
+            base: Vec::new(),
+        }
+    }
+
+    /// Resolve a path according to the current scope.
+    fn resolve_path(&self, path: ParsedPath<'a>) -> Vec<String> {
+        // Check to see if the path refers to an alias:
+        if let Some(expanded_alias) = self
+            .aliases
+            .iter()
+            .find_map(|alias| alias.expand(&path, &self.base))
+        {
+            expanded_alias
+        } else {
+            path.to_zngur(&self.base)
+        }
+    }
+
+    /// Create a fully-qualified path relative to this scope's base path.
+    fn simple_relative_path(&self, relative_item_name: &str) -> Vec<String> {
+        self.base
+            .iter()
+            .cloned()
+            .chain(Some(relative_item_name.to_string()))
+            .collect()
+    }
+
+    fn sub_scope(&self, new_aliases: &[ParsedAlias<'a>], nested_path: ParsedPath<'a>) -> Scope<'_> {
+        let base = nested_path.to_zngur(&self.base);
+        let mut mod_aliases = new_aliases.to_vec();
+        mod_aliases.extend_from_slice(&self.aliases);
+
+        Scope {
+            aliases: mod_aliases,
+            base,
+        }
+    }
+}
+
 impl ParsedPath<'_> {
     fn to_zngur(self, base: &[String]) -> Vec<String> {
         match self.start {
@@ -238,21 +288,17 @@ struct ParsedMethod<'a> {
 }
 
 impl ParsedMethod<'_> {
-    fn to_zngur(self, aliases: &[ParsedAlias<'_>], base: &[String]) -> ZngurMethod {
+    fn to_zngur(self, scope: &Scope<'_>) -> ZngurMethod {
         ZngurMethod {
             name: self.name.to_owned(),
             generics: self
                 .generics
                 .into_iter()
-                .map(|x| x.to_zngur(aliases, base))
+                .map(|x| x.to_zngur(scope))
                 .collect(),
             receiver: self.receiver,
-            inputs: self
-                .inputs
-                .into_iter()
-                .map(|x| x.to_zngur(aliases, base))
-                .collect(),
-            output: self.output.to_zngur(aliases, base),
+            inputs: self.inputs.into_iter().map(|x| x.to_zngur(scope)).collect(),
+            output: self.output.to_zngur(scope),
         }
     }
 }
@@ -272,23 +318,16 @@ where
 }
 
 impl ProcessedItem<'_> {
-    fn add_to_zngur_spec(
-        self,
-        r: &mut ZngurSpec,
-        aliases: &[ParsedAlias],
-        base: &[String],
-        ctx: &ParseContext,
-    ) {
+    fn add_to_zngur_spec(self, r: &mut ZngurSpec, scope: &Scope<'_>, ctx: &ParseContext) {
         match self {
             ProcessedItem::Mod {
                 path,
                 items,
-                aliases: mut mod_aliases,
+                aliases,
             } => {
-                let base = path.to_zngur(base);
-                mod_aliases.extend_from_slice(aliases);
+                let sub_scope = scope.sub_scope(&aliases, path);
                 for item in items {
-                    item.add_to_zngur_spec(r, &mod_aliases, &base, ctx);
+                    item.add_to_zngur_spec(r, &sub_scope, ctx);
                 }
             }
             ProcessedItem::Import(path) => {
@@ -389,11 +428,11 @@ impl ProcessedItem<'_> {
                                     ParsedConstructorArgs::Tuple(t) => t
                                         .into_iter()
                                         .enumerate()
-                                        .map(|(i, t)| (i.to_string(), t.to_zngur(aliases, base)))
+                                        .map(|(i, t)| (i.to_string(), t.to_zngur(scope)))
                                         .collect(),
                                     ParsedConstructorArgs::Named(t) => t
                                         .into_iter()
-                                        .map(|(i, t)| (i.to_owned(), t.to_zngur(aliases, base)))
+                                        .map(|(i, t)| (i.to_owned(), t.to_zngur(scope)))
                                         .collect(),
                                 },
                             })
@@ -401,7 +440,7 @@ impl ProcessedItem<'_> {
                         ParsedTypeItem::Field { name, ty, offset } => {
                             fields.push(ZngurField {
                                 name: name.to_owned(),
-                                ty: ty.to_zngur(aliases, base),
+                                ty: ty.to_zngur(scope),
                                 offset,
                             });
                         }
@@ -411,7 +450,7 @@ impl ProcessedItem<'_> {
                             deref,
                         } => {
                             let deref = deref.map(|x| {
-                                let deref_type = x.to_zngur(aliases, base);
+                                let deref_type = x.to_zngur(scope);
                                 let receiver_mutability = match data.receiver {
                                     ZngurMethodReceiver::Ref(mutability) => mutability,
                                     ZngurMethodReceiver::Static | ZngurMethodReceiver::Move => {
@@ -425,16 +464,8 @@ impl ProcessedItem<'_> {
                                 (deref_type, receiver_mutability)
                             });
                             methods.push(ZngurMethodDetails {
-                                data: data.to_zngur(aliases, base),
-                                use_path: use_path.map(|x| {
-                                    aliases
-                                        .iter()
-                                        .filter_map(|alias| alias.expand(&x, base))
-                                        .collect::<Vec<_>>()
-                                        .first()
-                                        .cloned()
-                                        .unwrap_or_else(|| x.to_zngur(base))
-                                }),
+                                data: data.to_zngur(scope),
+                                use_path: use_path.map(|x| scope.resolve_path(x)),
                                 deref,
                             });
                         }
@@ -514,7 +545,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                 };
                 checked_merge(
                     ZngurType {
-                        ty: ty.inner.to_zngur(aliases, base),
+                        ty: ty.inner.to_zngur(scope),
                         layout,
                         methods,
                         wellknown_traits: wt,
@@ -531,11 +562,8 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
             ProcessedItem::Trait { tr, methods } => {
                 checked_merge(
                     ZngurTrait {
-                        tr: tr.inner.to_zngur(aliases, base),
-                        methods: methods
-                            .into_iter()
-                            .map(|m| m.to_zngur(aliases, base))
-                            .collect(),
+                        tr: tr.inner.to_zngur(scope),
+                        methods: methods.into_iter().map(|m| m.to_zngur(scope)).collect(),
                     },
                     r,
                     tr.span,
@@ -543,11 +571,11 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                 );
             }
             ProcessedItem::Fn(f) => {
-                let method = f.inner.to_zngur(aliases, base);
+                let method = f.inner.to_zngur(scope);
                 checked_merge(
                     ZngurFn {
                         path: RustPathAndGenerics {
-                            path: base.iter().chain(Some(&method.name)).cloned().collect(),
+                            path: scope.simple_relative_path(&method.name),
                             generics: method.generics,
                             named_generics: vec![],
                         },
@@ -564,7 +592,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                     match item {
                         ParsedExternCppItem::Function(method) => {
                             let span = method.span;
-                            let method = method.inner.to_zngur(aliases, base);
+                            let method = method.inner.to_zngur(scope);
                             checked_merge(
                                 ZngurExternCppFn {
                                     name: method.name.to_string(),
@@ -579,11 +607,11 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         ParsedExternCppItem::Impl { tr, ty, methods } => {
                             checked_merge(
                                 ZngurExternCppImpl {
-                                    tr: tr.map(|x| x.to_zngur(aliases, base)),
-                                    ty: ty.inner.to_zngur(aliases, base),
+                                    tr: tr.map(|x| x.to_zngur(scope)),
+                                    ty: ty.inner.to_zngur(scope),
                                     methods: methods
                                         .into_iter()
-                                        .map(|x| x.to_zngur(aliases, base))
+                                        .map(|x| x.to_zngur(scope))
                                         .collect(),
                                 },
                                 r,
@@ -634,21 +662,21 @@ enum ParsedRustType<'a> {
 }
 
 impl ParsedRustType<'_> {
-    fn to_zngur(self, aliases: &[ParsedAlias<'_>], base: &[String]) -> RustType {
+    fn to_zngur(self, scope: &Scope<'_>) -> RustType {
         match self {
             ParsedRustType::Primitive(s) => RustType::Primitive(s),
-            ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(aliases, base))),
-            ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(aliases, base))),
-            ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(aliases, base))),
-            ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(aliases, base))),
+            ParsedRustType::Ref(m, s) => RustType::Ref(m, Box::new(s.to_zngur(scope))),
+            ParsedRustType::Raw(m, s) => RustType::Raw(m, Box::new(s.to_zngur(scope))),
+            ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(scope))),
+            ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(scope))),
             ParsedRustType::Dyn(tr, bounds) => RustType::Dyn(
-                tr.to_zngur(aliases, base),
+                tr.to_zngur(scope),
                 bounds.into_iter().map(|x| x.to_owned()).collect(),
             ),
             ParsedRustType::Tuple(v) => {
-                RustType::Tuple(v.into_iter().map(|s| s.to_zngur(aliases, base)).collect())
+                RustType::Tuple(v.into_iter().map(|s| s.to_zngur(scope)).collect())
             }
-            ParsedRustType::Adt(s) => RustType::Adt(s.to_zngur(aliases, base)),
+            ParsedRustType::Adt(s) => RustType::Adt(s.to_zngur(scope)),
         }
     }
 }
@@ -664,20 +692,17 @@ enum ParsedRustTrait<'a> {
 }
 
 impl ParsedRustTrait<'_> {
-    fn to_zngur(self, aliases: &[ParsedAlias<'_>], base: &[String]) -> RustTrait {
+    fn to_zngur(self, scope: &Scope<'_>) -> RustTrait {
         match self {
-            ParsedRustTrait::Normal(s) => RustTrait::Normal(s.to_zngur(aliases, base)),
+            ParsedRustTrait::Normal(s) => RustTrait::Normal(s.to_zngur(scope)),
             ParsedRustTrait::Fn {
                 name,
                 inputs,
                 output,
             } => RustTrait::Fn {
                 name: name.to_owned(),
-                inputs: inputs
-                    .into_iter()
-                    .map(|s| s.to_zngur(aliases, base))
-                    .collect(),
-                output: Box::new(output.to_zngur(aliases, base)),
+                inputs: inputs.into_iter().map(|s| s.to_zngur(scope)).collect(),
+                output: Box::new(output.to_zngur(scope)),
             },
         }
     }
@@ -691,24 +716,18 @@ struct ParsedRustPathAndGenerics<'a> {
 }
 
 impl ParsedRustPathAndGenerics<'_> {
-    fn to_zngur(self, aliases: &[ParsedAlias<'_>], base: &[String]) -> RustPathAndGenerics {
+    fn to_zngur(self, scope: &Scope<'_>) -> RustPathAndGenerics {
         RustPathAndGenerics {
-            path: aliases
-                .iter()
-                .filter_map(|alias| alias.expand(&self.path, base))
-                .collect::<Vec<_>>()
-                .first()
-                .cloned()
-                .unwrap_or_else(|| self.path.to_zngur(base)),
+            path: scope.resolve_path(self.path),
             generics: self
                 .generics
                 .into_iter()
-                .map(|x| x.to_zngur(aliases, base))
+                .map(|x| x.to_zngur(scope))
                 .collect(),
             named_generics: self
                 .named_generics
                 .into_iter()
-                .map(|(name, x)| (name.to_owned(), x.to_zngur(aliases, base)))
+                .map(|(name, x)| (name.to_owned(), x.to_zngur(scope)))
                 .collect(),
         }
     }
@@ -885,8 +904,10 @@ impl<'a> ProcessedZngFile<'a> {
     }
 
     fn into_zngur_spec(self, zngur: &mut ZngurSpec, ctx: &ParseContext) {
+        let root_scope = Scope::new_root(self.aliases);
+
         for item in self.items {
-            item.add_to_zngur_spec(zngur, &self.aliases, &[], ctx);
+            item.add_to_zngur_spec(zngur, &root_scope, ctx);
         }
     }
 }
