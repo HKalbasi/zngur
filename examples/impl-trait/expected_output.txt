@@ -1,0 +1,17 @@
+=== Testing impl Trait support in zngur ===
+
+--- Test 1: create_person returns impl Greeter ---
+Hello, I'm Alice!
+
+--- Test 2: create_robot returns impl Greeter ---
+Beep boop! Robot #42
+
+--- Test 3: create_greeter_by_type returns Box<dyn Greeter> ---
+Hello, I'm Bob!
+Beep boop! Robot #999
+
+--- Test 4: Concrete type functions ---
+Hello, I'm Charlie!
+Beep boop! Robot #100
+
+=== All impl Trait tests passed! ===
