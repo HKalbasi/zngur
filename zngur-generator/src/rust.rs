@@ -137,6 +137,16 @@ impl IntoCpp for RustType {
                         .collect(),
                 }
             }
+            RustType::ImplTrait(tr) => {
+                // For C++ interop, impl Trait is converted to Box<dyn Trait>
+                CppType {
+                    path: CppPath::from("rust::Box"),
+                    generic_args: vec![CppType {
+                        path: CppPath::from("rust::Dyn"),
+                        generic_args: vec![tr.into_cpp()],
+                    }],
+                }
+            }
         }
     }
 }
@@ -695,6 +705,9 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
     ) -> String {
+        // Convert impl Trait to Box<dyn Trait> for code generation
+        let output_codegen = output.for_codegen();
+
         let mut mangled_name = self.mangle_name(rust_name);
         if deref.is_some() {
             mangled_name += "_deref_";
@@ -719,19 +732,30 @@ pub extern "C" fn {mangled_name}("#
                     wln!(this, "    use ::{};", use_path.iter().join("::"));
                 }
             }
-            w!(
-                this,
-                "    ::std::ptr::write(o as *mut {output}, {rust_name}("
-            );
+            // Check if we need to box the return value (for impl Trait)
+            let needs_boxing = matches!(output, RustType::ImplTrait(_));
+
+            if needs_boxing {
+                w!(this, "    ::std::ptr::write(o as *mut {output_codegen}, Box::new({rust_name}(");
+            } else {
+                w!(this, "    ::std::ptr::write(o as *mut {output_codegen}, {rust_name}(");
+            }
+
             match deref {
                 Some(Mutability::Mut) => w!(this, "&mut"),
                 Some(Mutability::Not) => w!(this, "&"),
                 None => {}
             }
             for (n, ty) in inputs.iter().enumerate() {
-                w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");
+                let ty_codegen = ty.for_codegen();
+                w!(this, "::std::ptr::read(i{n} as *mut {ty_codegen}), ");
             }
-            wln!(this, "));");
+
+            if needs_boxing {
+                wln!(this, ")));");
+            } else {
+                wln!(this, "));");
+            }
         });
         wln!(self, " }} }}");
         mangled_name

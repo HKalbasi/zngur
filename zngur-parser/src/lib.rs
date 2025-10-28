@@ -659,6 +659,7 @@ enum ParsedRustType<'a> {
     Dyn(ParsedRustTrait<'a>, Vec<&'a str>),
     Tuple(Vec<ParsedRustType<'a>>),
     Adt(ParsedRustPathAndGenerics<'a>),
+    ImplTrait(ParsedRustTrait<'a>),
 }
 
 impl ParsedRustType<'_> {
@@ -677,6 +678,7 @@ impl ParsedRustType<'_> {
                 RustType::Tuple(v.into_iter().map(|s| s.to_zngur(scope)).collect())
             }
             ParsedRustType::Adt(s) => RustType::Adt(s.to_zngur(scope)),
+            ParsedRustType::ImplTrait(tr) => RustType::ImplTrait(tr.to_zngur(scope)),
         }
     }
 }
@@ -1162,6 +1164,9 @@ fn rust_type<'a>()
                     .collect::<Vec<_>>(),
             )
             .map(|(x, y)| ParsedRustType::Dyn(x, y));
+        let impl_trait = just(Token::KwImpl)
+            .ignore_then(rust_trait(parser.clone()))
+            .map(ParsedRustType::ImplTrait);
         let boxed = just(Token::Ident("Box"))
             .then(rust_generics(parser.clone()))
             .map(|(_, x)| {
@@ -1199,7 +1204,7 @@ fn rust_type<'a>()
             .then(parser)
             .map(|(m, x)| ParsedRustType::Raw(m, Box::new(x)));
         choice((
-            scalar, boxed, unit, tuple, slice, adt, reference, raw_ptr, dyn_trait,
+            scalar, boxed, unit, tuple, slice, adt, reference, raw_ptr, dyn_trait, impl_trait,
         ))
     })
     .boxed()

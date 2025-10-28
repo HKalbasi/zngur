@@ -201,10 +201,22 @@ pub enum RustType {
     Dyn(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
+    ImplTrait(RustTrait),
 }
 
 impl RustType {
     pub const UNIT: Self = RustType::Tuple(Vec::new());
+
+    /// Convert impl Trait to Box<dyn Trait> for use in generated Rust code
+    /// since impl Trait is not valid in all type positions
+    pub fn for_codegen(&self) -> Self {
+        match self {
+            RustType::ImplTrait(tr) => {
+                RustType::Boxed(Box::new(RustType::Dyn(tr.clone(), vec![])))
+            }
+            other => other.clone(),
+        }
+    }
 }
 
 impl Display for RustPathAndGenerics {
@@ -283,6 +295,7 @@ impl Display for RustType {
                 Ok(())
             }
             RustType::Slice(s) => write!(f, "[{s}]"),
+            RustType::ImplTrait(tr) => write!(f, "impl {tr}"),
         }
     }
 }

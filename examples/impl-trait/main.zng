@@ -1,0 +1,54 @@
+#convert_panic_to_exception
+
+// String support
+type str {
+    wellknown_traits(?Sized);
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+}
+
+mod crate {
+    // Define the Greeter trait
+    trait Greeter {
+        fn greet(&self) -> ::std::string::String;
+    }
+
+    // Define Person type
+    type Person {
+        #layout(size = 24, align = 8);
+        wellknown_traits(Debug);
+
+        constructor { name: ::std::string::String };
+    }
+
+    // Define Robot type
+    type Robot {
+        #layout(size = 4, align = 4);
+        wellknown_traits(Debug);
+
+        constructor { id: u32 };
+    }
+
+    // Box<dyn Greeter> with trait methods exposed
+    type Box<dyn Greeter> {
+        #layout(size = 16, align = 8);
+
+        fn greet(&self) -> ::std::string::String;
+    }
+
+    // Function returning Box<dyn Greeter> (the traditional approach)
+    fn create_greeter_by_type(bool, ::std::string::String, u32) -> Box<dyn Greeter>;
+
+    // Functions using impl Trait in return position - now supported!
+    // These are automatically converted to Box<dyn Greeter> for C++ interop
+    fn create_person(::std::string::String) -> impl Greeter;
+    fn create_robot(u32) -> impl Greeter;
+
+    // Concrete implementations that work with impl Trait in argument position internally
+    fn print_greeting_person(Person);
+    fn print_greeting_robot(Robot);
+}

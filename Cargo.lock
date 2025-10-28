@@ -375,6 +375,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-impl-trait"
+version = "0.7.0"
+
+[[package]]
 name = "example-memory_management"
 version = "0.7.0"
 
