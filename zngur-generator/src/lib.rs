@@ -39,20 +39,9 @@ impl ZngurGenerator {
     }
 
     pub fn render(self) -> GeneratedFiles {
-        let mut zng = self.0;
+        let zng = self.0;
         let namespace = &zng.cpp_namespace;
 
-        // Unit type is a bit special, and almost everyone needs it, so we add it ourself.
-        zng.types.push(ZngurType {
-            ty: RustType::UNIT,
-            layout: LayoutPolicy::ZERO_SIZED_TYPE,
-            wellknown_traits: vec![ZngurWellknownTrait::Copy],
-            methods: vec![],
-            constructors: vec![],
-            fields: vec![],
-            cpp_value: None,
-            cpp_ref: None,
-        });
         let mut cpp_file = CppFile::default();
         cpp_file.header_file_name = zng.cpp_include_header_name.clone();
         cpp_file.additional_includes = zng.additional_includes.0;

@@ -41,24 +41,63 @@ impl CppPath {
         self.0.split_last().unwrap().0
     }
 
+    /// Returns true if this is an infrastructure template type defined in zngur.h.
+    ///
+    /// These types have generic template definitions in zngur.h and never appear
+    /// in type_defs as they don't need per-type specialization in the generated header.
+    pub(crate) fn is_infrastructure_template(&self) -> bool {
+        matches!(
+            self.0
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            ["rust", "Ref"]
+                | ["rust", "RefMut"]
+                | ["rust", "Raw"]
+                | ["rust", "RawMut"]
+                | ["rust", "FieldOwned"]
+                | ["rust", "FieldRef"]
+                | ["rust", "FieldRefMut"]
+                | ["rust", "ZngurCppOpaqueOwnedObject"]
+                | ["rust", "Tuple"] // generic Tuple, not Unit
+        )
+    }
+
+    /// Returns true if this type is rust::Unit (the empty tuple).
+    pub(crate) fn is_unit(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Unit"
+    }
+
+    /// Returns true if this type is rust::Bool.
+    pub(crate) fn is_bool(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Bool"
+    }
+
+    /// Returns true if this type is rust::Str.
+    pub(crate) fn is_str(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Str"
+    }
+
     /// Returns whether this type needs a forward declaration in the generated header.
     ///
     /// Forward declarations are needed for user-defined types so they can be
     /// referenced before their full definition. Returns false for:
     /// - Primitive types (uint8_t, int32_t) - built-in to C++
-    /// - Infrastructure types (rust::Ref, rust::RefMut, rust::Unit) - defined in zngur.h
+    /// - Infrastructure types (Ref, RefMut, Raw, etc.) - defined in zngur.h as generic templates
+    /// - Unit type - fully defined in zngur.h as Tuple<> specialization
     fn needs_forward_declaration(&self) -> bool {
         // Primitive types (like uint8_t, int32_t, etc.) have no namespace - just a single component
         if self.0.len() == 1 {
             return false;
         }
 
-        // Skip zngur utility types
-        if self.0 == ["rust", "Unit"] || self.0 == ["rust", "Ref"] || self.0 == ["rust", "RefMut"] {
+        // Skip infrastructure types defined in zngur.h
+        if self.is_infrastructure_template() || self.is_unit() {
             return false;
         }
 
-        // For all other types with a namespace, generate forward declaration
+        // User types need forward declarations
         true
     }
 
@@ -117,6 +156,16 @@ impl CppType {
             path: CppPath::from("rust::Ref"),
             generic_args: vec![self],
         }
+    }
+
+    /// Returns true if this type is rust::Bool.
+    pub(crate) fn is_bool(&self) -> bool {
+        self.path.is_bool()
+    }
+
+    /// Returns true if this type is rust::Str.
+    pub(crate) fn is_str(&self) -> bool {
+        self.path.is_str()
     }
 
     pub(crate) fn specialization_decl(&self) -> String {

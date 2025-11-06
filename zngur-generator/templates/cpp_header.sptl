@@ -1,18 +1,6 @@
 #include <zngur.h>
 
-<% if self.cpp_namespace != "rust" { %>
-// Forward declare custom namespace for template specializations
-namespace <%- self.cpp_namespace %> {}
-<% } %>
-
 <% if let Some(symbols) = &self.panic_to_exception { %>
-#ifndef ZNGUR_RUST_PANIC_EXCEPTION_CLASS_DEFINED
-#define ZNGUR_RUST_PANIC_EXCEPTION_CLASS_DEFINED
-namespace rust {
-    class Panic {};
-}
-#endif
-
 extern "C" {
     uint8_t <%- symbols.detect_panic %>();
     void <%- symbols.take_panic %>();
@@ -131,7 +119,6 @@ namespace rust {
   <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
   <% let name = td.ty.path.name(); %>
 
-  <% if td.ty.path.0 != ["rust", "Unit"] { %>
   namespace rust {
     template<>
     inline uint8_t* __zngur_internal_data_ptr< <%- td.ty %> >(const <%- td.ty %>& t) noexcept ;
@@ -144,9 +131,7 @@ namespace rust {
     template<>
     inline size_t __zngur_internal_size_of< <%- td.ty %> >() noexcept ;
   }
-  <% } %>
 
-  <% if td.ty.path.0 != ["rust", "Unit"] { %>
   <%- td.ty.path.open_namespace() %>
 
       <%- td.ty.specialization_decl() %> {
@@ -170,7 +155,7 @@ namespace rust {
         friend void ::rust::__zngur_internal_assume_deinit< <%- td.ty %> >(<%- td.ty %>& t) noexcept ;
         friend ::rust::ZngurPrettyPrinter< <%- td.ty %> >;
 
-      <% if td.ty.path.to_string() == "::rust::Bool" { %>
+      <% if td.ty.is_bool() { %>
         public:
           operator bool() {
             return data[0];
@@ -298,9 +283,7 @@ namespace rust {
     }; // <%- td.ty.specialization_decl() %>
 
 <%- td.ty.path.close_namespace() %>
-  <% } %>
 
-<% if td.ty.path.0 != ["rust", "Unit"] { %>
 namespace rust {
 
 <% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
@@ -358,9 +341,7 @@ namespace rust {
 <% } %>
 
 } // namespace rust
-<% } %>
 
-<% if td.ty.path.0 != ["rust", "Unit"] { %>
 namespace rust {
 
   template<>
@@ -456,14 +437,12 @@ namespace rust {
   }
 
 } // namespace rust
-<% } %>
 
 // Ref specialization
-<% if td.ty.path.to_string() == "::rust::Str" { %>
+<% if td.ty.is_str() { %>
     auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
 <% } %>
 
-<% if td.ty.path.0 != ["rust", "Unit"] { %>
 namespace rust {
 
   template<>
@@ -544,16 +523,10 @@ namespace rust {
       <% } %>
     <% } %>
 
-    <% if td.ty.path.to_string() == "::rust::Str" { %>
+    <% if td.ty.is_str() { %>
       friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
     <% } %>
 };
-
-} // namespace rust
-<% } %>
-
-<% if td.ty.path.0 != ["rust", "Unit"] { %>
-namespace rust {
 
 <% for ref_kind in ["Ref", "Raw", "RawMut"] { %>
 
@@ -579,9 +552,8 @@ inline size_t __zngur_internal_size_of< <%- ref_kind %> < <%- td.ty %> > >() noe
 <% } %>
 
 } // namespace rust
-<% } %>
 
-<% if td.ty.path.to_string() == "::rust::Str" { %>
+<% if td.ty.is_str() { %>
   inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
     ::rust::Ref<::rust::Str> o;
     o.data[0] = reinterpret_cast<size_t>(input);
@@ -593,7 +565,6 @@ inline size_t __zngur_internal_size_of< <%- ref_kind %> < <%- td.ty %> > >() noe
 namespace rust {
 
 // Field specializations
-<% if td.ty.path.0 != ["rust", "Unit"] { %>
 <% for field_kind in &["FieldOwned", "FieldRef", "FieldRefMut"] { %>
 
   template<size_t OFFSET>
@@ -618,7 +589,6 @@ namespace rust {
 
   }; // struct <%- field_kind %>< <%- td.ty %>, OFFSET >
 <% } /* for field_kind in &[...] */ %>
-<% } %>
 
 } // namespace rust
 

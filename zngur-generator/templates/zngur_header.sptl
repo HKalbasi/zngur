@@ -14,6 +14,8 @@
 #define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 
 namespace rust {
+  class Panic {};
+
   template<typename T>
   uint8_t* __zngur_internal_data_ptr(const T& t) noexcept ;
 
@@ -160,8 +162,6 @@ namespace rust {
   struct Tuple;
 
   // Unit type (empty tuple)
-  #ifndef ZNGUR_UNIT_TYPE_DEFINED
-  #define ZNGUR_UNIT_TYPE_DEFINED
   template<>
   struct Tuple<> {
     ::std::array< ::uint8_t, 1> data;
@@ -188,8 +188,6 @@ namespace rust {
   inline uint8_t* __zngur_internal_data_ptr<Tuple<>>(Tuple<> const & t) noexcept {
       return const_cast<uint8_t*>(&t.data[0]);
   }
-
-  #endif // ZNGUR_UNIT_TYPE_DEFINED
 
   template<typename T>
   struct ZngurPrettyPrinter;
