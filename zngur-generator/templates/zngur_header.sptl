@@ -1,0 +1,331 @@
+#pragma once
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <csignal>
+#include <array>
+#include <iostream>
+#include <functional>
+#include <math.h>
+
+<%- self.additional_includes %>
+
+#define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+
+namespace rust {
+  template<typename T>
+  uint8_t* __zngur_internal_data_ptr(const T& t) noexcept ;
+
+  template<typename T>
+  void __zngur_internal_assume_init(T& t) noexcept ;
+
+  template<typename T>
+  void __zngur_internal_assume_deinit(T& t) noexcept ;
+
+  template<typename T>
+  inline size_t __zngur_internal_size_of() noexcept ;
+
+  template<typename T>
+  inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
+    memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
+    ::rust::__zngur_internal_assume_deinit(t);
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
+    T t;
+    ::rust::__zngur_internal_assume_init(t);
+    memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
+    return t;
+  }
+
+  template<typename T>
+  inline void __zngur_internal_check_init(const T&) noexcept {}
+
+  class ZngurCppOpaqueOwnedObject {
+    uint8_t* data;
+    void (*destructor)(uint8_t*);
+
+  public:
+    template<typename T, typename... Args>
+    inline static ZngurCppOpaqueOwnedObject build(Args&&... args) {
+        ZngurCppOpaqueOwnedObject o;
+        o.data = reinterpret_cast<uint8_t*>(new T(::std::forward<Args>(args)...));
+        o.destructor = [](uint8_t* d) {
+            delete reinterpret_cast<T*>(d);
+        };
+        return o;
+    }
+
+    template<typename T>
+    inline T& as_cpp() { return *reinterpret_cast<T *>(data); }
+  };
+
+  template<typename T>
+  struct Ref;
+
+  template<typename T>
+  struct RefMut;
+
+  template<typename T, size_t OFFSET>
+  struct FieldOwned {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+  template<typename T, size_t OFFSET>
+  struct FieldRef {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+  template<typename T, size_t OFFSET>
+  struct FieldRefMut {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+  template<typename T>
+  struct zngur_is_unsized : std::false_type {};
+  struct zngur_fat_pointer {
+    uint8_t* data;
+    size_t metadata;
+  };
+  template<typename T>
+  struct Raw {
+      using DataType = typename std::conditional<
+          zngur_is_unsized<T>::value,
+          zngur_fat_pointer,
+          uint8_t*
+      >::type;
+      DataType data;
+      Raw() {}
+      Raw(Ref<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+      }
+      Raw(RefMut<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      Raw(DataType data) : data(data) {
+      }
+      Raw<T> offset(ssize_t n) {
+          return Raw(data + n * __zngur_internal_size_of<T>());
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+  };
+  template<typename T>
+  struct RawMut {
+      using DataType = typename std::conditional<
+          zngur_is_unsized<T>::value,
+          zngur_fat_pointer,
+          uint8_t*
+      >::type;
+      DataType data;
+      RawMut() {}
+      RawMut(RefMut<T> value) {
+          memcpy(&data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      RawMut(DataType data) : data(data) {
+      }
+      RawMut<T> offset(ssize_t n) {
+          return RawMut(data + n * __zngur_internal_size_of<T>());
+      }
+      T read() {
+          T value;
+          memcpy(__zngur_internal_data_ptr<T>(value), data, __zngur_internal_size_of<T>());
+          __zngur_internal_assume_init<T>(value);
+          return value;
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+      RefMut<T> read_mut() {
+          RefMut<T> value;
+          memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &data, __zngur_internal_size_of<RefMut<T>>());
+          __zngur_internal_assume_init<RefMut<T>>(value);
+          return value;
+      }
+      void write(T value) {
+          memcpy(data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+          __zngur_internal_assume_deinit<T>(value);
+      }
+  };
+  template<typename... T>
+  struct Tuple;
+
+  // Unit type (empty tuple)
+  #ifndef ZNGUR_UNIT_TYPE_DEFINED
+  #define ZNGUR_UNIT_TYPE_DEFINED
+  template<>
+  struct Tuple<> {
+    ::std::array< ::uint8_t, 1> data;
+  };
+
+  using Unit = Tuple<>;
+
+  // Internal function specializations for Unit
+  template<>
+  inline size_t __zngur_internal_size_of<Tuple<>>() noexcept {
+      return 1;
+  }
+
+  template<>
+  inline void __zngur_internal_check_init<Tuple<>>(const Tuple<>&) noexcept {}
+
+  template<>
+  inline void __zngur_internal_assume_init<Tuple<>>(Tuple<>&) noexcept {}
+
+  template<>
+  inline void __zngur_internal_assume_deinit<Tuple<>>(Tuple<>&) noexcept {}
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr<Tuple<>>(Tuple<> const & t) noexcept {
+      return const_cast<uint8_t*>(&t.data[0]);
+  }
+
+  #endif // ZNGUR_UNIT_TYPE_DEFINED
+
+  template<typename T>
+  struct ZngurPrettyPrinter;
+
+  class Inherent;
+
+  template<typename Type, typename Trait = Inherent>
+  class Impl;
+
+  template<typename T>
+  T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
+    ::std::cerr << "[" << file_name << ":" << line_number << "] " << exp << " = ";
+    ZngurPrettyPrinter<typename ::std::remove_reference<T>::type>::print(input);
+    return ::std::forward<T>(input);
+  }
+
+<% for ty in self.builtin_types() { %>
+  <% let needs_endif = ty == "::size_t"; %>
+  <% if needs_endif { %>
+    #if defined(__APPLE__) || defined(__wasm__)
+  <% } %>
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< <%- ty %> >(const <%- ty %>& t) noexcept {
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+  }
+
+  template<>
+  inline void __zngur_internal_assume_init< <%- ty %> >(<%- ty %>&) noexcept {}
+  template<>
+  inline void __zngur_internal_assume_deinit< <%- ty %> >(<%- ty %>&) noexcept {}
+
+  template<>
+  inline size_t __zngur_internal_size_of< <%- ty %> >() noexcept {
+    return sizeof(<%- ty %>);
+  }
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< <%- ty %>*>(<%- ty %>* const & t) noexcept {
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+  }
+
+  template<>
+  inline void __zngur_internal_assume_init< <%- ty %>*>(<%- ty %>*&) noexcept {}
+  template<>
+  inline void __zngur_internal_assume_deinit< <%- ty %>*>(<%- ty %>*&) noexcept {}
+
+  template<>
+  inline uint8_t* __zngur_internal_data_ptr< <%- ty %> const*>(<%- ty %> const* const & t) noexcept {
+    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+  }
+
+  template<>
+  inline void __zngur_internal_assume_init< <%- ty %> const*>(<%- ty %> const*&) noexcept {}
+  template<>
+  inline void __zngur_internal_assume_deinit< <%- ty %> const*>(<%- ty %> const*&) noexcept {}
+
+  template<>
+  struct Ref< <%- ty %> > {
+    Ref() {
+      data = 0;
+    }
+    Ref(const <%- ty %>& t) {
+      data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+
+    template<size_t OFFSET>
+    Ref(const FieldOwned< <%- ty %>, OFFSET >& f) {
+      data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    Ref(const FieldRef< <%- ty %>, OFFSET >& f) {
+      data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    Ref(const FieldRefMut< <%- ty %>, OFFSET >& f) {
+      data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+
+    <%- ty %>& operator*() {
+      return *reinterpret_cast< <%- ty %>*>(data);
+    }
+
+  private:
+    size_t data;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< <%- ty %> > >(const ::rust::Ref< <%- ty %> >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+
+  };
+
+  template<>
+  struct RefMut< <%- ty %> > {
+    RefMut() {
+      data = 0;
+    }
+
+    RefMut(<%- ty %>& t) {
+      data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+
+    template<size_t OFFSET>
+    RefMut(const FieldOwned< <%- ty %>, OFFSET >& f) {
+        data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }
+
+    template<size_t OFFSET>
+    RefMut(const FieldRefMut< <%- ty %>, OFFSET >& f) {
+        data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+
+    <%- ty %>& operator*() {
+        return *reinterpret_cast< <%- ty %>*>(data);
+    }
+  private:
+    size_t data;
+    friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< <%- ty %> > >(const ::rust::RefMut< <%- ty %> >& t) noexcept ;
+    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+  };
+
+  <% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
+  <% if printable { %>
+    template<>
+    struct ZngurPrettyPrinter< <%- ty %> > {
+      static inline void print(<%- ty %> const& t) {
+        ::std::cerr << t << ::std::endl;
+      }
+    };
+  <% } %>
+
+  <% if needs_endif { %>
+    #endif
+  <% } %>
+
+// end builtin types
+<% } %>
+
+} // namespace rust

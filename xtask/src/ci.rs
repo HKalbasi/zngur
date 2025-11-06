@@ -23,12 +23,10 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
         sh.change_dir(example);
 
         if CARGO_PROJECTS.contains(&example) {
-            // Clean generated files for Cargo projects
-            let _ = cmd!(
-                sh,
-                "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
-            )
-            .run();
+            // Clean generated files and cargo artifacts for Cargo projects
+            cmd!(sh, "cargo clean")
+                .run()
+                .with_context(|| format!("Cleaning example `{example}` failed"))?;
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;

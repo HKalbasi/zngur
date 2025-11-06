@@ -2,7 +2,7 @@
 //! about the Zngur itself, see [the documentation](https://hkalbasi.github.io/zngur).
 
 use std::{
-    fs::File,
+    fs::{self, File},
     io::Write,
     path::{Path, PathBuf},
 };
@@ -27,6 +27,7 @@ pub struct Zngur {
     h_file_path: Option<PathBuf>,
     cpp_file_path: Option<PathBuf>,
     rs_file_path: Option<PathBuf>,
+    output_dir: Option<PathBuf>,
     mangling_base: Option<String>,
     cpp_namespace: Option<String>,
 }
@@ -38,6 +39,7 @@ impl Zngur {
             h_file_path: None,
             cpp_file_path: None,
             rs_file_path: None,
+            output_dir: None,
             mangling_base: None,
             cpp_namespace: None,
         }
@@ -68,11 +70,17 @@ impl Zngur {
         self
     }
 
+    pub fn with_output_dir(mut self, path: impl AsRef<Path>) -> Self {
+        self.output_dir = Some(path.as_ref().to_owned());
+        self
+    }
+
     pub fn generate(self) {
         let mut file = ZngurGenerator::build_from_zng(ParsedZngFile::parse(self.zng_file));
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
         let h_file_path = self.h_file_path.expect("No h file path provided");
+        let output_dir = self.output_dir.expect("No output directory provided. Use with_output_dir() to specify where utility headers should be generated.");
 
         file.0.cpp_include_header_name = h_file_path
             .file_name()
@@ -91,25 +99,33 @@ impl Zngur {
             file.0.mangling_base = mangling_base;
         }
 
-        let cpp_namespace = file.0.cpp_namespace.clone();
+        let generated = file.render();
 
-        let (rust, mut h, mut cpp) = file.render();
+        // Create output directory for utility headers
+        fs::create_dir_all(&output_dir).unwrap();
 
-        // TODO: Don't hard code namespace as "::rust" and remove this replace
-        h = h
-            .replace("rust::", &format!("{cpp_namespace}::"))
-            .replace("namespace rust", &format!("namespace {cpp_namespace}"));
-        cpp = cpp.map(|cpp| cpp.replace("rust::", &format!("{cpp_namespace}::")));
+        // Write utility headers to output directory
+        for (filename, content) in generated.utility_headers {
+            let utility_path = output_dir.join(&filename);
+            File::create(utility_path)
+                .unwrap()
+                .write_all(content.as_bytes())
+                .unwrap();
+        }
+
+        // Print the absolute path to the output directory
+        let abs_output_dir = output_dir.canonicalize().unwrap();
+        println!("Generated headers directory: {}", abs_output_dir.display());
 
         File::create(rs_file_path)
             .unwrap()
-            .write_all(rust.as_bytes())
+            .write_all(generated.rust_file.as_bytes())
             .unwrap();
         File::create(h_file_path)
             .unwrap()
-            .write_all(h.as_bytes())
+            .write_all(generated.primary_header.as_bytes())
             .unwrap();
-        if let Some(cpp) = cpp {
+        if let Some(cpp) = generated.cpp_file {
             let cpp_file_path = self.cpp_file_path.expect("No cpp file path provided");
             File::create(cpp_file_path)
                 .unwrap()
