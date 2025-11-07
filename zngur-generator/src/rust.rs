@@ -708,10 +708,10 @@ pub extern "C" fn {mangled_name}("#
                 "    ::std::ptr::write(o as *mut {output}, {rust_name}("
             );
             if deref {
-                w!(this, "&");
+                w!(this, "::std::ops::Deref::deref");
             }
             for (n, ty) in inputs.iter().enumerate() {
-                w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");
+                w!(this, "(::std::ptr::read(i{n} as *mut {ty})), ");
             }
             wln!(this, "));");
         });
