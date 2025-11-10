@@ -35,6 +35,9 @@ mod crate {
 
     type Box<dyn BlobStoreTrait> {
         #layout(size = 16, align = 8);
+        fn put(&self, &mut MultiBuf) -> u64 use BlobStoreTrait deref dyn BlobStoreTrait;
+        fn tag(&self, u64, &str) use BlobStoreTrait deref dyn BlobStoreTrait;
+        fn metadata(&self, u64) -> BlobMetadata use BlobStoreTrait deref dyn BlobStoreTrait;
     }
 }
 
