@@ -705,6 +705,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
             r#"
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
+#[allow(unused_parens)]
 pub extern "C" fn {mangled_name}("#
         );
         for n in 0..inputs.len() {
