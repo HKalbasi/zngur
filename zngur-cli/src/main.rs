@@ -11,6 +11,11 @@ enum Command {
         /// Path to the zng file
         path: PathBuf,
 
+        /// Directory where utility headers (like zngur.h) will be generated.
+        /// This directory should be added to your C++ include path.
+        #[arg(short = 'o', long)]
+        output_dir: PathBuf,
+
         /// Path of the generated C++ file, if it is needed
         ///
         /// Default is {ZNG_FILE_PARENT}/generated.cpp
@@ -52,6 +57,7 @@ fn main() {
     match cmd {
         Command::Generate {
             path,
+            output_dir,
             cpp_file,
             h_file,
             rs_file,
@@ -65,7 +71,8 @@ fn main() {
             let mut zng = Zngur::from_zng_file(&path)
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
-                .with_rs_file(rs_file);
+                .with_rs_file(rs_file)
+                .with_output_dir(output_dir);
             if let Some(mangling_base) = mangling_base {
                 zng = zng.with_mangling_base(&mangling_base);
             }
