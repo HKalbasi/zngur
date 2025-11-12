@@ -43,8 +43,6 @@ macro_rules! splat {
     };
 }
 
-pub(crate) use splat;
-
 #[derive(Template)]
 #[template(path = "cpp_header.sptl", escape = false)]
 pub(crate) struct CppHeaderTemplate<'a> {
