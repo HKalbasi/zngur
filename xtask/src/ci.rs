@@ -30,7 +30,9 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
-            let bash_cmd = format!("../../target/debug/example-{example} > actual_output.txt 2>&1");
+            let bash_cmd = format!(
+                "../../target/debug/example-{example} 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt"
+            );
             cmd!(sh, "bash -c {bash_cmd}")
                 .run()
                 .with_context(|| format!("Running example `{example}` failed"))?;
@@ -42,9 +44,12 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
             cmd!(sh, "make")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
-            cmd!(sh, "bash -c './a.out > actual_output.txt 2>&1'")
-                .run()
-                .with_context(|| format!("Running example `{example}` failed"))?;
+            cmd!(
+                sh,
+                "bash -c './a.out 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt'"
+            )
+            .run()
+            .with_context(|| format!("Running example `{example}` failed"))?;
         }
         if fix {
             sh.copy_file("./actual_output.txt", "./expected_output.txt")?;

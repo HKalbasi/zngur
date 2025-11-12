@@ -43,8 +43,6 @@ macro_rules! splat {
     };
 }
 
-pub(crate) use splat;
-
 #[derive(Template)]
 #[template(path = "zngur_header.sptl", escape = false)]
 pub(crate) struct ZngurHeaderTemplate<'a> {
