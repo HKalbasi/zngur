@@ -705,6 +705,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
             r#"
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
+#[allow(unused_parens)]
 pub extern "C" fn {mangled_name}("#
         );
         for n in 0..inputs.len() {
@@ -724,12 +725,12 @@ pub extern "C" fn {mangled_name}("#
                 "    ::std::ptr::write(o as *mut {output}, {rust_name}("
             );
             match deref {
-                Some(Mutability::Mut) => w!(this, "&mut"),
-                Some(Mutability::Not) => w!(this, "&"),
+                Some(Mutability::Mut) => w!(this, "::std::ops::DerefMut::deref_mut"),
+                Some(Mutability::Not) => w!(this, "::std::ops::Deref::deref"),
                 None => {}
             }
             for (n, ty) in inputs.iter().enumerate() {
-                w!(this, "::std::ptr::read(i{n} as *mut {ty}), ");
+                w!(this, "(::std::ptr::read(i{n} as *mut {ty})), ");
             }
             wln!(this, "));");
         });
