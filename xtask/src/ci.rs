@@ -31,7 +31,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
             let bash_cmd = format!(
-                "../../target/debug/example-{example} 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt"
+                "../../target/debug/example-{example} 2>&1 | sed 's/thread .* panicked/thread panicked/g' > actual_output.txt"
             );
             cmd!(sh, "bash -c {bash_cmd}")
                 .run()
@@ -46,7 +46,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 .with_context(|| format!("Building example `{example}` failed"))?;
             cmd!(
                 sh,
-                "bash -c './a.out 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt'"
+                "bash -c './a.out 2>&1 | sed s/thread.*panicked/thread\\ panicked/g > actual_output.txt'"
             )
             .run()
             .with_context(|| format!("Running example `{example}` failed"))?;
