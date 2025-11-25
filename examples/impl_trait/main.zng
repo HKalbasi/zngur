@@ -1,0 +1,24 @@
+#convert_panic_to_exception
+
+type str {
+    wellknown_traits(?Sized, Debug);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+
+    fn clone(&self) -> ::std::string::String;
+    fn push_str(&mut self, &str);
+    fn len(&self) -> usize;
+}
+
+mod crate {
+    fn argument_position_impl_trait(i32);
+    fn argument_position_impl_trait(::std::string::String);
+    fn return_position_impl_trait() -> impl ::std::fmt::Debug;
+}
