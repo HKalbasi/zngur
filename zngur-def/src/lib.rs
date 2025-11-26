@@ -199,6 +199,7 @@ pub enum RustType {
     Boxed(Box<RustType>),
     Slice(Box<RustType>),
     Dyn(RustTrait, Vec<String>),
+    Impl(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
 }
@@ -277,6 +278,13 @@ impl Display for RustType {
             RustType::Adt(pg) => write!(f, "{pg}"),
             RustType::Dyn(tr, marker_bounds) => {
                 write!(f, "dyn {tr}")?;
+                for mb in marker_bounds {
+                    write!(f, "+ {mb}")?;
+                }
+                Ok(())
+            }
+            RustType::Impl(tr, marker_bounds) => {
+                write!(f, "impl {tr}")?;
                 for mb in marker_bounds {
                     write!(f, "+ {mb}")?;
                 }
