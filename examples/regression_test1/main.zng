@@ -1,5 +1,10 @@
 #convert_panic_to_exception
 
+type bool {
+	#layout(size = 1, align = 1);
+	wellknown_traits(Copy);
+}
+
 type str {
     wellknown_traits(?Sized, Debug);
 
@@ -39,6 +44,44 @@ type (i32, ::std::string::String) {
 
     field 0 (offset = 0, type = i32);
     field 1 (offset = 8, type = ::std::string::String);
+}
+
+type (f32, f64) {
+    #layout(size = 16, align = 8);
+    wellknown_traits(Debug);
+
+    field 0 (offset = 0, type = f32);
+    field 1 (offset = 8, type = f64);
+}
+
+mod ::std::option {
+    type Option<&f32> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug, Copy);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &f32;
+    }
+
+    type Option<&mut f32> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &f32;
+    }
+}
+
+mod ::std::vec {
+    type Vec<f32> {
+        #layout(size = 24, align = 8);
+        wellknown_traits(Debug);
+
+        fn new() -> Vec<f32>;
+        fn get(&self, usize) -> ::std::option::Option<&f32> deref [f32];
+        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut f32> deref [f32];
+        fn push(&mut self, f32);
+    }
 }
 
 type crate::Scoped {

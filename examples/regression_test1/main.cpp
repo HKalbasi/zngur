@@ -4,8 +4,9 @@
 #include "./generated.h"
 
 void test_dbg_works_for_ref_and_refmut() {
-  auto scope = rust::crate::Scoped::new_("Test dbg works for Ref and RefMut"_rs);
-  
+  auto scope =
+      rust::crate::Scoped::new_("Test dbg works for Ref and RefMut"_rs);
+
   rust::Ref<rust::Str> v1 = "foo"_rs;
   zngur_dbg(v1);
   rust::std::string::String v2 = v1.to_owned();
@@ -20,11 +21,8 @@ void test_dbg_works_for_ref_and_refmut() {
   zngur_dbg(v4);
 }
 
-template<typename T>
-concept has_push_str = requires(T v, rust::Ref<rust::Str> s) { 
-  v.push_str(s); 
-};
-
+template <typename T>
+concept has_push_str = requires(T v, rust::Ref<rust::Str> s) { v.push_str(s); };
 
 void test_fields_and_constructor() {
   auto scope = rust::crate::Scoped::new_("Test fields and constructor work"_rs);
@@ -36,13 +34,14 @@ void test_fields_and_constructor() {
   v1.field2.push_str("baz"_rs);
   zngur_dbg(v1);
 
-  rust::Tuple<rust::std::string::String, rust::crate::Foo> v2{"kkk"_rs.to_owned(), std::move(v1)};
+  rust::Tuple<rust::std::string::String, rust::crate::Foo> v2{
+      "kkk"_rs.to_owned(), std::move(v1)};
   zngur_dbg(v2);
   zngur_dbg(v2.f0);
   zngur_dbg(v2.f1);
   zngur_dbg(v2.f1.field2);
   v2.f1.field2.push_str("xxx"_rs);
-  
+
   rust::Ref<rust::Tuple<rust::std::string::String, rust::crate::Foo>> v3 = v2;
   zngur_dbg(v3.f0);
   zngur_dbg(v3.f1);
@@ -51,7 +50,8 @@ void test_fields_and_constructor() {
   static_assert(!has_push_str<decltype(v3.f1.field2)>);
   zngur_dbg(v3.f1.field2.len());
 
-  rust::RefMut<rust::Tuple<rust::std::string::String, rust::crate::Foo>> v4 = v2;
+  rust::RefMut<rust::Tuple<rust::std::string::String, rust::crate::Foo>> v4 =
+      v2;
   zngur_dbg(v4.f0);
   zngur_dbg(v4.f1);
   zngur_dbg(v4.f1.field2);
@@ -60,7 +60,8 @@ void test_fields_and_constructor() {
 }
 
 void test_field_underlying_conversions() {
-  auto scope = rust::crate::Scoped::new_("Test Field* underlying conversions"_rs);
+  auto scope =
+      rust::crate::Scoped::new_("Test Field* underlying conversions"_rs);
 
   rust::Tuple<int32_t, rust::std::string::String> pair{42, "hi"_rs.to_owned()};
 
@@ -87,8 +88,31 @@ void test_field_underlying_conversions() {
   zngur_dbg(pmut.f1.len());
 }
 
+void test_floats() {
+  auto scope = rust::crate::Scoped::new_("Test floats"_rs);
+
+  rust::Tuple<float, double> pair{42.24, 12.3};
+
+  // FieldOwned conversion to Ref and value
+  rust::Ref<double> r1 = pair.f1;
+  zngur_dbg(*r1);
+  double v1 = pair.f1;
+  zngur_dbg(v1);
+
+  rust::std::vec::Vec<float> fvec = rust::std::vec::Vec<float>::new_();
+  fvec.push(pair.f0);
+  fvec.push(147);
+  zngur_dbg(fvec);
+  zngur_dbg(fvec.get(0));
+  zngur_dbg(fvec.get(2));
+  zngur_dbg(*fvec.get(1).unwrap());
+  *fvec.get_mut(1).unwrap() = 5.43;
+  zngur_dbg(fvec);
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
   test_field_underlying_conversions();
+  test_floats();
 }

@@ -1,45 +1,45 @@
 Test dbg works for Ref and RefMut -- started
-[main.cpp:10] v1 = "foo"
-[main.cpp:12] v2 = "foo"
-[main.cpp:14] v3 = "foo"
-[main.cpp:15] v2 = "foo"
-[main.cpp:16] v4 = "foo"
-[main.cpp:18] v5 = "foo"
-[main.cpp:19] "bar"_rs = "bar"
-[main.cpp:20] v4 = "foobar"
+[main.cpp:11] v1 = "foo"
+[main.cpp:13] v2 = "foo"
+[main.cpp:15] v3 = "foo"
+[main.cpp:16] v2 = "foo"
+[main.cpp:17] v4 = "foo"
+[main.cpp:19] v5 = "foo"
+[main.cpp:20] "bar"_rs = "bar"
+[main.cpp:21] v4 = "foobar"
 Test dbg works for Ref and RefMut -- finished
 
 Test fields and constructor work -- started
-[main.cpp:33] v1 = Foo {
+[main.cpp:31] v1 = Foo {
     field1: 1,
     field2: "bar",
 }
-[main.cpp:34] v1.field2 = "bar"
-[main.cpp:35] v1.field2.len() = 3
-[main.cpp:37] v1 = Foo {
+[main.cpp:32] v1.field2 = "bar"
+[main.cpp:33] v1.field2.len() = 3
+[main.cpp:35] v1 = Foo {
     field1: 1,
     field2: "barbaz",
 }
-[main.cpp:40] v2 = (
+[main.cpp:39] v2 = (
     "kkk",
     Foo {
         field1: 1,
         field2: "barbaz",
     },
 )
-[main.cpp:41] v2.f0 = "kkk"
-[main.cpp:42] v2.f1 = Foo {
+[main.cpp:40] v2.f0 = "kkk"
+[main.cpp:41] v2.f1 = Foo {
     field1: 1,
     field2: "barbaz",
 }
-[main.cpp:43] v2.f1.field2 = "barbaz"
-[main.cpp:47] v3.f0 = "kkk"
-[main.cpp:48] v3.f1 = Foo {
+[main.cpp:42] v2.f1.field2 = "barbaz"
+[main.cpp:46] v3.f0 = "kkk"
+[main.cpp:47] v3.f1 = Foo {
     field1: 1,
     field2: "barbazxxx",
 }
-[main.cpp:49] v3.f1.field2 = "barbazxxx"
-[main.cpp:52] v3.f1.field2.len() = 9
+[main.cpp:48] v3.f1.field2 = "barbazxxx"
+[main.cpp:51] v3.f1.field2.len() = 9
 [main.cpp:55] v4.f0 = "kkk"
 [main.cpp:56] v4.f1 = Foo {
     field1: 1,
@@ -50,12 +50,30 @@ Test fields and constructor work -- started
 Test fields and constructor work -- finished
 
 Test Field* underlying conversions -- started
-[main.cpp:70] v0 = 42
-[main.cpp:74] v1 = "hi"
-[main.cpp:78] sref.len() = 2
-[main.cpp:81] int32_t(pref.f0) = 42
-[main.cpp:82] pref.f1.len() = 2
-[main.cpp:85] int32_t(pmut.f0) = 42
-[main.cpp:87] pmut.f1.len() = 3
+[main.cpp:71] v0 = 42
+[main.cpp:75] v1 = "hi"
+[main.cpp:79] sref.len() = 2
+[main.cpp:82] int32_t(pref.f0) = 42
+[main.cpp:83] pref.f1.len() = 2
+[main.cpp:86] int32_t(pmut.f0) = 42
+[main.cpp:88] pmut.f1.len() = 3
 Test Field* underlying conversions -- finished
+
+Test floats -- started
+[main.cpp:98] *r1 = 12.3
+[main.cpp:100] v1 = 12.3
+[main.cpp:105] fvec = [
+    42.24,
+    147.0,
+]
+[main.cpp:106] fvec.get(0) = Some(
+    42.24,
+)
+[main.cpp:107] fvec.get(2) = None
+[main.cpp:108] *fvec.get(1).unwrap() = 147
+[main.cpp:110] fvec = [
+    42.24,
+    5.43,
+]
+Test floats -- finished
 
