@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, marker::PhantomData, path::Component};
+use std::{collections::HashMap, fmt::Display, path::Component};
 
 #[cfg(not(test))]
 use std::process::exit;
@@ -19,6 +19,10 @@ pub type Span = SimpleSpan<usize>;
 #[cfg(test)]
 mod tests;
 
+mod match_stmnt;
+
+use match_stmnt::parse::{MatchItemParser, ParsedMatch, ParsedMatchCfg, match_item};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Spanned<T> {
     inner: T,
@@ -35,6 +39,16 @@ type ParserInput<'a> = chumsky::input::MappedInput<
         ) -> (&'x Token<'x>, &'x SimpleSpan),
     >,
 >;
+
+/// Effective trait alias for verbose chumsky Parser Trait
+trait ZngParser<'a, Item>:
+    Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+}
+impl<'a, T, Item> ZngParser<'a, Item> for T where
+    T: Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+}
 
 #[derive(Debug)]
 pub struct ParsedZngFile<'a>(Vec<ParsedItem<'a>>);
@@ -206,6 +220,7 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
+    MatchOnCfg(ParsedMatch<'a, ParsedMatchCfg<'a>, ParsedItem<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -279,6 +294,7 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
+    MatchOnCfg(ParsedMatch<'a, ParsedMatchCfg<'a>, ParsedTypeItem<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -473,6 +489,9 @@ impl ProcessedItem<'_> {
                                 }
                             }
                             cpp_ref = Some(CppRef(cpp_type.to_owned()));
+                        }
+                        ParsedTypeItem::MatchOnCfg(_match_stmnt) => {
+                            todo!("evaluate match arms and emit items");
                         }
                     }
                 }
@@ -890,7 +909,7 @@ impl<'a> ParsedZngFile<'a> {
             ctx.emit_ariadne_errors();
         };
 
-        let (aliases, items) = ast.0.0.into_iter().partition_map(partition_parsed_item_vec);
+        let (aliases, items) = process_parsed_items(ast.0.0);
         ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, ctx);
 
         if let Some(dirname) = ctx.path.to_owned().parent() {
@@ -953,30 +972,41 @@ impl<'a> ParsedZngFile<'a> {
     }
 }
 
-fn partition_parsed_item_vec(item: ParsedItem<'_>) -> Either<ParsedAlias<'_>, ProcessedItem<'_>> {
-    match item {
-        ParsedItem::Alias(alias) => Either::Left(alias),
-        ParsedItem::ConvertPanicToException(span) => {
-            Either::Right(ProcessedItem::ConvertPanicToException(span))
+fn process_parsed_items<'a>(
+    items: impl IntoIterator<Item = ParsedItem<'a>>,
+) -> (Vec<ParsedAlias<'a>>, Vec<ProcessedItem<'a>>) {
+    let mut aliases = Vec::new();
+    let mut processed = Vec::new();
+    for item in items.into_iter() {
+        match item {
+            ParsedItem::Alias(alias) => aliases.push(alias),
+            ParsedItem::ConvertPanicToException(span) => {
+                processed.push(ProcessedItem::ConvertPanicToException(span))
+            }
+            ParsedItem::CppAdditionalInclude(inc) => {
+                processed.push(ProcessedItem::CppAdditionalInclude(inc))
+            }
+            ParsedItem::Mod { path, items } => {
+                let (aliases, items) = process_parsed_items(items);
+                processed.push(ProcessedItem::Mod {
+                    path,
+                    items,
+                    aliases,
+                })
+            }
+            ParsedItem::Type { ty, items } => processed.push(ProcessedItem::Type { ty, items }),
+            ParsedItem::Trait { tr, methods } => {
+                processed.push(ProcessedItem::Trait { tr, methods })
+            }
+            ParsedItem::Fn(method) => processed.push(ProcessedItem::Fn(method)),
+            ParsedItem::ExternCpp(items) => processed.push(ProcessedItem::ExternCpp(items)),
+            ParsedItem::Import(path) => processed.push(ProcessedItem::Import(path)),
+            ParsedItem::MatchOnCfg(_match_stmnt) => {
+                todo!("evalueate match arms and emit items")
+            }
         }
-        ParsedItem::CppAdditionalInclude(inc) => {
-            Either::Right(ProcessedItem::CppAdditionalInclude(inc))
-        }
-        ParsedItem::Mod { path, items } => {
-            let (aliases, items): (Vec<ParsedAlias<'_>>, Vec<ProcessedItem<'_>>) =
-                items.into_iter().partition_map(partition_parsed_item_vec);
-            Either::Right(ProcessedItem::Mod {
-                path,
-                items,
-                aliases,
-            })
-        }
-        ParsedItem::Type { ty, items } => Either::Right(ProcessedItem::Type { ty, items }),
-        ParsedItem::Trait { tr, methods } => Either::Right(ProcessedItem::Trait { tr, methods }),
-        ParsedItem::Fn(method) => Either::Right(ProcessedItem::Fn(method)),
-        ParsedItem::ExternCpp(items) => Either::Right(ProcessedItem::ExternCpp(items)),
-        ParsedItem::Import(path) => Either::Right(ProcessedItem::Import(path)),
     }
+    (aliases, processed)
 }
 
 impl<'a> ProcessedZngFile<'a> {
@@ -1173,16 +1203,6 @@ fn alias<'a>()
             })
         })
         .boxed()
-}
-
-/// Effective trait alias for verbose chumsky Parser Trait
-pub trait ZngParser<'a, Item>:
-    Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
-}
-impl<'a, T, Item> ZngParser<'a, Item> for T where
-    T: Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
 }
 
 fn file_parser<'a>()
@@ -1428,143 +1448,146 @@ fn method<'a>()
         })
 }
 
+fn inner_type_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+    let property_item = (spanned(select! {
+        Token::Ident(c) => c,
+    }))
+    .then_ignore(just(Token::Eq))
+    .then(select! {
+        Token::Number(c) => c,
+    });
+    let layout = just([Token::Sharp, Token::Ident("layout")])
+        .ignore_then(
+            property_item
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(ParsedLayoutPolicy::StackAllocated)
+        .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
+        .or(just([Token::Sharp, Token::Ident("heap_allocated")])
+            .to(ParsedLayoutPolicy::HeapAllocated))
+        .map_with(|x, extra| ParsedTypeItem::Layout(extra.span(), x))
+        .boxed();
+    let trait_item = select! {
+        Token::Ident("Debug") => ZngurWellknownTrait::Debug,
+        Token::Ident("Copy") => ZngurWellknownTrait::Copy,
+    }
+    .or(just(Token::Question)
+        .then(just(Token::Ident("Sized")))
+        .to(ZngurWellknownTrait::Unsized));
+    let traits = just(Token::Ident("wellknown_traits"))
+        .ignore_then(
+            spanned(trait_item)
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(ParsedTypeItem::Traits)
+        .boxed();
+    let constructor_args = rust_type()
+        .separated_by(just(Token::Comma))
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+        .map(ParsedConstructorArgs::Tuple)
+        .or((select! {
+            Token::Ident(c) => c,
+        })
+        .boxed()
+        .then_ignore(just(Token::Colon))
+        .then(rust_type())
+        .separated_by(just(Token::Comma))
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+        .map(ParsedConstructorArgs::Named))
+        .or(empty().to(ParsedConstructorArgs::Unit))
+        .boxed();
+    let constructor = just(Token::Ident("constructor")).ignore_then(
+        (select! {
+            Token::Ident(c) => Some(c),
+        })
+        .or(empty().to(None))
+        .then(constructor_args)
+        .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
+    );
+    let field = just(Token::Ident("field")).ignore_then(
+        (select! {
+            Token::Ident(c) => c.to_owned(),
+            Token::Number(c) => c.to_string(),
+        })
+        .then(
+            just(Token::Ident("offset"))
+                .then(just(Token::Eq))
+                .ignore_then(select! {
+                    Token::Number(c) => c,
+                })
+                .then(
+                    just(Token::Comma)
+                        .then(just(Token::KwType))
+                        .then(just(Token::Eq))
+                        .ignore_then(rust_type()),
+                )
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
+    );
+    let cpp_value = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_value")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
+        .then(select! {
+            Token::Str(c) => c,
+        })
+        .map(|x| ParsedTypeItem::CppValue {
+            field: x.0,
+            cpp_type: x.1,
+        });
+    let cpp_ref = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_ref")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
+        .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
+    let match_stmt =
+        match_item::<ParsedMatchCfg<'a>, ParsedTypeItem<'a>>().map(ParsedTypeItem::MatchOnCfg);
+    match_stmt.or(choice((
+        layout,
+        traits,
+        constructor,
+        field,
+        cpp_value,
+        cpp_ref,
+        method()
+            .then(
+                just(Token::KwUse)
+                    .ignore_then(path())
+                    .map(Some)
+                    .or(empty().to(None)),
+            )
+            .then(
+                just(Token::Ident("deref"))
+                    .ignore_then(rust_type())
+                    .map(Some)
+                    .or(empty().to(None)),
+            )
+            .map(|((data, use_path), deref)| ParsedTypeItem::Method {
+                deref,
+                use_path,
+                data,
+            }),
+    ))
+    .then_ignore(just(Token::Semicolon)))
+}
+
 fn type_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    fn inner_item<'a>()
-    -> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-    + Clone {
-        let property_item = (spanned(select! {
-            Token::Ident(c) => c,
-        }))
-        .then_ignore(just(Token::Eq))
-        .then(select! {
-            Token::Number(c) => c,
-        });
-        let layout = just([Token::Sharp, Token::Ident("layout")])
-            .ignore_then(
-                property_item
-                    .separated_by(just(Token::Comma))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(ParsedLayoutPolicy::StackAllocated)
-            .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
-            .or(just([Token::Sharp, Token::Ident("heap_allocated")])
-                .to(ParsedLayoutPolicy::HeapAllocated))
-            .map_with(|x, extra| ParsedTypeItem::Layout(extra.span(), x))
-            .boxed();
-        let trait_item = select! {
-            Token::Ident("Debug") => ZngurWellknownTrait::Debug,
-            Token::Ident("Copy") => ZngurWellknownTrait::Copy,
-        }
-        .or(just(Token::Question)
-            .then(just(Token::Ident("Sized")))
-            .to(ZngurWellknownTrait::Unsized));
-        let traits = just(Token::Ident("wellknown_traits"))
-            .ignore_then(
-                spanned(trait_item)
-                    .separated_by(just(Token::Comma))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(ParsedTypeItem::Traits)
-            .boxed();
-        let constructor_args = rust_type()
-            .separated_by(just(Token::Comma))
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
-            .map(ParsedConstructorArgs::Tuple)
-            .or((select! {
-                Token::Ident(c) => c,
-            })
-            .boxed()
-            .then_ignore(just(Token::Colon))
-            .then(rust_type())
-            .separated_by(just(Token::Comma))
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
-            .map(ParsedConstructorArgs::Named))
-            .or(empty().to(ParsedConstructorArgs::Unit))
-            .boxed();
-        let constructor = just(Token::Ident("constructor")).ignore_then(
-            (select! {
-                Token::Ident(c) => Some(c),
-            })
-            .or(empty().to(None))
-            .then(constructor_args)
-            .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
-        );
-        let field = just(Token::Ident("field")).ignore_then(
-            (select! {
-                Token::Ident(c) => c.to_owned(),
-                Token::Number(c) => c.to_string(),
-            })
-            .then(
-                just(Token::Ident("offset"))
-                    .then(just(Token::Eq))
-                    .ignore_then(select! {
-                        Token::Number(c) => c,
-                    })
-                    .then(
-                        just(Token::Comma)
-                            .then(just(Token::KwType))
-                            .then(just(Token::Eq))
-                            .ignore_then(rust_type()),
-                    )
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
-        );
-        let cpp_value = just(Token::Sharp)
-            .then(just(Token::Ident("cpp_value")))
-            .ignore_then(select! {
-                Token::Str(c) => c,
-            })
-            .then(select! {
-                Token::Str(c) => c,
-            })
-            .map(|x| ParsedTypeItem::CppValue {
-                field: x.0,
-                cpp_type: x.1,
-            });
-        let cpp_ref = just(Token::Sharp)
-            .then(just(Token::Ident("cpp_ref")))
-            .ignore_then(select! {
-                Token::Str(c) => c,
-            })
-            .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-        choice((
-            layout,
-            traits,
-            constructor,
-            field,
-            cpp_value,
-            cpp_ref,
-            method()
-                .then(
-                    just(Token::KwUse)
-                        .ignore_then(path())
-                        .map(Some)
-                        .or(empty().to(None)),
-                )
-                .then(
-                    just(Token::Ident("deref"))
-                        .ignore_then(rust_type())
-                        .map(Some)
-                        .or(empty().to(None)),
-                )
-                .map(|((data, use_path), deref)| ParsedTypeItem::Method {
-                    deref,
-                    use_path,
-                    data,
-                }),
-        ))
-        .then_ignore(just(Token::Semicolon))
-    }
     just(Token::KwType)
         .ignore_then(spanned(rust_type()))
         .then(
-            spanned(inner_item())
+            spanned(inner_type_item())
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
@@ -1663,6 +1686,7 @@ fn item<'a>()
             additional_include_item(),
             import_item(),
             alias(),
+            match_item::<ParsedMatchCfg<'a>, ParsedItem<'a>>().map(ParsedItem::MatchOnCfg),
         ))
     })
     .boxed()
@@ -1711,111 +1735,9 @@ fn path<'a>()
         .boxed()
 }
 
-trait MatchableParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-    type Pattern: MatchPatternParser<'src>;
-    fn parser() -> impl ZngParser<'src, Self>;
-}
-
-trait MatchPatternParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-    fn parser() -> impl ZngParser<'src, Self>;
-}
-
-trait MatchItemParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-    fn parser() -> impl ZngParser<'src, Self>;
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedMatchCfg<'src> {
-    pub item: Vec<&'src str>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ParsedMatchCfgPattern<'src> {
-    Empty, // a `_` pattern
-    Matches(Vec<Spanned<&'src str>>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-enum ParsedMatchEnumBody<'src, Item: MatchItemParser<'src>> {
-    Items(Vec<Spanned<Item>>, PhantomData<&'src Item>),
-    Empty,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedMatchArm<'src, Pattern: MatchPatternParser<'src>, Item: MatchItemParser<'src>> {
-    pub pattern: Pattern,
-    pub body: ParsedMatchEnumBody<'src, Item>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ParsedMatch<'src, Scrutinee: MatchableParser<'src>, Item: MatchItemParser<'src>> {
-    pub scrutinee: Spanned<Scrutinee>,
-    pub arms:
-        Vec<Spanned<ParsedMatchArm<'src, <Scrutinee as MatchableParser<'src>>::Pattern, Item>>>,
-}
-
-impl<'src> MatchPatternParser<'src> for ParsedMatchCfgPattern<'src> {
-    fn parser() -> impl ZngParser<'src, Self> {
-        spanned(select! {
-            Token::Str(c) => c
-        })
-        .separated_by(just(Token::Pipe))
-        .collect::<Vec<_>>()
-        .map(ParsedMatchCfgPattern::Matches)
-        .or(just(Token::Underscore).to(ParsedMatchCfgPattern::Empty))
-    }
-}
-
-impl<'src> MatchableParser<'src> for ParsedMatchCfg<'src> {
-    type Pattern = ParsedMatchCfgPattern<'src>;
-    fn parser() -> impl ZngParser<'src, Self> {
-        just([Token::Sharp, Token::Ident("cfg")])
-            .ignore_then(
-                (select! {Token::Ident(c) => c})
-                    .separated_by(just(Token::Dot))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(|item| ParsedMatchCfg { item })
-    }
-}
-
-fn match_item<'src, Scrutinee: MatchableParser<'src>, Item: MatchItemParser<'src> + 'src>()
--> impl ZngParser<'src, ParsedMatch<'src, Scrutinee, Item>> {
-    let match_arm = Scrutinee::Pattern::parser()
-        .then(
-            just(Token::ArrowArm).ignore_then(choice((
-                spanned(<Item as MatchItemParser>::parser())
-                    .repeated()
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
-                    .map(|items| ParsedMatchEnumBody::Items(items, PhantomData)),
-                spanned(<Item as MatchItemParser>::parser())
-                    .map(|item| ParsedMatchEnumBody::Items(vec![item], PhantomData)),
-                just([Token::BraceOpen, Token::BraceClose]).map(|_t| ParsedMatchEnumBody::Empty),
-            ))),
-        )
-        .map(
-            |(pattern, body)| ParsedMatchArm::<<Scrutinee as MatchableParser>::Pattern, Item> {
-                pattern,
-                body,
-            },
-        );
-
-    just([Token::Sharp, Token::KwMatch])
-        .ignore_then(spanned(<Scrutinee as MatchableParser>::parser()))
-        .then(
-            spanned(match_arm)
-                .repeated()
-                .collect::<Vec<_>>()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
-        )
-        .map(|(scrutinee, arms)| ParsedMatch { scrutinee, arms })
-}
-
 impl<'src> MatchItemParser<'src> for ParsedTypeItem<'src> {
     fn parser() -> impl ZngParser<'src, Self> {
-        inner_type_item()
+        inner_type_item().boxed()
     }
 }
 
