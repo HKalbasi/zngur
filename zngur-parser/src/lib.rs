@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, path::Component};
+use std::{collections::HashMap, fmt::Display, marker::PhantomData, path::Component};
 
 #[cfg(not(test))]
 use std::process::exit;
@@ -996,6 +996,7 @@ impl<'a> ProcessedZngFile<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Token<'a> {
     Arrow,
+    ArrowArm,
     AngleOpen,
     AngleClose,
     BracketOpen,
@@ -1014,6 +1015,9 @@ enum Token<'a> {
     Question,
     Comma,
     Semicolon,
+    Pipe,
+    Underscore,
+    Dot,
     KwAs,
     KwDyn,
     KwUse,
@@ -1028,6 +1032,7 @@ enum Token<'a> {
     KwExtern,
     KwImpl,
     KwImport,
+    KwMatch,
     Ident(&'a str),
     Str(&'a str),
     Number(usize),
@@ -1050,6 +1055,7 @@ impl<'a> Token<'a> {
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
             "import" => Token::KwImport,
+            "match" => Token::KwMatch,
             x => Token::Ident(x),
         }
     }
@@ -1059,6 +1065,7 @@ impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Arrow => write!(f, "->"),
+            Token::ArrowArm => write!(f, "=>"),
             Token::AngleOpen => write!(f, "<"),
             Token::AngleClose => write!(f, ">"),
             Token::BracketOpen => write!(f, "["),
@@ -1077,6 +1084,9 @@ impl Display for Token<'_> {
             Token::Question => write!(f, "?"),
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
+            Token::Pipe => write!(f, "|"),
+            Token::Underscore => write!(f, "_"),
+            Token::Dot => write!(f, "."),
             Token::KwAs => write!(f, "as"),
             Token::KwDyn => write!(f, "dyn"),
             Token::KwUse => write!(f, "use"),
@@ -1091,6 +1101,7 @@ impl Display for Token<'_> {
             Token::KwExtern => write!(f, "extern"),
             Token::KwImpl => write!(f, "impl"),
             Token::KwImport => write!(f, "import"),
+            Token::KwMatch => write!(f, "match"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -1103,6 +1114,7 @@ fn lexer<'src>()
     let token = choice((
         choice([
             just("->").to(Token::Arrow),
+            just("=>").to(Token::ArrowArm),
             just("<").to(Token::AngleOpen),
             just(">").to(Token::AngleClose),
             just("[").to(Token::BracketOpen),
@@ -1121,6 +1133,9 @@ fn lexer<'src>()
             just("?").to(Token::Question),
             just(",").to(Token::Comma),
             just(";").to(Token::Semicolon),
+            just("|").to(Token::Pipe),
+            just("_").to(Token::Underscore),
+            just(".").to(Token::Dot),
         ]),
         text::ident().map(Token::ident_or_kw),
         text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
@@ -1158,6 +1173,16 @@ fn alias<'a>()
             })
         })
         .boxed()
+}
+
+/// Effective trait alias for verbose chumsky Parser Trait
+pub trait ZngParser<'a, Item>:
+    Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+}
+impl<'a, T, Item> ZngParser<'a, Item> for T where
+    T: Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
 }
 
 fn file_parser<'a>()
@@ -1684,4 +1709,118 @@ fn path<'a>()
             span: extra.span(),
         })
         .boxed()
+}
+
+trait MatchableParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    type Pattern: MatchPatternParser<'src>;
+    fn parser() -> impl ZngParser<'src, Self>;
+}
+
+trait MatchPatternParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    fn parser() -> impl ZngParser<'src, Self>;
+}
+
+trait MatchItemParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    fn parser() -> impl ZngParser<'src, Self>;
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedMatchCfg<'src> {
+    pub item: Vec<&'src str>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ParsedMatchCfgPattern<'src> {
+    Empty, // a `_` pattern
+    Matches(Vec<Spanned<&'src str>>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum ParsedMatchEnumBody<'src, Item: MatchItemParser<'src>> {
+    Items(Vec<Spanned<Item>>, PhantomData<&'src Item>),
+    Empty,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedMatchArm<'src, Pattern: MatchPatternParser<'src>, Item: MatchItemParser<'src>> {
+    pub pattern: Pattern,
+    pub body: ParsedMatchEnumBody<'src, Item>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ParsedMatch<'src, Scrutinee: MatchableParser<'src>, Item: MatchItemParser<'src>> {
+    pub scrutinee: Spanned<Scrutinee>,
+    pub arms:
+        Vec<Spanned<ParsedMatchArm<'src, <Scrutinee as MatchableParser<'src>>::Pattern, Item>>>,
+}
+
+impl<'src> MatchPatternParser<'src> for ParsedMatchCfgPattern<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        spanned(select! {
+            Token::Str(c) => c
+        })
+        .separated_by(just(Token::Pipe))
+        .collect::<Vec<_>>()
+        .map(ParsedMatchCfgPattern::Matches)
+        .or(just(Token::Underscore).to(ParsedMatchCfgPattern::Empty))
+    }
+}
+
+impl<'src> MatchableParser<'src> for ParsedMatchCfg<'src> {
+    type Pattern = ParsedMatchCfgPattern<'src>;
+    fn parser() -> impl ZngParser<'src, Self> {
+        just([Token::Sharp, Token::Ident("cfg")])
+            .ignore_then(
+                (select! {Token::Ident(c) => c})
+                    .separated_by(just(Token::Dot))
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+            )
+            .map(|item| ParsedMatchCfg { item })
+    }
+}
+
+fn match_item<'src, Scrutinee: MatchableParser<'src>, Item: MatchItemParser<'src> + 'src>()
+-> impl ZngParser<'src, ParsedMatch<'src, Scrutinee, Item>> {
+    let match_arm = Scrutinee::Pattern::parser()
+        .then(
+            just(Token::ArrowArm).ignore_then(choice((
+                spanned(<Item as MatchItemParser>::parser())
+                    .repeated()
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                    .map(|items| ParsedMatchEnumBody::Items(items, PhantomData)),
+                spanned(<Item as MatchItemParser>::parser())
+                    .map(|item| ParsedMatchEnumBody::Items(vec![item], PhantomData)),
+                just([Token::BraceOpen, Token::BraceClose]).map(|_t| ParsedMatchEnumBody::Empty),
+            ))),
+        )
+        .map(
+            |(pattern, body)| ParsedMatchArm::<<Scrutinee as MatchableParser>::Pattern, Item> {
+                pattern,
+                body,
+            },
+        );
+
+    just([Token::Sharp, Token::KwMatch])
+        .ignore_then(spanned(<Scrutinee as MatchableParser>::parser()))
+        .then(
+            spanned(match_arm)
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+        )
+        .map(|(scrutinee, arms)| ParsedMatch { scrutinee, arms })
+}
+
+impl<'src> MatchItemParser<'src> for ParsedTypeItem<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        inner_type_item()
+    }
+}
+
+impl<'src> MatchItemParser<'src> for ParsedItem<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        item()
+    }
 }
