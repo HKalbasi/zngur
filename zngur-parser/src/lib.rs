@@ -1,4 +1,7 @@
-use std::{fmt::Display, path::Component, process::exit};
+use std::{collections::HashMap, fmt::Display, path::Component};
+
+#[cfg(not(test))]
+use std::process::exit;
 
 use ariadne::{Color, Label, Report, ReportKind, sources};
 use chumsky::prelude::*;
@@ -303,7 +306,7 @@ impl ParsedMethod<'_> {
     }
 }
 
-fn checked_merge<T, U>(src: T, dst: &mut U, span: Span, ctx: &ParseContext)
+fn checked_merge<T, U>(src: T, dst: &mut U, span: Span, ctx: &mut ParseContext)
 where
     T: Merge<U>,
 {
@@ -311,14 +314,14 @@ where
         Ok(()) => {}
         Err(e) => match e {
             MergeFailure::Conflict(s) => {
-                create_and_emit_error(ctx, &s, span);
+                ctx.add_error_str(&s, span);
             }
         },
     }
 }
 
 impl ProcessedItem<'_> {
-    fn add_to_zngur_spec(self, r: &mut ZngurSpec, scope: &Scope<'_>, ctx: &ParseContext) {
+    fn add_to_zngur_spec(self, r: &mut ZngurSpec, scope: &Scope<'_>, ctx: &mut ParseContext) {
         match self {
             ProcessedItem::Mod {
                 path,
@@ -332,28 +335,22 @@ impl ProcessedItem<'_> {
             }
             ProcessedItem::Import(path) => {
                 if path.path.is_absolute() {
-                    create_and_emit_error(
-                        ctx,
-                        "Absolute paths imports are not supported.",
-                        path.span,
-                    )
+                    ctx.add_error_str("Absolute paths imports are not supported.", path.span)
                 }
                 match path.path.components().next() {
-                    Some(Component::CurDir) | Some(Component::ParentDir) => {}
-                    _ => create_and_emit_error(
-                        ctx,
+                    Some(Component::CurDir) | Some(Component::ParentDir) => {
+                        r.imports.push(Import(path.path));
+                    }
+                    _ => ctx.add_error_str(
                         "Module import is not supported. Use a relative path instead.",
                         path.span,
                     ),
                 }
-
-                r.imports.push(Import(path.path));
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
                     // We add unit type implicitly.
-                    create_and_emit_error(
-                        ctx,
+                    ctx.add_error_str(
                         "Unit type is declared implicitly. Remove this entirely.",
                         ty.span,
                     );
@@ -380,26 +377,22 @@ impl ProcessedItem<'_> {
                                         match key.inner {
                                             "size" => size = Some(value),
                                             "align" => align = Some(value),
-                                            _ => create_and_emit_error(
-                                                ctx,
-                                                "Unknown property",
-                                                key.span,
-                                            ),
+                                            _ => ctx.add_error_str("Unknown property", key.span),
                                         }
                                     }
                                     let Some(size) = size else {
-                                        create_and_emit_error(
-                                            ctx,
+                                        ctx.add_error_str(
                                             "Size is not declared for this type",
                                             ty.span,
                                         );
+                                        continue;
                                     };
                                     let Some(align) = align else {
-                                        create_and_emit_error(
-                                            ctx,
+                                        ctx.add_error_str(
                                             "Align is not declared for this type",
                                             ty.span,
                                         );
+                                        continue;
                                     };
                                     LayoutPolicy::StackAllocated { size, align }
                                 }
@@ -408,11 +401,7 @@ impl ProcessedItem<'_> {
                             });
                             match layout_span {
                                 Some(_) => {
-                                    create_and_emit_error(
-                                        ctx,
-                                        "Duplicate layout policy found",
-                                        span,
-                                    );
+                                    ctx.add_error_str("Duplicate layout policy found", span);
                                 }
                                 None => layout_span = Some(span),
                             }
@@ -449,19 +438,19 @@ impl ProcessedItem<'_> {
                             use_path,
                             deref,
                         } => {
-                            let deref = deref.map(|x| {
+                            let deref = deref.and_then(|x| {
                                 let deref_type = x.to_zngur(scope);
                                 let receiver_mutability = match data.receiver {
                                     ZngurMethodReceiver::Ref(mutability) => mutability,
                                     ZngurMethodReceiver::Static | ZngurMethodReceiver::Move => {
-                                        create_and_emit_error(
-                                            ctx,
+                                        ctx.add_error_str(
                                             "Deref needs reference receiver",
                                             item_span,
                                         );
+                                        return None;
                                     }
                                 };
-                                (deref_type, receiver_mutability)
+                                Some((deref_type, receiver_mutability))
                             });
                             methods.push(ZngurMethodDetails {
                                 data: data.to_zngur(scope),
@@ -475,11 +464,8 @@ impl ProcessedItem<'_> {
                         ParsedTypeItem::CppRef { cpp_type } => {
                             match layout_span {
                                 Some(span) => {
-                                    create_and_emit_error(
-                                        ctx,
-                                        "Duplicate layout policy found",
-                                        span,
-                                    );
+                                    ctx.add_error_str("Duplicate layout policy found", span);
+                                    continue;
                                 }
                                 None => {
                                     layout = Some(LayoutPolicy::ZERO_SIZED_TYPE);
@@ -507,8 +493,7 @@ impl ProcessedItem<'_> {
                 }
                 if let Some(is_unsized) = is_unsized {
                     if let Some(span) = layout_span {
-                        emit_ariadne_error(
-                            ctx,
+                        ctx.add_report(
                             Report::build(
                                 ReportKind::Error,
                                 ctx.filename().to_string(),
@@ -535,29 +520,29 @@ impl ProcessedItem<'_> {
                     }
                     layout = Some(LayoutPolicy::OnlyByRef);
                 }
-                let Some(layout) = layout else {
-                    create_and_emit_error(
+                if let Some(layout) = layout {
+                    checked_merge(
+                        ZngurType {
+                            ty: ty.inner.to_zngur(scope),
+                            layout,
+                            methods,
+                            wellknown_traits: wt,
+                            constructors,
+                            fields,
+                            cpp_value,
+                            cpp_ref,
+                        },
+                        r,
+                        ty.span,
                         ctx,
+                    );
+                } else {
+                    ctx.add_error_str(
                         "No layout policy found for this type. \
 Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
                         ty.span,
                     );
                 };
-                checked_merge(
-                    ZngurType {
-                        ty: ty.inner.to_zngur(scope),
-                        layout,
-                        methods,
-                        wellknown_traits: wt,
-                        constructors,
-                        fields,
-                        cpp_value,
-                        cpp_ref,
-                    },
-                    r,
-                    ty.span,
-                    ctx,
-                );
             }
             ProcessedItem::Trait { tr, methods } => {
                 checked_merge(
@@ -632,11 +617,11 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
             }
             ProcessedItem::ConvertPanicToException(span) => {
                 if ctx.depth > 0 {
-                    create_and_emit_error(
-                        ctx,
+                    ctx.add_error_str(
                         "Using `#convert_panic_to_exception` in imported zngur files is not supported. This directive can only be used in the main zngur file.",
                         span,
                     );
+                    return;
                 }
                 match ConvertPanicToException(true).merge(r) {
                     Ok(()) => {}
@@ -733,27 +718,129 @@ impl ParsedRustPathAndGenerics<'_> {
     }
 }
 
-struct ParseContext<'a> {
+struct ParseContext<'a, 'b> {
     path: std::path::PathBuf,
     text: &'a str,
     depth: usize,
+    reports: Vec<Report<'b, (String, std::ops::Range<usize>)>>,
+    source_cache: std::collections::HashMap<std::path::PathBuf, String>,
 }
 
-impl<'a> ParseContext<'a> {
+impl<'a, 'b> ParseContext<'a, 'b> {
     fn new(path: std::path::PathBuf, text: &'a str) -> Self {
         Self {
             path,
             text,
             depth: 0,
+            reports: Vec::new(),
+            source_cache: HashMap::new(),
         }
     }
 
     fn with_depth(path: std::path::PathBuf, text: &'a str, depth: usize) -> Self {
-        Self { path, text, depth }
+        Self {
+            path,
+            text,
+            depth,
+            reports: Vec::new(),
+            source_cache: HashMap::new(),
+        }
     }
 
     fn filename(&self) -> &str {
         self.path.file_name().unwrap().to_str().unwrap()
+    }
+
+    fn add_report(&mut self, report: Report<'b, (String, std::ops::Range<usize>)>) {
+        self.reports.push(report);
+    }
+    fn add_errors<'err_src>(&mut self, errs: impl Iterator<Item = Rich<'err_src, String>>) {
+        let filename = self.filename().to_string();
+        self.reports.extend(errs.map(|e| {
+            Report::build(ReportKind::Error, &filename, e.span().start)
+                .with_message(e.to_string())
+                .with_label(
+                    Label::new((filename.clone(), e.span().into_range()))
+                        .with_message(e.reason().to_string())
+                        .with_color(Color::Red),
+                )
+                .with_labels(e.contexts().map(|(label, span)| {
+                    Label::new((filename.clone(), span.into_range()))
+                        .with_message(format!("while parsing this {}", label))
+                        .with_color(Color::Yellow)
+                }))
+                .finish()
+        }));
+    }
+
+    fn add_error_str(&mut self, error: &str, span: Span) {
+        self.add_errors([Rich::custom(span, error)].into_iter());
+    }
+
+    fn consume_errors_from(&mut self, other: ParseContext<'_, 'b>) {
+        if other.has_errors() {
+            self.reports.extend(other.reports);
+            self.source_cache.insert(other.path, other.text.to_string());
+            self.source_cache.extend(other.source_cache);
+        }
+    }
+
+    fn has_errors(&self) -> bool {
+        !self.reports.is_empty()
+    }
+
+    #[cfg(test)]
+    fn emit_ariadne_errors(&self) -> ! {
+        let mut r = Vec::<u8>::new();
+        for err in &self.reports {
+            err.write(
+                sources(
+                    [(self.filename().to_string(), self.text)]
+                        .into_iter()
+                        .chain(
+                            self.source_cache
+                                .iter()
+                                .map(|(path, text)| {
+                                    (
+                                        path.file_name().unwrap().to_str().unwrap().to_string(),
+                                        text.as_str(),
+                                    )
+                                })
+                                .collect::<Vec<_>>()
+                                .into_iter(),
+                        ),
+                ),
+                &mut r,
+            )
+            .unwrap();
+        }
+        std::panic::resume_unwind(Box::new(tests::ErrorText(
+            String::from_utf8(strip_ansi_escapes::strip(r)).unwrap(),
+        )));
+    }
+
+    #[cfg(not(test))]
+    fn emit_ariadne_errors(&self) -> ! {
+        for err in &self.reports {
+            err.eprint(sources(
+                [(self.filename().to_string(), self.text)]
+                    .into_iter()
+                    .chain(
+                        self.source_cache
+                            .iter()
+                            .map(|(path, text)| {
+                                (
+                                    path.file_name().unwrap().to_str().unwrap().to_string(),
+                                    text.as_str(),
+                                )
+                            })
+                            .collect::<Vec<_>>()
+                            .into_iter(),
+                    ),
+            ))
+            .unwrap();
+        }
+        exit(101);
     }
 }
 
@@ -784,11 +871,11 @@ impl ImportResolver for DefaultImportResolver {
 }
 
 impl<'a> ParsedZngFile<'a> {
-    fn parse_into(zngur: &mut ZngurSpec, ctx: &ParseContext, resolver: &impl ImportResolver) {
+    fn parse_into(zngur: &mut ZngurSpec, ctx: &mut ParseContext, resolver: &impl ImportResolver) {
         let (tokens, errs) = lexer().parse(ctx.text).into_output_errors();
         let Some(tokens) = tokens else {
-            let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-            emit_error(&ctx, errs);
+            ctx.add_errors(errs.into_iter().map(|e| e.map_token(|c| c.to_string())));
+            ctx.emit_ariadne_errors();
         };
         let tokens: ParserInput<'_> = tokens.as_slice().map(
             (ctx.text.len()..ctx.text.len()).into(),
@@ -799,33 +886,27 @@ impl<'a> ParsedZngFile<'a> {
             .parse(tokens)
             .into_output_errors();
         let Some(ast) = ast else {
-            let errs = errs.into_iter().map(|e| e.map_token(|c| c.to_string()));
-            emit_error(&ctx, errs);
+            ctx.add_errors(errs.into_iter().map(|e| e.map_token(|c| c.to_string())));
+            ctx.emit_ariadne_errors();
         };
 
         let (aliases, items) = ast.0.0.into_iter().partition_map(partition_parsed_item_vec);
-        ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, &ctx);
+        ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, ctx);
 
-        if let Some(dirname) = ctx.path.parent() {
+        if let Some(dirname) = ctx.path.to_owned().parent() {
             for import in std::mem::take(&mut zngur.imports) {
                 match resolver.resolve_import(dirname, &import.0) {
                     Ok(text) => {
-                        Self::parse_into(
-                            zngur,
-                            &ParseContext::with_depth(
-                                dirname.join(&import.0),
-                                &text,
-                                ctx.depth + 1,
-                            ),
-                            resolver,
-                        );
+                        let mut nested_ctx =
+                            ParseContext::with_depth(dirname.join(&import.0), &text, ctx.depth + 1);
+                        Self::parse_into(zngur, &mut nested_ctx, resolver);
+                        ctx.consume_errors_from(nested_ctx);
                     }
                     Err(_) => {
                         // TODO: emit a better error. How should we get a span here?
                         // I'd like to avoid putting a ParsedImportPath in ZngurSpec, and
                         // also not have to pass a filename to add_to_zngur_spec.
-                        emit_ariadne_error(
-                            &ctx,
+                        ctx.add_report(
                             Report::build(ReportKind::Error, ctx.filename(), 0)
                                 .with_message(format!(
                                     "Import path not found: {}",
@@ -842,32 +923,32 @@ impl<'a> ParsedZngFile<'a> {
     pub fn parse(path: std::path::PathBuf) -> ZngurSpec {
         let mut zngur = ZngurSpec::default();
         let text = std::fs::read_to_string(&path).unwrap();
-        Self::parse_into(
-            &mut zngur,
-            &ParseContext::new(path, &text),
-            &DefaultImportResolver,
-        );
+        let mut ctx = ParseContext::new(path, &text);
+        Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
+        if ctx.has_errors() {
+            ctx.emit_ariadne_errors();
+        }
         zngur
     }
 
     pub fn parse_str(text: &str) -> ZngurSpec {
         let mut zngur = ZngurSpec::default();
-        Self::parse_into(
-            &mut zngur,
-            &ParseContext::new(std::path::PathBuf::from("test.zng"), text),
-            &DefaultImportResolver,
-        );
+        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
+        Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
+        if ctx.has_errors() {
+            ctx.emit_ariadne_errors();
+        }
         zngur
     }
 
     #[cfg(test)]
     pub(crate) fn parse_str_with_resolver(text: &str, resolver: &impl ImportResolver) -> ZngurSpec {
         let mut zngur = ZngurSpec::default();
-        Self::parse_into(
-            &mut zngur,
-            &ParseContext::new(std::path::PathBuf::from("test.zng"), text),
-            resolver,
-        );
+        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
+        Self::parse_into(&mut zngur, &mut ctx, resolver);
+        if ctx.has_errors() {
+            ctx.emit_ariadne_errors();
+        }
         zngur
     }
 }
@@ -903,57 +984,13 @@ impl<'a> ProcessedZngFile<'a> {
         ProcessedZngFile { aliases, items }
     }
 
-    fn into_zngur_spec(self, zngur: &mut ZngurSpec, ctx: &ParseContext) {
+    fn into_zngur_spec(self, zngur: &mut ZngurSpec, ctx: &mut ParseContext) {
         let root_scope = Scope::new_root(self.aliases);
 
         for item in self.items {
             item.add_to_zngur_spec(zngur, &root_scope, ctx);
         }
     }
-}
-
-fn create_and_emit_error(ctx: &ParseContext, error: &str, span: Span) -> ! {
-    emit_error(ctx, [Rich::custom(span, error)].into_iter())
-}
-
-#[cfg(test)]
-fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
-    let mut r = Vec::<u8>::new();
-    err.write(sources([(ctx.filename().to_string(), ctx.text)]), &mut r)
-        .unwrap();
-
-    std::panic::resume_unwind(Box::new(tests::ErrorText(
-        String::from_utf8(strip_ansi_escapes::strip(r)).unwrap(),
-    )));
-}
-
-#[cfg(not(test))]
-fn emit_ariadne_error(ctx: &ParseContext, err: Report<'_, (String, std::ops::Range<usize>)>) -> ! {
-    err.eprint(sources([(ctx.filename().to_string(), ctx.text)]))
-        .unwrap();
-    exit(101);
-}
-
-fn emit_error<'a>(ctx: &ParseContext, errs: impl Iterator<Item = Rich<'a, String>>) -> ! {
-    for e in errs {
-        emit_ariadne_error(
-            ctx,
-            Report::build(ReportKind::Error, ctx.filename(), e.span().start)
-                .with_message(e.to_string())
-                .with_label(
-                    Label::new((ctx.filename().to_string(), e.span().into_range()))
-                        .with_message(e.reason().to_string())
-                        .with_color(Color::Red),
-                )
-                .with_labels(e.contexts().map(|(label, span)| {
-                    Label::new((ctx.filename().to_string(), span.into_range()))
-                        .with_message(format!("while parsing this {}", label))
-                        .with_color(Color::Yellow)
-                }))
-                .finish(),
-        )
-    }
-    exit(101);
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
