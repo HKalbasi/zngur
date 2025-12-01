@@ -13,8 +13,9 @@ enum Command {
 
         /// Directory where utility headers (like zngur.h) will be generated.
         /// This directory should be added to your C++ include path.
+        /// Not required when using --single-header.
         #[arg(short = 'o', long)]
-        output_dir: PathBuf,
+        output_dir: Option<PathBuf>,
 
         /// Path of the generated C++ file, if it is needed
         ///
@@ -49,6 +50,11 @@ enum Command {
         /// Default is "rust"
         #[arg(long)]
         cpp_namespace: Option<String>,
+
+        /// Generate a single header file instead of splitting into generated.h and zngur.h.
+        /// This emulates the old behavior of zngur.
+        #[arg(long)]
+        single_header: bool,
     },
 }
 
@@ -63,16 +69,26 @@ fn main() {
             rs_file,
             mangling_base,
             cpp_namespace,
+            single_header,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
             let h_file = h_file.unwrap_or_else(|| pp.join("generated.h"));
             let rs_file = rs_file.unwrap_or_else(|| pp.join("src/generated.rs"));
+
             let mut zng = Zngur::from_zng_file(&path)
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
                 .with_rs_file(rs_file)
-                .with_output_dir(output_dir);
+                .with_single_header(single_header);
+
+            if let Some(output_dir) = output_dir {
+                zng = zng.with_output_dir(output_dir);
+            } else if !single_header {
+                eprintln!("Error: --output-dir is required when not using --single-header");
+                std::process::exit(1);
+            }
+
             if let Some(mangling_base) = mangling_base {
                 zng = zng.with_mangling_base(&mangling_base);
             }
