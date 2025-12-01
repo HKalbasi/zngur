@@ -30,13 +30,14 @@ main.wasm: main.cpp generated.h generated.cpp \
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
 	    ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+			-I. \
 	    -o $@
 
 ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
 	cargo build --target=wasm32-wasip1 --release
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
-	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g main32.zng
+	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g main32.zng -o .
 
 # Ensure wasm32-wasip1 target is installed
 wasm32-wasip1-target:

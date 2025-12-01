@@ -1,0 +1,18 @@
+17
+s[2] = 7
+
+thread panicked at examples/simple_single_header/src/generated.rs:192:39:
+called `Option::unwrap()` on a `None` value
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+s[4] = Rust panic happened
+hello 2 2
+hello 5 7
+hello 7 14
+hello 3 17
+34 17
+vector iterator has been destructed
+[main.cpp:71] t = [
+    10,
+    20,
+    60,
+]

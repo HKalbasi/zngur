@@ -11,6 +11,7 @@
   - [Types with special support](./call_rust_from_cpp/special_types.md)
   - [Panic and exceptions](./call_rust_from_cpp/panic_and_exceptions.md)
   - [Raw pointers](./call_rust_from_cpp/raw_pointers.md)
+  - [Generated code overview](./generated_code.md)
 - [Calling C++ from Rust](./call_cpp_from_rust/index.md)
   - [Calling C++ free functions](./call_cpp_from_rust/function.md)
   - [Writing `impl` blocks for Rust types in C++](./call_cpp_from_rust/rust_impl.md)
