@@ -657,6 +657,7 @@ enum ParsedRustType<'a> {
     Boxed(Box<ParsedRustType<'a>>),
     Slice(Box<ParsedRustType<'a>>),
     Dyn(ParsedRustTrait<'a>, Vec<&'a str>),
+    Impl(ParsedRustTrait<'a>, Vec<&'a str>),
     Tuple(Vec<ParsedRustType<'a>>),
     Adt(ParsedRustPathAndGenerics<'a>),
 }
@@ -670,6 +671,10 @@ impl ParsedRustType<'_> {
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(scope))),
             ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(scope))),
             ParsedRustType::Dyn(tr, bounds) => RustType::Dyn(
+                tr.to_zngur(scope),
+                bounds.into_iter().map(|x| x.to_owned()).collect(),
+            ),
+            ParsedRustType::Impl(tr, bounds) => RustType::Impl(
                 tr.to_zngur(scope),
                 bounds.into_iter().map(|x| x.to_owned()).collect(),
             ),
@@ -1151,8 +1156,8 @@ fn rust_type<'a>()
         let pg = rust_path_and_generics(parser.clone());
         let adt = pg.clone().map(ParsedRustType::Adt);
 
-        let dyn_trait = just(Token::KwDyn)
-            .ignore_then(rust_trait(parser.clone()))
+        let dyn_trait = just(Token::KwDyn).or(just(Token::KwImpl))
+            .then(rust_trait(parser.clone()))
             .then(
                 just(Token::Plus)
                     .ignore_then(select! {
@@ -1161,7 +1166,11 @@ fn rust_type<'a>()
                     .repeated()
                     .collect::<Vec<_>>(),
             )
-            .map(|(x, y)| ParsedRustType::Dyn(x, y));
+            .map(|((token, first), rest)| match token {
+                Token::KwDyn => ParsedRustType::Dyn(first, rest),
+                Token::KwImpl => ParsedRustType::Impl(first, rest),
+                _ => unreachable!(),
+            });
         let boxed = just(Token::Ident("Box"))
             .then(rust_generics(parser.clone()))
             .map(|(_, x)| {

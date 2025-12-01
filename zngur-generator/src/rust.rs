@@ -1,6 +1,7 @@
 use std::fmt::Write;
 
 use itertools::Itertools;
+use sha2::{Digest, Sha256};
 
 use crate::{
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
@@ -137,6 +138,7 @@ impl IntoCpp for RustType {
                         .collect(),
                 }
             }
+            RustType::Impl(_, _) => panic!("impl Trait is invalid in C++"),
         }
     }
 }
@@ -209,6 +211,16 @@ macro_rules! wln {
     ($dst:expr, $($arg:tt)*) => {
         { let _ = writeln!($dst, $($arg)*); }
     };
+}
+
+pub fn hash_of_sig(sig: &[RustType]) -> String {
+    let mut text = "".to_owned();
+    for elem in sig {
+        text += &format!("{elem}+");
+    }
+
+    let digset = Sha256::digest(&text);
+    hex::encode(&digset[..5])
 }
 
 fn mangle_name(name: &str, mangling_base: &str) -> String {
@@ -294,7 +306,13 @@ impl RustFile {
         let mut method_mangled_name = vec![];
         wln!(self, r#"unsafe extern "C" {{"#);
         for method in &tr.methods {
-            let name = self.mangle_name(&tr.tr.to_string()) + "_" + &method.name;
+            let name = self.mangle_name(&tr.tr.to_string())
+                + "_"
+                + &method.name
+                + "_"
+                + &hash_of_sig(&method.generics)
+                + "_"
+                + &hash_of_sig(&method.inputs);
             wln!(
                 self,
                 r#"fn {name}(data: *mut u8, {} o: *mut u8);"#,
@@ -695,10 +713,9 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
     ) -> String {
-        let mut mangled_name = self.mangle_name(rust_name);
+        let mut mangled_name = self.mangle_name(rust_name) + "_" + &hash_of_sig(&inputs);
         if deref.is_some() {
-            mangled_name += "_deref_";
-            mangled_name += &self.mangle_name(&inputs[0].to_string());
+            mangled_name += "_deref";
         }
         w!(
             self,
