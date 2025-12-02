@@ -4,6 +4,11 @@ Starting with Zngur 0.8.0, you can automatically determine type size and alignme
 
 **Note:** The intention is to eventually make `layout(auto)` the default, hopefully before 1.0.
 
+## Requirements
+
+- **Cargo must be installed**: `#layout(auto)` uses Cargo to locate and build your crate.
+  If you're using a bare `rustc` workflow without Cargo, use explicit `#layout(size = X, align = Y)` directives instead.
+
 ## Usage
 
 In your `.zng` file, simply use `#layout(auto)`:
@@ -96,6 +101,19 @@ See [`examples/tutorial`](https://github.com/HKalbasi/zngur/blob/main/examples/t
 
 Auto-layout errors include helpful hints to guide you toward a solution:
 
+### "cargo is not available"
+
+```
+error: cargo is not available
+  #layout(auto) requires Cargo to extract type layouts
+
+  = hint: install Cargo from https://rustup.rs or use explicit #layout(size = X, align = Y)
+```
+
+**Solution:** Either install Cargo via rustup, or replace `#layout(auto)` with explicit `#layout(size = X, align = Y)` directives in your `.zng` file.
+
+### "could not find compiled library"
+
 ```
 error: could not find compiled library
   Could not find compiled library for crate 'my_crate' in ./target/debug/
@@ -104,6 +122,8 @@ error: could not find compiled library
 ```
 
 **Solution:** Run `cargo build` to compile your crate first.
+
+### "type not found in compiled crate"
 
 ```
 error: type not found in compiled crate

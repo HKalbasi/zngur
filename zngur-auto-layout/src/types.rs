@@ -61,6 +61,11 @@ pub enum LayoutError {
     /// - Hint: Try deleting the cache directory.
     CacheError(String),
 
+    /// Cargo is not available in PATH but is required for auto-layout.
+    ///
+    /// - Hint: Install Cargo or use explicit layouts.
+    CargoNotFound,
+
     /// An unspecified error occurred.
     Other(String),
 }
@@ -129,6 +134,15 @@ impl fmt::Display for LayoutError {
                 write!(
                     f,
                     "  = hint: try deleting the cache directory and rebuilding"
+                )
+            }
+            LayoutError::CargoNotFound => {
+                writeln!(f, "error: cargo is not available")?;
+                writeln!(f, "  #layout(auto) requires Cargo to extract type layouts")?;
+                writeln!(f)?;
+                write!(
+                    f,
+                    "  = hint: install Cargo from https://rustup.rs or use explicit #layout(size = X, align = Y)"
                 )
             }
             LayoutError::Other(msg) => {

@@ -27,10 +27,15 @@ pub(crate) struct Extractor {
 impl Extractor {
     /// Creates an extractor for the crate at `crate_path` targeting `target`.
     ///
-    /// - Precondition: rustc is available on PATH.
+    /// - Precondition: rustc and cargo are available on PATH.
     /// - Postcondition: Returns an extractor configured for the given crate
-    ///   and target, or an error if rustc version cannot be determined.
+    ///   and target, or an error if rustc version cannot be determined or cargo is not available.
     pub(crate) fn new(crate_path: &Path, target: Option<&str>) -> LayoutResult<Self> {
+        // Check if cargo is available
+        if Command::new("cargo").arg("--version").output().is_err() {
+            return Err(LayoutError::CargoNotFound);
+        }
+
         Ok(Self {
             crate_path: crate_path.to_path_buf(),
             target: target.map(|s| s.to_string()),
@@ -95,7 +100,13 @@ impl Extractor {
             cmd.arg("--target").arg(target);
         }
 
-        let output = cmd.output()?;
+        let output = cmd.output().map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                LayoutError::CargoNotFound
+            } else {
+                LayoutError::IoError(e)
+            }
+        })?;
 
         if !output.status.success() {
             let stderr = String::from_utf8_lossy(&output.stderr);
