@@ -90,7 +90,6 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
     sh.change_dir("..");
 
     // Build examples in parallel (limit to 4 at a time to avoid resource exhaustion)
-    // Now each example runs the binary directly - no cargo run overhead!
     println!("Building {} examples in parallel...", examples.len());
     examples
         .par_iter()
