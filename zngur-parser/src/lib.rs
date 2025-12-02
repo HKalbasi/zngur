@@ -1,4 +1,8 @@
-use std::{collections::HashMap, fmt::Display, path::Component, rc::Rc};
+use std::{
+    collections::{HashMap, VecDeque},
+    fmt::Display,
+    path::Component,
+};
 
 #[cfg(not(test))]
 use std::process::exit;
@@ -22,7 +26,7 @@ mod tests;
 pub mod cfg;
 mod match_stmnt;
 
-use crate::cfg::{ParsedMatchCfg, RustCfgProvider};
+use crate::cfg::{CargoEnvRustCfgProvider, ParsedMatchCfg, RustCfgProvider};
 use match_stmnt::{ParsedMatch, match_item};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -382,7 +386,8 @@ impl ProcessedItem<'_> {
                 let mut layout_span = None;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
-                for item in items {
+                let mut to_process = VecDeque::from(items);
+                while let Some(item) = to_process.pop_front() {
                     let item_span = item.span;
                     let item = item.inner;
                     match item {
@@ -492,8 +497,11 @@ impl ProcessedItem<'_> {
                             }
                             cpp_ref = Some(CppRef(cpp_type.to_owned()));
                         }
-                        ParsedTypeItem::MatchOnCfg(_match_stmnt) => {
-                            todo!("evaluate match arms and emit items");
+                        ParsedTypeItem::MatchOnCfg(match_) => {
+                            let result = match_.eval(ctx);
+                            if !result.is_empty() {
+                                to_process.extend(result);
+                            }
                         }
                     }
                 }
@@ -745,22 +753,18 @@ struct ParseContext<'a, 'b> {
     depth: usize,
     reports: Vec<Report<'b, (String, std::ops::Range<usize>)>>,
     source_cache: std::collections::HashMap<std::path::PathBuf, String>,
-    cfg_provider: Rc<dyn RustCfgProvider>,
+    cfg_provider: &'a dyn RustCfgProvider,
 }
 
 impl<'a, 'b> ParseContext<'a, 'b> {
-    fn new<Cfg: RustCfgProvider + 'static>(
-        path: std::path::PathBuf,
-        text: &'a str,
-        cfg: Cfg,
-    ) -> Self {
+    fn new(path: std::path::PathBuf, text: &'a str, cfg: &'a dyn RustCfgProvider) -> Self {
         Self {
             path,
             text,
             depth: 0,
             reports: Vec::new(),
             source_cache: HashMap::new(),
-            cfg_provider: Rc::new(cfg),
+            cfg_provider: cfg,
         }
     }
 
@@ -768,7 +772,7 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         path: std::path::PathBuf,
         text: &'a str,
         depth: usize,
-        cfg: Rc<dyn RustCfgProvider>,
+        cfg: &'a dyn RustCfgProvider,
     ) -> Self {
         Self {
             path,
@@ -810,11 +814,31 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         self.add_errors([Rich::custom(span, error)].into_iter());
     }
 
-    fn consume_errors_from(&mut self, other: ParseContext<'_, 'b>) {
-        if other.has_errors() {
-            self.reports.extend(other.reports);
-            self.source_cache.insert(other.path, other.text.to_string());
-            self.source_cache.extend(other.source_cache);
+    fn take_errors(
+        self,
+    ) -> Option<(
+        Vec<Report<'b, (String, std::ops::Range<usize>)>>,
+        std::collections::HashMap<std::path::PathBuf, String>,
+    )> {
+        if self.has_errors() {
+            let mut source_cache = self.source_cache;
+            source_cache.insert(self.path, self.text.to_string());
+            Some((self.reports, source_cache))
+        } else {
+            None
+        }
+    }
+
+    fn consume_errors(
+        &mut self,
+        other: Option<(
+            Vec<Report<'b, (String, std::ops::Range<usize>)>>,
+            std::collections::HashMap<std::path::PathBuf, String>,
+        )>,
+    ) {
+        if let Some((reports, cache)) = other {
+            self.reports.extend(reports);
+            self.source_cache.extend(cache);
         }
     }
 
@@ -876,8 +900,8 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         exit(101);
     }
 
-    fn get_config_provider(&self) -> Rc<dyn RustCfgProvider> {
-        return self.cfg_provider.clone();
+    fn get_config_provider(&self) -> &dyn RustCfgProvider {
+        return self.cfg_provider;
     }
 }
 
@@ -927,7 +951,12 @@ impl<'a> ParsedZngFile<'a> {
             ctx.emit_ariadne_errors();
         };
 
-        let (aliases, items) = process_parsed_items(ast.0.0);
+        let (aliases, items) = partition_parsed_items(
+            ast.0
+                .0
+                .into_iter()
+                .map(|item| process_parsed_item(item, ctx)),
+        );
         ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, ctx);
 
         if let Some(dirname) = ctx.path.to_owned().parent() {
@@ -941,7 +970,7 @@ impl<'a> ParsedZngFile<'a> {
                             ctx.get_config_provider(),
                         );
                         Self::parse_into(zngur, &mut nested_ctx, resolver);
-                        ctx.consume_errors_from(nested_ctx);
+                        ctx.consume_errors(nested_ctx.take_errors());
                     }
                     Err(_) => {
                         // TODO: emit a better error. How should we get a span here?
@@ -962,30 +991,30 @@ impl<'a> ParsedZngFile<'a> {
     }
 
     pub fn parse(path: std::path::PathBuf) -> ZngurSpec {
-        let mut zngur = ZngurSpec::default();
+        Self::parse_with_cfg(path, &CargoEnvRustCfgProvider)
+    }
+
+    pub fn parse_with_cfg(path: std::path::PathBuf, cfg: &impl RustCfgProvider) -> ZngurSpec {
         let text = std::fs::read_to_string(&path).unwrap();
-        let mut ctx = ParseContext::new(path, &text);
-        Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
-        if ctx.has_errors() {
-            ctx.emit_ariadne_errors();
-        }
-        zngur
+        Self::parse_str(&text, path, cfg)
     }
 
-    pub fn parse_str(text: &str) -> ZngurSpec {
-        let mut zngur = ZngurSpec::default();
-        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
-        Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
-        if ctx.has_errors() {
-            ctx.emit_ariadne_errors();
-        }
-        zngur
+    pub fn parse_str(
+        text: &str,
+        path: std::path::PathBuf,
+        cfg: &impl RustCfgProvider,
+    ) -> ZngurSpec {
+        Self::parse_str_with_resolver(text, path, cfg, &DefaultImportResolver)
     }
 
-    #[cfg(test)]
-    pub(crate) fn parse_str_with_resolver(text: &str, resolver: &impl ImportResolver) -> ZngurSpec {
+    pub fn parse_str_with_resolver(
+        text: &str,
+        path: std::path::PathBuf,
+        cfg: &impl RustCfgProvider,
+        resolver: &impl ImportResolver,
+    ) -> ZngurSpec {
         let mut zngur = ZngurSpec::default();
-        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
+        let mut ctx = ParseContext::new(path, text, cfg);
         Self::parse_into(&mut zngur, &mut ctx, resolver);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
@@ -997,9 +1026,13 @@ impl<'a> ParsedZngFile<'a> {
 pub(crate) enum ProcessedItemOrAlias<'a> {
     Processed(ProcessedItem<'a>),
     Alias(ParsedAlias<'a>),
+    ChildItems(Vec<ProcessedItemOrAlias<'a>>),
 }
 
-fn process_parsed_item<'a>(item: ParsedItem<'a>) -> ProcessedItemOrAlias {
+fn process_parsed_item<'a>(
+    item: ParsedItem<'a>,
+    ctx: &mut ParseContext,
+) -> ProcessedItemOrAlias<'a> {
     use ProcessedItemOrAlias as Ret;
     match item {
         ParsedItem::Alias(alias) => Ret::Alias(alias),
@@ -1010,7 +1043,9 @@ fn process_parsed_item<'a>(item: ParsedItem<'a>) -> ProcessedItemOrAlias {
             Ret::Processed(ProcessedItem::CppAdditionalInclude(inc))
         }
         ParsedItem::Mod { path, items } => {
-            let (aliases, items) = process_parsed_items(items);
+            let (aliases, items) = partition_parsed_items(
+                items.into_iter().map(|item| process_parsed_item(item, ctx)),
+            );
             Ret::Processed(ProcessedItem::Mod {
                 path,
                 items,
@@ -1022,21 +1057,30 @@ fn process_parsed_item<'a>(item: ParsedItem<'a>) -> ProcessedItemOrAlias {
         ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
         ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
         ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
-        ParsedItem::MatchOnCfg(_match_stmnt) => {
-            todo!("evalueate match arms and emit items")
-        }
+        ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
+            match_
+                .eval(ctx)
+                .into_iter()
+                .map(|item| item.inner)
+                .collect(),
+        ),
     }
 }
 
-fn process_parsed_items<'a>(
-    items: impl IntoIterator<Item = ParsedItem<'a>>,
+fn partition_parsed_items<'a>(
+    items: impl IntoIterator<Item = ProcessedItemOrAlias<'a>>,
 ) -> (Vec<ParsedAlias<'a>>, Vec<ProcessedItem<'a>>) {
     let mut aliases = Vec::new();
     let mut processed = Vec::new();
     for item in items.into_iter() {
-        match process_parsed_item(item) {
+        match item {
             ProcessedItemOrAlias::Processed(p) => processed.push(p),
             ProcessedItemOrAlias::Alias(a) => aliases.push(a),
+            ProcessedItemOrAlias::ChildItems(children) => {
+                let (child_aliases, child_items) = partition_parsed_items(children);
+                aliases.extend(child_aliases);
+                processed.extend(child_items);
+            }
         }
     }
     (aliases, processed)

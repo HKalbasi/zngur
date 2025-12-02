@@ -12,9 +12,9 @@ use chumsky::prelude::*;
 
 pub trait RustCfgProvider {
     /// Gets values assoceated with a config key if it's present.
-    fn get_cfg(&self, key: &str) -> Option<Vec<&str>>;
+    fn get_cfg(&self, key: &str) -> Option<Vec<String>>;
     /// Gets a list of feature names that are enabeled
-    fn get_features(&self) -> Vec<&str>;
+    fn get_features(&self) -> Vec<String>;
 }
 
 pub struct InMemoryRustCfgProvider {
@@ -61,16 +61,52 @@ impl InMemoryRustCfgProvider {
 }
 
 impl RustCfgProvider for InMemoryRustCfgProvider {
-    fn get_cfg(&self, key: &str) -> Option<Vec<&str>> {
-        self.cfg
-            .get(key)
-            .map(|values| values.iter().map(std::convert::AsRef::as_ref).collect())
+    fn get_cfg(&self, key: &str) -> Option<Vec<String>> {
+        self.cfg.get(key).map(|values| values.to_vec())
     }
-    fn get_features(&self) -> Vec<&str> {
-        self.features
-            .iter()
-            .map(std::convert::AsRef::as_ref)
-            .collect()
+    fn get_features(&self) -> Vec<String> {
+        self.features.iter().cloned().collect()
+    }
+}
+
+/// pull config values from the environment (for build scripts)
+pub struct CargoEnvRustCfgProvider;
+
+impl CargoEnvRustCfgProvider {
+    fn split_values(values: &str) -> Vec<String> {
+        values.split(",").map(str::to_owned).collect()
+    }
+}
+
+const CARGO_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
+const CARGO_CFG_PREFIX: &str = "CARGO_CFG_";
+
+impl RustCfgProvider for CargoEnvRustCfgProvider {
+    fn get_cfg(&self, key: &str) -> Option<Vec<String>> {
+        let key = key.to_uppercase();
+        std::env::var(format!("{CARGO_CFG_PREFIX}{key}"))
+            .map(|value| Self::split_values(&value))
+            .ok()
+    }
+
+    fn get_features(&self) -> Vec<String> {
+        let mut features = HashSet::new();
+        // features exist in two places
+        // CARGO_FEATURE_{name} and (msrv = 1.85) CARGO_CFG_FEATURE=<name,...>
+        // https://doc.rust-lang.org/cargo/reference/environment-variables.html#environment-variables-cargo-sets-for-build-scripts
+        for (k, _) in std::env::vars_os() {
+            // no panic if not unicode
+            let Some(k) = k.to_str() else {
+                continue;
+            };
+            if let Some(feature) = k.strip_prefix(CARGO_FEATURE_PREFIX) {
+                features.insert(feature.to_lowercase());
+            }
+        }
+        if let Ok(values) = std::env::var("CARGO_CFG_FEATURE") {
+            features.extend(Self::split_values(&values));
+        }
+        features.into_iter().collect()
     }
 }
 
@@ -83,10 +119,10 @@ pub(crate) enum ParsedCfgScrutinee<'src> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ProcessedCfgScrutinee<'src> {
+pub(crate) enum ProcessedCfgScrutinee {
     Empty,
     Some,
-    Values(Vec<&'src str>),
+    Values(Vec<String>),
 }
 
 /// Match on config keys and features
@@ -180,12 +216,12 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
     fn eval<
         'a,
         Item: crate::match_stmnt::MatchItem<'a> + 'a,
-        Items: IntoIterator<Item = (Self::Pattern, Vec<Item>)>,
+        Items: IntoIterator<Item = (Self::Pattern, Vec<Spanned<Item>>)>,
     >(
         &self,
         arms: Items,
         ctx: &mut ParseContext,
-    ) -> Vec<Item::Processed> {
+    ) -> Vec<Spanned<Item::Processed>> {
         let mut items = Vec::new();
         let cfg = ctx.get_config_provider();
         let scrutinee = self
@@ -194,25 +230,44 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
             .map(|key| match key {
                 ParsedCfgScrutinee::Key(key) => cfg
                     .get_cfg(key)
-                    .map(ProcessedCfgScrutinee::Values)
+                    .map(|values| {
+                        if values.is_empty() {
+                            ProcessedCfgScrutinee::Some
+                        } else {
+                            ProcessedCfgScrutinee::Values(values)
+                        }
+                    })
                     .unwrap_or(ProcessedCfgScrutinee::Empty),
                 ParsedCfgScrutinee::KeyWithItem(key, item) => cfg
                     .get_cfg(key)
-                    .and_then(|values| values.contains(item).then_some(ProcessedCfgScrutinee::Some))
+                    .and_then(|values| {
+                        values
+                            .iter()
+                            .any(|value| value == item)
+                            .then_some(ProcessedCfgScrutinee::Some)
+                    })
                     .unwrap_or(ProcessedCfgScrutinee::Empty),
                 ParsedCfgScrutinee::AllFeatures => {
                     ProcessedCfgScrutinee::Values(cfg.get_features())
                 }
-                ParsedCfgScrutinee::Feature(feature) => cfg
-                    .get_features()
-                    .contains(feature)
-                    .then_some(ProcessedCfgScrutinee::Some)
-                    .unwrap_or(ProcessedCfgScrutinee::Empty),
+                ParsedCfgScrutinee::Feature(feature) => {
+                    if cfg.get_features().iter().any(|value| value == feature) {
+                        ProcessedCfgScrutinee::Some
+                    } else {
+                        ProcessedCfgScrutinee::Empty
+                    }
+                }
             })
             .collect::<Vec<_>>();
         for (pattern, body) in arms {
             if pattern.matches(&scrutinee, ctx) {
-                items.extend(body.into_iter().map(|item| item.process()))
+                items.extend(body.into_iter().map(|item| {
+                    let span = item.span;
+                    Spanned {
+                        inner: item.inner.process(ctx),
+                        span,
+                    }
+                }))
             }
         }
         items
@@ -253,17 +308,11 @@ impl ParsedMatchCfgPatternItem<'_> {
         use ProcessedCfgScrutinee as PCS;
         match self {
             Self::Empty => true,
-            Self::Some => match &scrutinee {
-                PCS::Empty => false,
-                _ => true,
-            },
-            Self::None => match &scrutinee {
-                PCS::Empty => true,
-                _ => false,
-            },
+            Self::Some => !matches!(scrutinee, PCS::Empty),
+            Self::None => matches!(scrutinee, PCS::Empty),
             Self::Value(v) => match &scrutinee {
                 PCS::Empty | PCS::Some => false,
-                PCS::Values(values) => values.contains(&v.inner),
+                PCS::Values(values) => values.iter().any(|value| value == v.inner),
             },
         }
     }

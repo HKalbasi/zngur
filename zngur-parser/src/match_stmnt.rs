@@ -5,11 +5,15 @@ use std::marker::PhantomData;
 pub trait Matchable<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
     type Pattern: MatchPattern<'src>;
     fn parser() -> impl ZngParser<'src, Self>;
-    fn eval<'a, Item: MatchItem<'a> + 'a, Items: IntoIterator<Item = (Self::Pattern, Vec<Item>)>>(
+    fn eval<
+        'a,
+        Item: MatchItem<'a> + 'a,
+        Items: IntoIterator<Item = (Self::Pattern, Vec<Spanned<Item>>)>,
+    >(
         &self,
         arms: Items,
         ctx: &mut ParseContext,
-    ) -> Vec<Item::Processed>;
+    ) -> Vec<Spanned<Item::Processed>>;
 }
 
 pub trait MatchPattern<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
@@ -18,8 +22,9 @@ pub trait MatchPattern<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq 
 
 pub trait MatchItem<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
     type Processed;
+
+    fn process(self, ctx: &mut ParseContext) -> Self::Processed;
     fn parser() -> impl ZngParser<'src, Self>;
-    fn process(self) -> Self::Processed;
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -53,22 +58,23 @@ pub struct ParsedMatch<'src, Scrutinee: Matchable<'src>, Item: MatchItem<'src>> 
 }
 
 impl<'src, Scrutinee: Matchable<'src>, Item: MatchItem<'src>> ParsedMatch<'src, Scrutinee, Item> {
-    fn eval(self, ctx: &mut ParseContext) -> Vec<Item::Processed> {
+    pub fn eval(self, ctx: &mut ParseContext) -> Vec<Spanned<Item::Processed>> {
         let mut items = Vec::new();
         let arms = self.arms.into_iter().map(|arm| {
             let arm = arm.inner;
             (
                 arm.pattern,
                 match arm.body {
-                    ParsedMatchArmBody::WithItems { items, .. } => {
-                        items.into_iter().map(|item| item.inner).collect()
-                    }
+                    ParsedMatchArmBody::WithItems { items, .. } => items,
                     ParsedMatchArmBody::Empty => Vec::new(),
                 },
             )
         });
-        let result = self.scrutinee.inner.eval(arms, ctx);
-        if result.len() > 0 {
+        let result = self
+            .scrutinee
+            .inner
+            .eval(arms, ctx);
+        if !result.is_empty() {
             items.reserve(result.len());
             items.extend(result);
         }
@@ -113,22 +119,24 @@ pub fn match_item<'src, Scrutinee: Matchable<'src> + 'src, Item: MatchItem<'src>
 
 impl<'src> MatchItem<'src> for crate::ParsedTypeItem<'src> {
     type Processed = Self;
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::inner_type_item().boxed()
+
+    fn process(self, _ctx: &mut ParseContext) -> Self::Processed {
+        self
     }
 
-    fn process(self) -> Self::Processed {
-        self
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::inner_type_item().boxed()
     }
 }
 
 impl<'src> MatchItem<'src> for crate::ParsedItem<'src> {
     type Processed = ProcessedItemOrAlias<'src>;
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::item()
+
+    fn process(self, ctx: &mut ParseContext) -> Self::Processed {
+        crate::process_parsed_item(self, ctx)
     }
 
-    fn process(self) -> Self::Processed {
-        crate::process_parsed_item(self)
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::item()
     }
 }
