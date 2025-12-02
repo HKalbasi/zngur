@@ -2,6 +2,8 @@
 
 Starting with Zngur 0.8.0, you can automatically determine type size and alignment at build time using `#layout(auto)` instead of manually specifying `#layout(size = X, align = Y)`.
 
+**Note:** The intention is to eventually make `layout(auto)` the default, hopefully before 1.0.
+
 ## Usage
 
 In your `.zng` file, simply use `#layout(auto)`:
@@ -34,29 +36,9 @@ When you use `#layout(auto)`, Zngur:
 
 This happens transparently during `cargo build` when using Zngur in your build script.
 
-## Build Script Configuration
+### Advanced configuration in build scripts
 
-Auto-layout works automatically with no special configuration needed in your `build.rs`:
-
-```rust
-use zngur::Zngur;
-
-fn main() {
-    let crate_dir = build::cargo_manifest_dir();
-    let out_dir = build::out_dir();
-
-    Zngur::from_zng_file(crate_dir.join("main.zng"))
-        .with_cpp_file(out_dir.join("generated.cpp"))
-        .with_h_file(out_dir.join("generated.h"))
-        .with_rs_file(out_dir.join("generated.rs"))
-        .generate();
-}
-```
-
-If there are no types with `#layout(auto)` in your `.zng` file, the auto-layout system simply skips all processing with no overhead.
-
-### Advanced Configuration
-
+Auto-layout works automatically with no special configuration needed in your `build.rs`.
 For special cases, you can customize the layout resolution:
 
 ```rust
@@ -76,8 +58,6 @@ The layout cache is automatically invalidated when:
 - Target triple changes
 - Source files are modified (detected via Cargo.lock and src/ mtime)
 - Cargo features change
-
-This ensures the cache never becomes stale.
 
 ## CLI Command: Dumping Layouts
 
@@ -107,54 +87,6 @@ For cross-compilation:
 ```bash
 zngur dump-layouts main.zng --target x86_64-unknown-linux-gnu
 ```
-
-## When to Use Auto Layout
-
-For most use cases where you control the compiler version, **`#layout(auto)` is the recommended default**. Here's the full decision tree:
-
-### Quick Decision Guide
-
-**For types with unstable layouts** (most custom types, tuples, etc.):
-
-- ✅ Use `#layout(auto)` - convenient and always correct
-- ⚠️ Never use explicit `#layout(size = X, align = Y)` in published libraries (see [Layout Policy](./layout_policy.md))
-- ✅ Use `#heap_allocate` if you need maximum portability across compiler versions
-
-**For types with stable layouts** (`Vec<T>`, `String`, `Box<T>`, `#[repr(C)]` types, primitives):
-
-- ✅ Use `#layout(auto)` - convenient and verifies your assumptions
-- ✅ Use explicit `#layout(size = X, align = Y)` - slightly faster builds, no rustc dependency
-- Both work fine; auto is safer because it catches mistakes
-
-### Detailed Considerations
-
-**Use `#layout(auto)` when:**
-
-- You want convenience (no manual lookup)
-- You control the compiler version (most projects)
-- You want automatic verification that values are correct
-- The type's layout might change between compiler versions
-
-**Use explicit `#layout(size = X, align = Y)` only when:**
-
-- The type has a **guaranteed stable** layout
-- You want to avoid rustc as a build dependency
-- You're okay with manual maintenance
-- Examples: `Vec<T>` (24 bytes), `String` (24 bytes), `Box<T>` (8 bytes), primitives
-
-**Use `#heap_allocate` when:**
-
-- You need maximum portability (works with any compiler version)
-- You don't control the final build environment
-- Heap allocation overhead is acceptable
-- You don't want to maintain layout information at all
-
-## Limitations
-
-- Requires the crate to be built before layout extraction
-- Types must be public or accessible from the crate root
-- Cross-compilation requires the target's stdlib to be installed
-- Adds a small amount of build time (typically < 1 second, cached)
 
 ## Example
 
