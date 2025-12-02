@@ -1,4 +1,4 @@
-use std::{collections::HashMap, fmt::Display, path::Component};
+use std::{collections::HashMap, fmt::Display, path::Component, rc::Rc};
 
 #[cfg(not(test))]
 use std::process::exit;
@@ -19,9 +19,11 @@ pub type Span = SimpleSpan<usize>;
 #[cfg(test)]
 mod tests;
 
+pub mod cfg;
 mod match_stmnt;
 
-use match_stmnt::parse::{MatchItemParser, ParsedMatch, ParsedMatchCfg, match_item};
+use crate::cfg::{ParsedMatchCfg, RustCfgProvider};
+use match_stmnt::{ParsedMatch, match_item};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Spanned<T> {
@@ -743,26 +745,38 @@ struct ParseContext<'a, 'b> {
     depth: usize,
     reports: Vec<Report<'b, (String, std::ops::Range<usize>)>>,
     source_cache: std::collections::HashMap<std::path::PathBuf, String>,
+    cfg_provider: Rc<dyn RustCfgProvider>,
 }
 
 impl<'a, 'b> ParseContext<'a, 'b> {
-    fn new(path: std::path::PathBuf, text: &'a str) -> Self {
+    fn new<Cfg: RustCfgProvider + 'static>(
+        path: std::path::PathBuf,
+        text: &'a str,
+        cfg: Cfg,
+    ) -> Self {
         Self {
             path,
             text,
             depth: 0,
             reports: Vec::new(),
             source_cache: HashMap::new(),
+            cfg_provider: Rc::new(cfg),
         }
     }
 
-    fn with_depth(path: std::path::PathBuf, text: &'a str, depth: usize) -> Self {
+    fn with_depth(
+        path: std::path::PathBuf,
+        text: &'a str,
+        depth: usize,
+        cfg: Rc<dyn RustCfgProvider>,
+    ) -> Self {
         Self {
             path,
             text,
             depth,
             reports: Vec::new(),
             source_cache: HashMap::new(),
+            cfg_provider: cfg,
         }
     }
 
@@ -861,6 +875,10 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         }
         exit(101);
     }
+
+    fn get_config_provider(&self) -> Rc<dyn RustCfgProvider> {
+        return self.cfg_provider.clone();
+    }
 }
 
 /// A trait for types which can resolve filesystem-like paths relative to a given directory.
@@ -916,8 +934,12 @@ impl<'a> ParsedZngFile<'a> {
             for import in std::mem::take(&mut zngur.imports) {
                 match resolver.resolve_import(dirname, &import.0) {
                     Ok(text) => {
-                        let mut nested_ctx =
-                            ParseContext::with_depth(dirname.join(&import.0), &text, ctx.depth + 1);
+                        let mut nested_ctx = ParseContext::with_depth(
+                            dirname.join(&import.0),
+                            &text,
+                            ctx.depth + 1,
+                            ctx.get_config_provider(),
+                        );
                         Self::parse_into(zngur, &mut nested_ctx, resolver);
                         ctx.consume_errors_from(nested_ctx);
                     }
@@ -972,38 +994,49 @@ impl<'a> ParsedZngFile<'a> {
     }
 }
 
+pub(crate) enum ProcessedItemOrAlias<'a> {
+    Processed(ProcessedItem<'a>),
+    Alias(ParsedAlias<'a>),
+}
+
+fn process_parsed_item<'a>(item: ParsedItem<'a>) -> ProcessedItemOrAlias {
+    use ProcessedItemOrAlias as Ret;
+    match item {
+        ParsedItem::Alias(alias) => Ret::Alias(alias),
+        ParsedItem::ConvertPanicToException(span) => {
+            Ret::Processed(ProcessedItem::ConvertPanicToException(span))
+        }
+        ParsedItem::CppAdditionalInclude(inc) => {
+            Ret::Processed(ProcessedItem::CppAdditionalInclude(inc))
+        }
+        ParsedItem::Mod { path, items } => {
+            let (aliases, items) = process_parsed_items(items);
+            Ret::Processed(ProcessedItem::Mod {
+                path,
+                items,
+                aliases,
+            })
+        }
+        ParsedItem::Type { ty, items } => Ret::Processed(ProcessedItem::Type { ty, items }),
+        ParsedItem::Trait { tr, methods } => Ret::Processed(ProcessedItem::Trait { tr, methods }),
+        ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
+        ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
+        ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
+        ParsedItem::MatchOnCfg(_match_stmnt) => {
+            todo!("evalueate match arms and emit items")
+        }
+    }
+}
+
 fn process_parsed_items<'a>(
     items: impl IntoIterator<Item = ParsedItem<'a>>,
 ) -> (Vec<ParsedAlias<'a>>, Vec<ProcessedItem<'a>>) {
     let mut aliases = Vec::new();
     let mut processed = Vec::new();
     for item in items.into_iter() {
-        match item {
-            ParsedItem::Alias(alias) => aliases.push(alias),
-            ParsedItem::ConvertPanicToException(span) => {
-                processed.push(ProcessedItem::ConvertPanicToException(span))
-            }
-            ParsedItem::CppAdditionalInclude(inc) => {
-                processed.push(ProcessedItem::CppAdditionalInclude(inc))
-            }
-            ParsedItem::Mod { path, items } => {
-                let (aliases, items) = process_parsed_items(items);
-                processed.push(ProcessedItem::Mod {
-                    path,
-                    items,
-                    aliases,
-                })
-            }
-            ParsedItem::Type { ty, items } => processed.push(ProcessedItem::Type { ty, items }),
-            ParsedItem::Trait { tr, methods } => {
-                processed.push(ProcessedItem::Trait { tr, methods })
-            }
-            ParsedItem::Fn(method) => processed.push(ProcessedItem::Fn(method)),
-            ParsedItem::ExternCpp(items) => processed.push(ProcessedItem::ExternCpp(items)),
-            ParsedItem::Import(path) => processed.push(ProcessedItem::Import(path)),
-            ParsedItem::MatchOnCfg(_match_stmnt) => {
-                todo!("evalueate match arms and emit items")
-            }
+        match process_parsed_item(item) {
+            ProcessedItemOrAlias::Processed(p) => processed.push(p),
+            ProcessedItemOrAlias::Alias(a) => aliases.push(a),
         }
     }
     (aliases, processed)
@@ -1733,16 +1766,4 @@ fn path<'a>()
             span: extra.span(),
         })
         .boxed()
-}
-
-impl<'src> MatchItemParser<'src> for ParsedTypeItem<'src> {
-    fn parser() -> impl ZngParser<'src, Self> {
-        inner_type_item().boxed()
-    }
-}
-
-impl<'src> MatchItemParser<'src> for ParsedItem<'src> {
-    fn parser() -> impl ZngParser<'src, Self> {
-        item()
-    }
 }

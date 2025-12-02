@@ -1,132 +1,134 @@
-pub(crate) mod parse {
+use crate::{ParseContext, ProcessedItemOrAlias, Spanned, Token, ZngParser, spanned};
+use chumsky::prelude::*;
+use std::marker::PhantomData;
 
-    use crate::{Spanned, ZngParser, spanned, Token};
-    use chumsky::prelude::*;
-    use std::marker::PhantomData;
+pub trait Matchable<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    type Pattern: MatchPattern<'src>;
+    fn parser() -> impl ZngParser<'src, Self>;
+    fn eval<'a, Item: MatchItem<'a> + 'a, Items: IntoIterator<Item = (Self::Pattern, Vec<Item>)>>(
+        &self,
+        arms: Items,
+        ctx: &mut ParseContext,
+    ) -> Vec<Item::Processed>;
+}
 
-    pub trait MatchableParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-        type Pattern: MatchPatternParser<'src>;
-        fn parser() -> impl ZngParser<'src, Self>;
-    }
+pub trait MatchPattern<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    fn parser() -> impl ZngParser<'src, Self>;
+}
 
-    pub trait MatchPatternParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-        fn parser() -> impl ZngParser<'src, Self>;
-    }
+pub trait MatchItem<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+    type Processed;
+    fn parser() -> impl ZngParser<'src, Self>;
+    fn process(self) -> Self::Processed;
+}
 
-    pub trait MatchItemParser<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
-        fn parser() -> impl ZngParser<'src, Self>;
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ParsedMatchArmBody<'src, Item: MatchItem<'src>> {
+    WithItems {
+        items: Vec<Spanned<Item>>,
+        _pd: PhantomData<&'src Item>,
+    },
+    Empty,
+}
 
-    /// Match on config keys and features
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ParsedMatchCfg<'src> {
-        /// a list of confg key paths
-        pub item: Vec<Vec<&'src str>>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum ParsedMatchCfgPatternItem<'src> {
-        Empty, // a `_` pattern
-        Some,  // the config has "some" value for the key
-        None,  // the config has "no" value for the key
-        Value(Spanned<&'src str>),
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ParsedMatchCfgPattern<'src>(pub Vec<ParsedMatchCfgPatternItem<'src>>);
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub enum ParsedMatchEnumBody<'src, Item: MatchItemParser<'src>> {
-        Items(Vec<Spanned<Item>>, PhantomData<&'src Item>),
-        Empty,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ParsedMatchArm<'src, Pattern: MatchPatternParser<'src>, Item: MatchItemParser<'src>> {
-        pub pattern: Pattern,
-        pub body: ParsedMatchEnumBody<'src, Item>,
-    }
-
-    #[derive(Debug, Clone, PartialEq, Eq)]
-    pub struct ParsedMatch<'src, Scrutinee: MatchableParser<'src>, Item: MatchItemParser<'src>> {
-        pub scrutinee: Spanned<Scrutinee>,
-        pub arms:
-            Vec<Spanned<ParsedMatchArm<'src, <Scrutinee as MatchableParser<'src>>::Pattern, Item>>>,
-    }
-
-    impl<'src> MatchPatternParser<'src> for ParsedMatchCfgPattern<'src> {
-        fn parser() -> impl ZngParser<'src, Self> {
-            choice((
-                just(Token::Underscore).to(ParsedMatchCfgPatternItem::Empty),
-                spanned(select! {
-                    Token::Str(c) => c
-                })
-                .map(ParsedMatchCfgPatternItem::Value),
-                just(Token::Ident("Some")).to(ParsedMatchCfgPatternItem::Some),
-                just(Token::Ident("None")).to(ParsedMatchCfgPatternItem::None),
-            ))
-            .separated_by(just(Token::Pipe))
-            .at_least(1)
-            .collect::<Vec<_>>()
-            .map(ParsedMatchCfgPattern)
+impl<'src, Item: MatchItem<'src>> ParsedMatchArmBody<'src, Item> {
+    pub fn with_items(items: Vec<Spanned<Item>>) -> Self {
+        ParsedMatchArmBody::WithItems {
+            items,
+            _pd: PhantomData,
         }
     }
+}
 
-    impl<'src> MatchableParser<'src> for ParsedMatchCfg<'src> {
-        type Pattern = ParsedMatchCfgPattern<'src>;
-        fn parser() -> impl ZngParser<'src, Self> {
-            just([Token::Sharp, Token::Ident("cfg")])
-                .ignore_then(
-                    (select! {Token::Ident(c) => c})
-                        .separated_by(just(Token::Dot))
-                        .at_least(1)
-                        .collect::<Vec<_>>()
-                        .separated_by(just(Token::Comma))
-                        .at_least(1)
-                        .collect::<Vec<_>>()
-                        .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-                )
-                .map(|item| ParsedMatchCfg { item })
-        }
-    }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedMatchArm<'src, Pattern: MatchPattern<'src>, Item: MatchItem<'src>> {
+    pub pattern: Pattern,
+    pub body: ParsedMatchArmBody<'src, Item>,
+}
 
-    pub fn match_item<
-        'src,
-        Scrutinee: MatchableParser<'src> + 'src,
-        Item: MatchItemParser<'src> + 'src,
-    >() -> impl ZngParser<'src, ParsedMatch<'src, Scrutinee, Item>> {
-        let match_arm = Scrutinee::Pattern::parser()
-            .then(
-                just(Token::ArrowArm).ignore_then(choice((
-                    spanned(<Item as MatchItemParser>::parser())
-                        .repeated()
-                        .collect::<Vec<_>>()
-                        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
-                        .map(|items| ParsedMatchEnumBody::Items(items, PhantomData)),
-                    spanned(<Item as MatchItemParser>::parser())
-                        .map(|item| ParsedMatchEnumBody::Items(vec![item], PhantomData)),
-                    just([Token::BraceOpen, Token::BraceClose])
-                        .map(|_t| ParsedMatchEnumBody::Empty),
-                ))),
-            )
-            .map(
-                |(pattern, body)| ParsedMatchArm::<<Scrutinee as MatchableParser>::Pattern, Item> {
-                    pattern,
-                    body,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ParsedMatch<'src, Scrutinee: Matchable<'src>, Item: MatchItem<'src>> {
+    pub scrutinee: Spanned<Scrutinee>,
+    pub arms: Vec<Spanned<ParsedMatchArm<'src, <Scrutinee as Matchable<'src>>::Pattern, Item>>>,
+}
+
+impl<'src, Scrutinee: Matchable<'src>, Item: MatchItem<'src>> ParsedMatch<'src, Scrutinee, Item> {
+    fn eval(self, ctx: &mut ParseContext) -> Vec<Item::Processed> {
+        let mut items = Vec::new();
+        let arms = self.arms.into_iter().map(|arm| {
+            let arm = arm.inner;
+            (
+                arm.pattern,
+                match arm.body {
+                    ParsedMatchArmBody::WithItems { items, .. } => {
+                        items.into_iter().map(|item| item.inner).collect()
+                    }
+                    ParsedMatchArmBody::Empty => Vec::new(),
                 },
             )
-            .boxed();
+        });
+        let result = self.scrutinee.inner.eval(arms, ctx);
+        if result.len() > 0 {
+            items.reserve(result.len());
+            items.extend(result);
+        }
+        items
+    }
+}
 
-        just([Token::Sharp, Token::KwMatch])
-            .ignore_then(spanned(<Scrutinee as MatchableParser>::parser()))
-            .then(
-                spanned(match_arm)
+pub fn match_item<'src, Scrutinee: Matchable<'src> + 'src, Item: MatchItem<'src> + 'src>()
+-> impl ZngParser<'src, ParsedMatch<'src, Scrutinee, Item>> {
+    let match_arm = Scrutinee::Pattern::parser()
+        .then(
+            just(Token::ArrowArm).ignore_then(choice((
+                spanned(<Item as MatchItem>::parser())
                     .repeated()
                     .collect::<Vec<_>>()
-                    .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
-            )
-            .map(|(scrutinee, arms)| ParsedMatch { scrutinee, arms })
-            .boxed()
+                    .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                    .map(ParsedMatchArmBody::with_items),
+                spanned(<Item as MatchItem>::parser())
+                    .map(|item| ParsedMatchArmBody::with_items(vec![item])),
+                just([Token::BraceOpen, Token::BraceClose]).map(|_t| ParsedMatchArmBody::Empty),
+            ))),
+        )
+        .map(
+            |(pattern, body)| ParsedMatchArm::<<Scrutinee as Matchable>::Pattern, Item> {
+                pattern,
+                body,
+            },
+        )
+        .boxed();
+
+    just([Token::Sharp, Token::KwMatch])
+        .ignore_then(spanned(<Scrutinee as Matchable>::parser()))
+        .then(
+            spanned(match_arm)
+                .repeated()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+        )
+        .map(|(scrutinee, arms)| ParsedMatch { scrutinee, arms })
+        .boxed()
+}
+
+impl<'src> MatchItem<'src> for crate::ParsedTypeItem<'src> {
+    type Processed = Self;
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::inner_type_item().boxed()
     }
 
+    fn process(self) -> Self::Processed {
+        self
+    }
+}
+
+impl<'src> MatchItem<'src> for crate::ParsedItem<'src> {
+    type Processed = ProcessedItemOrAlias<'src>;
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::item()
+    }
+
+    fn process(self) -> Self::Processed {
+        crate::process_parsed_item(self)
+    }
 }
