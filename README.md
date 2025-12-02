@@ -130,10 +130,11 @@ Because our examples require invoking a built `zngur` binary, we use `xtask` to 
 
 3. **Run the CI locally**: The official command to run our CI is:
    ```bash
-   CXX=clang++ cargo xtask ci
+   eval "$(mise env)" && CXX=clang++ cargo xtask ci
    ```
    You can use any of the C++ compilers mentioned in our CI workflow: `clang++` or `g++`.
    Other compilers may work, but are not guaranteed to by our CI testing.
+   The `eval "$(mise env)"` command sources the mise environment, which sets up paths to tools like the WASI SDK (required by the `tutorial-wasm32` example). If you skip this step, the wasm32 examples may fail to build (due to missing `$(WASI_SDK_PATH)/bin/clang++`)
 
 ### Formatting
 

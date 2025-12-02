@@ -164,7 +164,7 @@ mod zngur_types {
     impl ZngurCppOpaqueOwnedObject {
         pub unsafe fn new(
             data: *mut u8,
-            destructor: extern "C" fn(*mut u8),            
+            destructor: extern "C" fn(*mut u8),
         ) -> Self {
             Self { data, destructor }
         }
@@ -347,7 +347,7 @@ pub extern "C" fn {mangled_name}(
     destructor: extern "C" fn(*mut u8),
     o: *mut u8,
 ) {{
-    struct Wrapper {{ 
+    struct Wrapper {{
         value: ZngurCppOpaqueOwnedObject,
     }}
     impl {trait_without_assocs} for Wrapper {{
@@ -378,7 +378,7 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
     }}
-    unsafe {{ 
+    unsafe {{
         let this = Wrapper {{
             value: ZngurCppOpaqueOwnedObject::new(data, destructor),
         }};
@@ -439,7 +439,7 @@ pub extern "C" fn {mangled_name}(
             self,
             r#"
     }}
-    unsafe {{ 
+    unsafe {{
         let this = data as *mut Wrapper;
         let r: &dyn {trait_name} = &*this;
         std::ptr::write(o as *mut _, r)
@@ -864,7 +864,7 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 pub fn {size_fn}() -> usize {{
                     ::std::mem::size_of::<{ty}>()
                 }}
-        
+
                 #[allow(non_snake_case)]
                 #[unsafe(no_mangle)]
                 pub fn {alloc_fn}() -> *mut u8 {{
@@ -885,6 +885,11 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
                 }
             }
             LayoutPolicy::OnlyByRef => CppLayoutPolicy::OnlyByRef,
+            LayoutPolicy::Auto => {
+                panic!(
+                    "LayoutPolicy::Auto should have been resolved before rendering. Call resolve_auto_layouts() first."
+                );
+            }
         }
     }
 }

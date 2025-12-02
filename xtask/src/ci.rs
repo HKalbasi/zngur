@@ -29,6 +29,10 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
             )
             .run();
+            // Clean cargo build cache to force build.rs to re-run
+            cmd!(sh, "cargo clean")
+                .run()
+                .with_context(|| format!("Cleaning example `{example}` failed"))?;
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
