@@ -3,17 +3,28 @@ use std::panic::catch_unwind;
 use expect_test::{Expect, expect};
 use zngur_def::{RustPathAndGenerics, RustType};
 
-use crate::{ImportResolver, ParsedZngFile};
+use crate::{ImportResolver, ParsedZngFile, cfg::RustCfgProvider};
+
+struct NullCfg;
+
+impl RustCfgProvider for NullCfg {
+    fn get_cfg(&self, _key: &str) -> Option<Vec<String>> {
+        None
+    }
+    fn get_features(&self) -> Vec<String> {
+        Vec::new()
+    }
+}
 
 fn check_success(zng: &str) {
-    let _ = ParsedZngFile::parse_str(zng);
+    let _ = ParsedZngFile::parse_str(zng, "test.zng".into(), &NullCfg);
 }
 
 pub struct ErrorText(pub String);
 
 fn check_fail(zng: &str, error: Expect) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str(zng);
+        let _ = ParsedZngFile::parse_str(zng, "test.zng".into(), &NullCfg);
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -26,7 +37,7 @@ fn check_fail(zng: &str, error: Expect) {
 
 fn check_import_fail(zng: &str, error: Expect, resolver: &MockFilesystem) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str_with_resolver(zng, resolver);
+        let _ = ParsedZngFile::parse_str_with_resolver(zng, "test.zng".into(), &NullCfg, resolver);
     });
 
     match r {
