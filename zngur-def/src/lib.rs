@@ -87,6 +87,7 @@ pub enum LayoutPolicy {
     StackAllocated { size: usize, align: usize },
     HeapAllocated,
     OnlyByRef,
+    Auto,
 }
 
 impl LayoutPolicy {

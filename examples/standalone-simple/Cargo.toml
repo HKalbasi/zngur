@@ -1,0 +1,16 @@
+[package]
+name = "example-standalone-simple"
+version = "0.7.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+# rlib is needed for zngur-bridge to depend on this crate
+# staticlib is optional - the bridge project produces the final staticlib
+crate-type = ["rlib"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]

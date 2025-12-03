@@ -29,11 +29,15 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
             )
             .run();
+            // Clean cargo build cache to force build.rs to re-run
+            cmd!(sh, "cargo clean")
+                .run()
+                .with_context(|| format!("Cleaning example `{example}` failed"))?;
             cmd!(sh, "cargo build")
                 .run()
                 .with_context(|| format!("Building example `{example}` failed"))?;
             let bash_cmd = format!(
-                "../../target/debug/example-{example} 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt"
+                "../../target/debug/example-{example} 2>&1 | sed 's/thread .* panicked/thread panicked/g' > actual_output.txt"
             );
             cmd!(sh, "bash -c {bash_cmd}")
                 .run()
@@ -48,7 +52,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 .with_context(|| format!("Building example `{example}` failed"))?;
             cmd!(
                 sh,
-                "bash -c './a.out 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt'"
+                "bash -c './a.out 2>&1 | sed s/thread.*panicked/thread\\ panicked/g > actual_output.txt'"
             )
             .run()
             .with_context(|| format!("Running example `{example}` failed"))?;

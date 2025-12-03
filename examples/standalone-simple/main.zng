@@ -1,12 +1,12 @@
 #convert_panic_to_exception
 
 type Box<dyn Fn(i32) -> i32> {
-    #layout(size = 16, align = 8);
+    #layout(auto);
 }
 
 mod ::std {
     type option::Option<i32> {
-        #layout(size = 8, align = 4);
+        #layout(auto);
         wellknown_traits(Copy);
 
         constructor None;
@@ -16,21 +16,21 @@ mod ::std {
     }
 
     type option::Option<&i32> {
-        #layout(size = 8, align = 8);
+        #layout(auto);
         wellknown_traits(Copy);
 
         fn unwrap(self) -> &i32;
     }
 
     type iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>> {
-        #layout(size = 48, align = 8);
+        #layout(auto);
 
         fn sum<i32>(self) -> i32;
     }
 
     mod vec {
         type IntoIter<i32> {
-            #layout(size = 32, align = 8);
+            #layout(auto);
 
             fn sum<i32>(self) -> i32;
             fn map<i32, Box<dyn Fn(i32) -> i32>>(self, Box<dyn Fn(i32) -> i32>)
@@ -38,7 +38,7 @@ mod ::std {
         }
 
         type Vec<i32> {
-            #layout(size = 24, align = 8);
+            #layout(auto);
             wellknown_traits(Debug);
 
             fn new() -> Vec<i32>;
@@ -55,7 +55,7 @@ mod ::std {
 }
 
 type Box<dyn ::std::iter::Iterator<Item = i32>> {
-    #layout(size = 16, align = 8);
+    #layout(auto);
 
     fn collect<::std::vec::Vec<i32>>(self) -> ::std::vec::Vec<i32>;
 }

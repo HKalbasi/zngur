@@ -1,13 +1,10 @@
 # Layout policy
 
-Normal Zngur usage requires explicitly declaring data layout information (size and alignment)
-in order to store Rust things by value on the C++ stack.
-But the layout of Rust types is not stable,
-and can break when changing the compiler version,
-using different compiler configurations (e.g. `-Z randomize-layout`) and on different targets.
-This can make Zngur unusable for certain circumstances,
-so Zngur supports different strategies (and all of them have their own drawbacks)
-for storing Rust things by value in C++, called "Layout policies".
+Zngur needs to know the size and alignment of Rust types in order to store them by value on the C++ stack.
+The layout of Rust types is not stable and can change between compiler versions, configurations, or targets.
+Zngur supports several strategies for handling this, each with different tradeoffs.
+
+> **Note:** For most use cases, consider using [`#layout(auto)`](./auto_layout.md) which automatically extracts the correct layout at build time.
 
 In fact, you should never use this mode of Zngur (and any other form of static assertion on size and alignment)
 when you don't control the final compiler that compiles the code,
@@ -25,12 +22,16 @@ is usually not desirable.
 
 These are the layout policies Zngur currently supports:
 
+## `#layout(auto)`
+
+**Recommended for most use cases.** Automatically extracts the correct size and alignment at build time.
+See [Automatic Layout Resolution](./auto_layout.md) for details.
+
 ## `#layout(size = X, align = Y)`
 
-This is the normal mode,
-in which you should provide the exact values of size and alignment for your type,
-which enables storing them by value on the C++ stack.
-This mode has the best performance, but it has the problems mentioned above.
+Explicitly specify the exact values of size and alignment for your type.
+This enables storing them by value on the C++ stack with no runtime overhead.
+However, the values can break when changing the compiler version or target.
 
 Note that even in projects that you don't control the compiler,
 you can use this mode for types that have stable size and align, such as:

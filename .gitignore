@@ -8,3 +8,5 @@ perf.data
 perf.data.old
 actual_output.txt
 flamegraph.svg
+**/zngur-bridge/
+**/zngur.h

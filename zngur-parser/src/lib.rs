@@ -252,6 +252,7 @@ enum ParsedLayoutPolicy<'a> {
     StackAllocated(Vec<(Spanned<&'a str>, usize)>),
     HeapAllocated,
     OnlyByRef,
+    Auto,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -398,6 +399,7 @@ impl ProcessedItem<'_> {
                                 }
                                 ParsedLayoutPolicy::HeapAllocated => LayoutPolicy::HeapAllocated,
                                 ParsedLayoutPolicy::OnlyByRef => LayoutPolicy::OnlyByRef,
+                                ParsedLayoutPolicy::Auto => LayoutPolicy::Auto,
                             });
                             match layout_span {
                                 Some(_) => {
@@ -1417,12 +1419,14 @@ fn type_item<'a>()
         });
         let layout = just([Token::Sharp, Token::Ident("layout")])
             .ignore_then(
-                property_item
-                    .separated_by(just(Token::Comma))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                just([Token::ParenOpen, Token::Ident("auto"), Token::ParenClose])
+                    .to(ParsedLayoutPolicy::Auto)
+                    .or(property_item
+                        .separated_by(just(Token::Comma))
+                        .collect::<Vec<_>>()
+                        .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                        .map(ParsedLayoutPolicy::StackAllocated)),
             )
-            .map(ParsedLayoutPolicy::StackAllocated)
             .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
             .or(just([Token::Sharp, Token::Ident("heap_allocated")])
                 .to(ParsedLayoutPolicy::HeapAllocated))

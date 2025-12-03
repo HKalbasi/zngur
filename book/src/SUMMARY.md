@@ -3,6 +3,7 @@
 [Zngur](./zngur.md)
 
 - [Tutorial](./tutorial.md)
+- [Standalone Output Format (0.8+)](./standalone_output.md)
 - [Calling Rust from C++](./call_rust_from_cpp/index.md)
   - [Name mapping](./call_rust_from_cpp/name_mapping.md)
   - [Well-known traits](./call_rust_from_cpp/wellknown_traits.md)

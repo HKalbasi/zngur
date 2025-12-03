@@ -16,4 +16,7 @@ bench = false
 
 [dependencies]
 zngur = { version = "=0.7.0", path = "../zngur" }
+zngur-auto-layout = { version = "=0.7.0", path = "../zngur-auto-layout" }
+zngur-parser = { version = "=0.7.0", path = "../zngur-parser" }
+zngur-def = { version = "=0.7.0", path = "../zngur-def" }
 clap = { version = "4.3.12", features = ["derive"] }

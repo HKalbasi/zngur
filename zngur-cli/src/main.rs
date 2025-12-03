@@ -45,6 +45,45 @@ enum Command {
         #[arg(long)]
         cpp_namespace: Option<String>,
     },
+
+    /// Extract and display layout information for types with #layout(auto)
+    #[command(alias = "dl")]
+    DumpLayouts {
+        /// Path to the zng file
+        path: PathBuf,
+
+        /// Target triple for cross-compilation (e.g., x86_64-unknown-linux-gnu)
+        #[arg(long)]
+        target: Option<String>,
+
+        /// Path to the crate containing the types (default: current directory)
+        #[arg(long)]
+        crate_path: Option<PathBuf>,
+    },
+
+    /// Generate a standalone bridge project
+    #[command(alias = "gs")]
+    GenerateStandalone {
+        /// Path to the zng file
+        path: PathBuf,
+
+        /// Output directory name for the bridge project
+        ///
+        /// Default is "zngur-bridge"
+        #[arg(short = 'o', long)]
+        output: Option<PathBuf>,
+
+        /// A unique string which is included in zngur symbols to prevent duplicate
+        /// symbols in linker
+        #[arg(long)]
+        mangling_base: Option<String>,
+
+        /// The C++ namespace which zngur puts its things in it
+        ///
+        /// Default is "rust"
+        #[arg(long)]
+        cpp_namespace: Option<String>,
+    },
 }
 
 fn main() {
@@ -72,6 +111,63 @@ fn main() {
             if let Some(cpp_namespace) = cpp_namespace {
                 zng = zng.with_cpp_namespace(&cpp_namespace);
             }
+            zng.generate();
+        }
+        Command::DumpLayouts {
+            path,
+            target,
+            crate_path,
+        } => {
+            use zngur_auto_layout::LayoutExtractor;
+            use zngur_parser::ParsedZngFile;
+
+            // Parse the zng file to find types with Auto layout
+            let spec = ParsedZngFile::parse(path.clone());
+
+            let auto_types: Vec<_> = spec
+                .types
+                .iter()
+                .filter(|ty_def| matches!(ty_def.layout, zngur_def::LayoutPolicy::Auto))
+                .map(|ty_def| ty_def.ty.clone())
+                .collect();
+
+            if auto_types.is_empty() {
+                println!("No types with #layout(auto) found in {}", path.display());
+                return;
+            }
+
+            let crate_path = crate_path.unwrap_or_else(|| std::env::current_dir().unwrap());
+
+            let mut extractor = LayoutExtractor::new(&crate_path);
+            if let Some(target) = target {
+                extractor = extractor.with_target(target);
+            }
+
+            match extractor.dump_layouts_zng(&auto_types) {
+                Ok(output) => println!("{}", output),
+                Err(e) => {
+                    eprintln!("Error: {}", e);
+                    std::process::exit(1);
+                }
+            }
+        }
+        Command::GenerateStandalone {
+            path,
+            output,
+            mangling_base,
+            cpp_namespace,
+        } => {
+            let output_dir = output.unwrap_or_else(|| PathBuf::from("zngur-bridge"));
+
+            let mut zng = Zngur::from_zng_file(&path).standalone_mode(output_dir);
+
+            if let Some(mangling_base) = mangling_base {
+                zng = zng.with_mangling_base(&mangling_base);
+            }
+            if let Some(cpp_namespace) = cpp_namespace {
+                zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
+
             zng.generate();
         }
     }

@@ -6,6 +6,7 @@ members = [
     "zngur-generator",
     "zngur-parser",
     "zngur-autozng",
+    "zngur-auto-layout",
     "examples/*",
     "xtask",
     "benchmark",

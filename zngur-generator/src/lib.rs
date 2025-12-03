@@ -30,6 +30,75 @@ impl ZngurGenerator {
         ZngurGenerator(zng)
     }
 
+    /// Replaces all `LayoutPolicy::Auto` with extracted layout values.
+    ///
+    /// Compiles a helper program to extract size and alignment for types
+    /// marked with `#layout(auto)`. Does nothing if no such types exist.
+    ///
+    /// Must be called before `render()` if any types use `LayoutPolicy::Auto`.
+    ///
+    /// - Precondition: The crate at `crate_path` has been compiled.
+    /// - Precondition: All auto-layout types are public and accessible.
+    /// - Postcondition: All `LayoutPolicy::Auto` are replaced with
+    ///   `LayoutPolicy::StackAllocated`, or an error describing the failure.
+    /// - Complexity: O(1) when no auto types exist or cache is valid;
+    ///   O(n) when extracting, where n is compilation time.
+    pub fn resolve_auto_layouts(
+        &mut self,
+        crate_path: &std::path::Path,
+        cache_dir: Option<&std::path::Path>,
+        target: Option<&str>,
+    ) -> Result<(), String> {
+        // Collect types with Auto layout
+        let auto_types: Vec<RustType> = self
+            .0
+            .types
+            .iter()
+            .filter(|ty_def| matches!(ty_def.layout, LayoutPolicy::Auto))
+            .map(|ty_def| ty_def.ty.clone())
+            .collect();
+
+        if auto_types.is_empty() {
+            return Ok(());
+        }
+
+        // Extract layouts
+        let extractor = zngur_auto_layout::LayoutExtractor::new(crate_path);
+        let extractor = if let Some(cache_dir) = cache_dir {
+            extractor.with_cache_dir(cache_dir.to_path_buf())
+        } else {
+            extractor
+        };
+        let extractor = if let Some(target) = target {
+            extractor.with_target(target.to_string())
+        } else {
+            extractor
+        };
+
+        let layouts = extractor
+            .extract_layouts(&auto_types)
+            .map_err(|e| format!("Failed to extract layouts: {}", e))?;
+
+        // Replace Auto with StackAllocated
+        for ty_def in &mut self.0.types {
+            if matches!(ty_def.layout, LayoutPolicy::Auto) {
+                if let Some(layout) = layouts.get(&ty_def.ty) {
+                    ty_def.layout = LayoutPolicy::StackAllocated {
+                        size: layout.size,
+                        align: layout.align,
+                    };
+                } else {
+                    return Err(format!(
+                        "Layout extraction succeeded but missing layout for type: {}",
+                        ty_def.ty
+                    ));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     pub fn render(self) -> (String, String, Option<String>) {
         let mut zng = self.0;
 
@@ -66,6 +135,11 @@ impl ZngurGenerator {
                 }
                 LayoutPolicy::HeapAllocated => (),
                 LayoutPolicy::OnlyByRef => (),
+                LayoutPolicy::Auto => {
+                    panic!(
+                        "LayoutPolicy::Auto should have been resolved before rendering. Call resolve_auto_layouts() first."
+                    );
+                }
             }
             if is_copy {
                 rust_file.add_static_is_copy_assert(&ty);
