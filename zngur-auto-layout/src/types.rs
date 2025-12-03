@@ -66,6 +66,11 @@ pub enum LayoutError {
     /// - Hint: Install Cargo or use explicit layouts.
     CargoNotFound,
 
+    /// Failed to parse the compiled object file.
+    ///
+    /// - Hint: This may indicate a toolchain issue or unsupported platform.
+    ObjectParseError(String),
+
     /// An unspecified error occurred.
     Other(String),
 }
@@ -143,6 +148,15 @@ impl fmt::Display for LayoutError {
                 write!(
                     f,
                     "  = hint: install Cargo from https://rustup.rs or use explicit #layout(size = X, align = Y)"
+                )
+            }
+            LayoutError::ObjectParseError(msg) => {
+                writeln!(f, "error: failed to parse compiled object file")?;
+                writeln!(f, "  {}", msg)?;
+                writeln!(f)?;
+                write!(
+                    f,
+                    "  = hint: this may indicate a toolchain issue or unsupported platform"
                 )
             }
             LayoutError::Other(msg) => {

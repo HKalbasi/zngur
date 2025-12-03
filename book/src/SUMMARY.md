@@ -8,7 +8,6 @@
   - [Name mapping](./call_rust_from_cpp/name_mapping.md)
   - [Well-known traits](./call_rust_from_cpp/wellknown_traits.md)
   - [Layout policy](./call_rust_from_cpp/layout_policy.md)
-  - [Automatic layout resolution](./call_rust_from_cpp/auto_layout.md)
   - [Fields](./call_rust_from_cpp/fields.md)
   - [Types with special support](./call_rust_from_cpp/special_types.md)
   - [Panic and exceptions](./call_rust_from_cpp/panic_and_exceptions.md)

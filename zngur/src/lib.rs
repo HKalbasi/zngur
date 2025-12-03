@@ -123,99 +123,58 @@ impl Zngur {
         let zng_file = self.zng_file;
         let cpp_namespace = self.cpp_namespace;
         let mangling_base = self.mangling_base;
-        let crate_path_opt = self.crate_path;
-        let layout_cache_dir = self.layout_cache_dir;
-        let target = self.target;
+
+        // Detect parent crate from zng file location
+        let zng_file_abs = zng_file.canonicalize().unwrap_or(zng_file.clone());
+        let zng_parent = zng_file_abs
+            .parent()
+            .expect("zng file has no parent directory");
+        let crate_path = self.crate_path.unwrap_or_else(|| zng_parent.to_path_buf());
+
+        // Get relative path from bridge project to zng file
+        // The bridge project will be at output_dir, so we need "../<zng_filename>"
+        let zng_filename = zng_file
+            .file_name()
+            .expect("zng file has no filename")
+            .to_string_lossy()
+            .to_string();
+
+        // Compute path to zngur crate from the bridge project
+        // For development (in the zngur workspace), we find the workspace root
+        // For production use, we'd use the crates.io version
+        let zngur_path = Self::find_zngur_path(&output_dir);
 
         // Create output directory structure
         fs::create_dir_all(&output_dir).expect("Failed to create output directory");
         fs::create_dir_all(output_dir.join("src")).expect("Failed to create src directory");
         fs::create_dir_all(output_dir.join("cpp")).expect("Failed to create cpp directory");
 
-        // Parse and generate code
-        let mut file = ZngurGenerator::build_from_zng(ParsedZngFile::parse(zng_file.clone()));
-
-        // Set up file paths within the bridge project
-        let h_file_path = output_dir.join("cpp/generated.h");
-        let cpp_file_path = output_dir.join("cpp/generated.cpp");
-        let rs_file_path = output_dir.join("src/lib.rs");
-
-        file.0.cpp_include_header_name = "generated.h".to_string();
-        let cpp_ns = cpp_namespace.clone().unwrap_or_else(|| "rust".to_string());
-        file.0.cpp_namespace = cpp_ns.clone();
-
-        if let Some(ref cpp_namespace_val) = cpp_namespace {
-            file.0.mangling_base = cpp_namespace_val.clone();
-        }
-
-        if let Some(mangling_base_val) = mangling_base {
-            file.0.mangling_base = mangling_base_val;
-        }
-
-        // Resolve auto layouts (detect parent crate from zng file location)
-        // Canonicalize the zng_file path to get an absolute path
-        let zng_file_abs = zng_file.canonicalize().unwrap_or(zng_file.clone());
-        let zng_parent = zng_file_abs
-            .parent()
-            .expect("zng file has no parent directory");
-        let crate_path = crate_path_opt.unwrap_or_else(|| zng_parent.to_path_buf());
-
-        let cache_dir = layout_cache_dir.or_else(|| env::var("OUT_DIR").ok().map(PathBuf::from));
-
-        if let Err(e) =
-            file.resolve_auto_layouts(&crate_path, cache_dir.as_deref(), target.as_deref())
-        {
-            eprintln!("{}", e);
-            eprintln!();
-            eprintln!(
-                "note: you can avoid auto-layout by using explicit #layout(size = X, align = Y)"
-            );
-            eprintln!("      or #heap_allocate instead of #layout(auto) in your .zng file");
-            panic!("auto layout resolution failed");
-        }
-
-        let (rust, mut h, mut cpp) = file.render();
-
-        // Namespace replacement
-        h = h
-            .replace("rust::", &format!("{cpp_ns}::"))
-            .replace("namespace rust", &format!("namespace {cpp_ns}"));
-        cpp = cpp.map(|cpp_code| cpp_code.replace("rust::", &format!("{cpp_ns}::")));
-
-        // Check if C++ code exists
-        let has_cpp = cpp.is_some();
-
-        // Write generated files
-        File::create(&rs_file_path)
+        // Generate minimal src/lib.rs that includes the generated code
+        let lib_rs = r#"mod generated;
+pub use generated::*;
+"#;
+        File::create(output_dir.join("src/lib.rs"))
             .unwrap()
-            .write_all(rust.as_bytes())
+            .write_all(lib_rs.as_bytes())
             .unwrap();
-        File::create(&h_file_path)
-            .unwrap()
-            .write_all(h.as_bytes())
-            .unwrap();
-        if let Some(cpp_code) = cpp {
-            File::create(&cpp_file_path)
-                .unwrap()
-                .write_all(cpp_code.as_bytes())
-                .unwrap();
-        }
 
         // Generate Cargo.toml
-        let cargo_toml = Self::generate_cargo_toml(&crate_path, has_cpp);
+        let cargo_toml = Self::generate_cargo_toml(&crate_path, &zngur_path);
         File::create(output_dir.join("Cargo.toml"))
             .unwrap()
             .write_all(cargo_toml.as_bytes())
             .unwrap();
 
-        // Generate build.rs if C++ code exists
-        if has_cpp {
-            let build_rs = Self::generate_build_rs();
-            File::create(output_dir.join("build.rs"))
-                .unwrap()
-                .write_all(build_rs.as_bytes())
-                .unwrap();
-        }
+        // Generate build.rs that does layout extraction and code generation
+        let build_rs = Self::generate_build_rs(
+            &zng_filename,
+            cpp_namespace.as_deref(),
+            mangling_base.as_deref(),
+        );
+        File::create(output_dir.join("build.rs"))
+            .unwrap()
+            .write_all(build_rs.as_bytes())
+            .unwrap();
 
         println!(
             "Generated standalone bridge project at: {}",
@@ -223,7 +182,41 @@ impl Zngur {
         );
     }
 
-    fn generate_cargo_toml(parent_crate_path: &Path, has_cpp: bool) -> String {
+    /// Find the path to the zngur crate from the bridge project directory.
+    ///
+    /// For development (in the zngur workspace), this finds the workspace root and returns
+    /// a relative path. For production use, this would return a crates.io version string.
+    fn find_zngur_path(output_dir: &Path) -> String {
+        // Get absolute path of the output directory
+        let output_abs = output_dir
+            .canonicalize()
+            .unwrap_or_else(|_| std::env::current_dir().unwrap().join(output_dir));
+
+        // Walk up from output_dir looking for a directory containing zngur/Cargo.toml
+        let mut search_dir = output_abs.parent();
+        let mut depth = 1; // Start at 1 since we're already one level up
+
+        while let Some(dir) = search_dir {
+            let potential_zngur = dir.join("zngur").join("Cargo.toml");
+            if potential_zngur.exists() {
+                // Found it! Return relative path
+                let rel_prefix = "../".repeat(depth);
+                return format!("{rel_prefix}zngur");
+            }
+            search_dir = dir.parent();
+            depth += 1;
+
+            // Don't search too far up
+            if depth > 10 {
+                break;
+            }
+        }
+
+        // Fallback to crates.io version
+        "0.7".to_string()
+    }
+
+    fn generate_cargo_toml(parent_crate_path: &Path, zngur_dep: &str) -> String {
         // Read parent Cargo.toml to get crate name
         let parent_cargo_toml_path = parent_crate_path.join("Cargo.toml");
         let parent_cargo_toml = std::fs::read_to_string(&parent_cargo_toml_path)
@@ -237,7 +230,14 @@ impl Zngur {
             .map(|s| s.trim().trim_matches('"').to_string())
             .expect("Failed to find package name in parent Cargo.toml");
 
-        let mut cargo_toml = format!(
+        // Determine if zngur_dep is a path or a version
+        let zngur_dep_str = if zngur_dep.starts_with("../") || zngur_dep.starts_with('/') {
+            format!("{{ path = \"{zngur_dep}\" }}")
+        } else {
+            format!("\"{zngur_dep}\"")
+        };
+
+        format!(
             r#"[package]
 name = "zngur-bridge"
 version = "0.1.0"
@@ -250,34 +250,60 @@ edition = "2021"
 crate-type = ["staticlib"]
 
 [dependencies]
-{} = {{ path = ".." }}
-"#,
-            package_name
-        );
+{package_name} = {{ path = ".." }}
 
-        if has_cpp {
-            cargo_toml.push_str(
-                r#"
 [build-dependencies]
-cc = "1.0"
-"#,
-            );
-        }
-
-        cargo_toml
+zngur = {zngur_dep_str}
+"#
+        )
     }
 
-    fn generate_build_rs() -> String {
-        r#"fn main() {
-    cc::Build::new()
-        .cpp(true)
-        .file("cpp/generated.cpp")
-        .include("cpp")
-        .std("c++17")
-        .compile("zngur_bridge_cpp");
-}
+    fn generate_build_rs(
+        zng_filename: &str,
+        cpp_namespace: Option<&str>,
+        mangling_base: Option<&str>,
+    ) -> String {
+        let mut build_rs = format!(
+            r#"fn main() {{
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+
+    // Generate code (layout extraction happens inside)
+    let zng = zngur::Zngur::from_zng_file("../{zng_filename}")
+        .with_crate_path("..")
+        .with_layout_cache_dir(&out_dir)
+        .with_h_file(format!("{{manifest_dir}}/cpp/generated.h"))
+        .with_cpp_file(format!("{{manifest_dir}}/cpp/generated.cpp"))
+        .with_rs_file(format!("{{manifest_dir}}/src/generated.rs"))"#
+        );
+
+        if let Some(ns) = cpp_namespace {
+            build_rs.push_str(&format!(
+                r#"
+        .with_cpp_namespace("{ns}")"#
+            ));
+        }
+
+        if let Some(mb) = mangling_base {
+            build_rs.push_str(&format!(
+                r#"
+        .with_mangling_base("{mb}")"#
+            ));
+        }
+
+        build_rs.push_str(&format!(
+            r#";
+
+    zng.generate();
+
+    // Tell Cargo to re-run if the .zng file or source files change
+    println!("cargo::rerun-if-changed=../{zng_filename}");
+    println!("cargo::rerun-if-changed=../src");
+}}
 "#
-        .to_string()
+        ));
+
+        build_rs
     }
 
     pub fn generate(mut self) {

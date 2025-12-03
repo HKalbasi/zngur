@@ -1,9 +1,12 @@
 //! Core layout extraction logic via rustc compilation.
 //!
 //! This module implements layout extraction by generating and compiling a
-//! temporary Rust program that reports type sizes and alignments.
+//! temporary Rust object file with embedded layout data in object file sections.
+//! This approach supports cross-compilation because we read the object file
+//! directly rather than executing a compiled program.
 
 use crate::types::{Layout, LayoutError, LayoutResult};
+use object::{Object, ObjectSection};
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -45,20 +48,22 @@ impl Extractor {
 
     /// Extracts layouts for all `types`.
     ///
-    /// Generates a temporary Rust program, compiles it against the target crate,
-    /// executes it, and parses its JSON output to extract size/align pairs.
+    /// Generates a temporary Rust program with layout data embedded in object
+    /// file sections using `#[link_section]`. The program is compiled (but not
+    /// executed), and layouts are extracted by reading the object file directly.
+    ///
+    /// This approach supports cross-compilation because we read the object file
+    /// for the target platform rather than executing code.
     ///
     /// - Precondition: The crate has been compiled and artifacts exist.
     /// - Precondition: All types are public and accessible.
     /// - Postcondition: Returns a map from types to their layouts, or an error
     ///   describing the first failure encountered.
-    /// - Complexity: O(n) where n is the compilation and execution time of the
-    ///   extraction program.
     pub(crate) fn extract(&self, types: &[RustType]) -> LayoutResult<HashMap<RustType, Layout>> {
         // Find the compiled crate artifacts
         let crate_lib = self.find_crate_lib()?;
 
-        // Generate the extraction program
+        // Generate the extraction program with #[link_section] breadcrumbs
         let extraction_code = self.generate_extraction_code(types)?;
 
         // Create a temporary directory for compilation
@@ -66,16 +71,19 @@ impl Extractor {
         fs::create_dir_all(&temp_dir)?;
 
         let temp_file = temp_dir.join("extract_layouts.rs");
-        fs::write(&temp_file, extraction_code)?;
+        fs::write(&temp_file, &extraction_code)?;
 
-        // Compile and run the extraction program
-        let output = self.compile_and_run(&temp_file, &crate_lib, &temp_dir)?;
+        // Compile to object file (don't link or run)
+        let obj_file = temp_dir.join("extract_layouts.o");
+        self.compile_to_object(&temp_file, &crate_lib, &obj_file)?;
+
+        // Extract layouts from object file sections
+        let layouts = self.extract_from_object(&obj_file, types)?;
 
         // Clean up
         let _ = fs::remove_dir_all(&temp_dir);
 
-        // Parse the output
-        self.parse_output(&output, types)
+        Ok(layouts)
     }
 
     fn find_crate_lib(&self) -> LayoutResult<PathBuf> {
@@ -132,8 +140,43 @@ impl Extractor {
         let lib_name = crate_name.replace('-', "_");
 
         // Determine the target directory
-        // Priority: CARGO_TARGET_DIR env var > workspace root > crate root
-        let target_dirs = if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
+        // Priority: OUT_DIR (for build.rs context) > CARGO_TARGET_DIR > workspace root > crate root
+        let target_dirs = if let Ok(out_dir) = env::var("OUT_DIR") {
+            // In build.rs context, OUT_DIR is like target/release/build/<pkg>/out
+            // The deps are in target/release/deps/
+            let out_path = PathBuf::from(&out_dir);
+            let mut dirs = vec![];
+
+            // Walk up from OUT_DIR to find target directory
+            let mut current = out_path.as_path();
+            while let Some(parent) = current.parent() {
+                if parent.file_name().map_or(false, |n| n == "target") {
+                    dirs.push(parent.to_path_buf());
+                    break;
+                }
+                // Also check if this is the profile directory (release/debug)
+                if parent.join("deps").exists() {
+                    // We're at the profile level, parent is target
+                    if let Some(target_dir) = parent.parent() {
+                        dirs.push(target_dir.to_path_buf());
+                    }
+                    break;
+                }
+                current = parent;
+            }
+
+            // Also check workspace and crate targets as fallback
+            let mut check_dir = self.crate_path.as_path();
+            while let Some(parent) = check_dir.parent() {
+                let potential_target = parent.join("target");
+                if potential_target.exists() && !dirs.contains(&potential_target) {
+                    dirs.push(potential_target);
+                }
+                check_dir = parent;
+            }
+            dirs.push(self.crate_path.join("target"));
+            dirs
+        } else if let Ok(target_dir) = env::var("CARGO_TARGET_DIR") {
             vec![PathBuf::from(target_dir)]
         } else {
             let mut dirs = vec![];
@@ -158,9 +201,25 @@ impl Extractor {
 
         for target_dir in &target_dirs {
             for profile in &profiles {
-                let lib_path = target_dir.join(profile);
+                // Check deps directory first (for build.rs dependency context)
+                let deps_path = target_dir.join(profile).join("deps");
+                if deps_path.exists() {
+                    // Look for lib<name>-<hash>.rlib pattern
+                    if let Ok(entries) = fs::read_dir(&deps_path) {
+                        for entry in entries.flatten() {
+                            let filename = entry.file_name().to_string_lossy().to_string();
+                            // Match lib<name>-<hash>.rlib or lib<name>.rlib
+                            if filename.starts_with(&format!("lib{}", lib_name))
+                                && (filename.ends_with(".rlib") || filename.ends_with(".rmeta"))
+                            {
+                                return Ok(entry.path());
+                            }
+                        }
+                    }
+                }
 
-                // Try to find the rlib or dylib
+                // Also check direct lib path (for non-deps context)
+                let lib_path = target_dir.join(profile);
                 let extensions = vec!["rlib", "so", "dylib", "dll", "a"];
                 for ext in &extensions {
                     let candidate = lib_path.join(format!("lib{}.{}", lib_name, ext));
@@ -198,123 +257,242 @@ impl Extractor {
         ))
     }
 
+    /// Generates Rust source code with layout data embedded in object file sections.
+    ///
+    /// For each type, generates a static array with `#[link_section]` attribute
+    /// containing [size, align]. The section name encodes the type index.
     fn generate_extraction_code(&self, types: &[RustType]) -> LayoutResult<String> {
         let mut code = String::new();
 
         // Add necessary imports
+        code.push_str("#![allow(dead_code)]\n");
         code.push_str("use std::mem::{size_of, align_of};\n\n");
 
-        code.push_str("fn main() {\n");
+        // Determine section name format based on target
+        // Mach-O (macOS/iOS) requires "segment,section" format
+        // ELF and PE/COFF use ".section" format
+        let is_macho = self.is_macho_target();
 
-        // Generate simple output format: TYPE|SIZE|ALIGN per line
-        for ty in types {
+        // Generate a link_section static for each type
+        for (idx, ty) in types.iter().enumerate() {
             let type_str = rust_type_to_string(ty);
+
+            // Use platform-appropriate section naming
+            let section_name = if is_macho {
+                // Mach-O format: __DATA,__zngur_N (segment,section)
+                // Section names in Mach-O are limited to 16 chars, so keep it short
+                format!("__DATA,__zngur{}", idx)
+            } else {
+                // ELF/PE format: .zngur_N
+                format!(".zngur_{}", idx)
+            };
+
             code.push_str(&format!(
-                "    println!(\"{{}}|{{}}|{{}}\", \"{}\", size_of::<{}>(), align_of::<{}>());\n",
-                type_str, type_str, type_str
+                r#"#[used]
+#[link_section = "{section}"]
+static ZNGUR_LAYOUT_{idx}: [usize; 2] = [
+    size_of::<{ty}>(),
+    align_of::<{ty}>(),
+];
+
+"#,
+                section = section_name,
+                idx = idx,
+                ty = type_str
             ));
         }
 
-        code.push_str("}\n");
+        // Add a dummy main for crate-type bin (helps with some linking scenarios)
+        code.push_str("fn main() {}\n");
 
         Ok(code)
     }
 
-    fn compile_and_run(
+    /// Returns true if the target uses Mach-O object format (macOS, iOS, etc.)
+    fn is_macho_target(&self) -> bool {
+        match &self.target {
+            Some(target) => {
+                target.contains("apple") || target.contains("darwin") || target.contains("ios")
+            }
+            None => {
+                // No explicit target - check host platform
+                cfg!(target_vendor = "apple")
+            }
+        }
+    }
+
+    /// Compiles the extraction source to an object file.
+    ///
+    /// Uses `rustc --emit=obj` to produce an object file without linking.
+    /// This allows us to read the embedded layout data from sections.
+    fn compile_to_object(
         &self,
         source: &Path,
         crate_lib: &Path,
-        temp_dir: &Path,
-    ) -> LayoutResult<String> {
-        let output_bin = temp_dir.join("extract_layouts");
-
+        output: &Path,
+    ) -> LayoutResult<()> {
         // Get the crate name for the --extern flag
         let crate_name = self.get_crate_name()?;
         let lib_name = crate_name.replace('-', "_");
 
-        // Build rustc command
+        // Build rustc command to emit object file
         let mut cmd = Command::new("rustc");
         cmd.arg(source)
-            .arg("--crate-type")
-            .arg("bin")
-            .arg("--edition")
-            .arg("2021")
+            .arg("--emit=obj")
+            .arg("--crate-type=bin")
+            .arg("--edition=2021")
             .arg("-o")
-            .arg(&output_bin)
+            .arg(output)
             .arg("--extern")
             .arg(format!("{}={}", lib_name, crate_lib.display()));
 
-        // Add target if specified
+        // Add target if specified (critical for cross-compilation)
         if let Some(target) = &self.target {
             cmd.arg("--target").arg(target);
         }
 
-        // Compile
-        let output = cmd.output()?;
+        let result = cmd.output()?;
 
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
+        if !result.status.success() {
+            let stderr = String::from_utf8_lossy(&result.stderr);
             return Err(LayoutError::CompilationFailed(format!(
                 "Failed to compile layout extraction program:\n{}",
                 stderr
             )));
         }
 
-        // Run the compiled program
-        let output = Command::new(&output_bin).output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            return Err(LayoutError::ExecutionFailed(format!(
-                "Failed to execute layout extraction program:\n{}",
-                stderr
-            )));
-        }
-
-        Ok(String::from_utf8_lossy(&output.stdout).to_string())
+        Ok(())
     }
 
-    fn parse_output(
+    /// Extracts layout data from object file sections.
+    ///
+    /// Reads sections named `.zngur_N` (or platform variants like `__DATA,.zngur_N`)
+    /// and parses the embedded [size, align] arrays.
+    fn extract_from_object(
         &self,
-        output: &str,
+        obj_path: &Path,
         types: &[RustType],
     ) -> LayoutResult<HashMap<RustType, Layout>> {
-        // Parse simple format: TYPE|SIZE|ALIGN per line
-        let mut parsed: HashMap<String, Layout> = HashMap::new();
+        let data = fs::read(obj_path)?;
+        let obj = object::File::parse(&*data).map_err(|e| {
+            LayoutError::ObjectParseError(format!("Failed to parse object file: {}", e))
+        })?;
 
-        for line in output.lines() {
-            let parts: Vec<&str> = line.split('|').collect();
-            if parts.len() != 3 {
-                continue; // Skip malformed lines
-            }
+        // Determine pointer size from the object file
+        let ptr_size = if obj.is_64() { 8usize } else { 4usize };
+        let endian = obj.endianness();
 
-            let type_str = parts[0].to_string();
-            let size = parts[1]
-                .parse::<usize>()
-                .map_err(|_| LayoutError::ParseError(format!("Invalid size: {}", parts[1])))?;
-            let align = parts[2]
-                .parse::<usize>()
-                .map_err(|_| LayoutError::ParseError(format!("Invalid align: {}", parts[2])))?;
+        let mut layouts = HashMap::new();
 
-            parsed.insert(type_str, Layout { size, align });
+        // Look for our layout sections
+        for (idx, ty) in types.iter().enumerate() {
+            let section_suffix = format!("zngur_{}", idx);
+
+            // Find the section - handle platform-specific naming
+            let section_data = self.find_layout_section(&obj, &section_suffix)?;
+
+            // Parse the [size, align] array from section data
+            let layout = parse_layout_from_bytes(&section_data, ptr_size, endian)?;
+            layouts.insert(ty.clone(), layout);
         }
 
-        // Map to result with original RustType keys
-        let mut result = HashMap::new();
-        for ty in types {
-            let type_str = rust_type_to_string(ty);
-            if let Some(layout) = parsed.get(&type_str) {
-                result.insert(ty.clone(), layout.clone());
-            } else {
-                return Err(LayoutError::TypeNotFound(format!(
-                    "Type '{}' not found. Check if it's public and the path is correct.",
-                    type_str
-                )));
-            }
-        }
-
-        Ok(result)
+        Ok(layouts)
     }
+
+    /// Finds a layout section by index, handling platform-specific section naming.
+    ///
+    /// - ELF: `.zngur_N`
+    /// - Mach-O: `__zngurN` (in __DATA segment)
+    /// - PE/COFF: `.zngur_N`
+    fn find_layout_section(
+        &self,
+        obj: &object::File,
+        section_suffix: &str,
+    ) -> LayoutResult<Vec<u8>> {
+        // Extract the index number from the suffix (e.g., "zngur_0" -> "0")
+        let idx = section_suffix
+            .strip_prefix("zngur_")
+            .unwrap_or(section_suffix);
+
+        for section in obj.sections() {
+            if let Ok(name) = section.name() {
+                // Check various naming patterns:
+                // ELF/PE: ".zngur_N" or ends with "zngur_N"
+                // Mach-O: "__zngurN" (section name only, segment is __DATA)
+                let matches = name.ends_with(section_suffix)
+                    || name.contains(&format!(".{}", section_suffix))
+                    || name == format!("__zngur{}", idx)
+                    || name.ends_with(&format!("__zngur{}", idx));
+
+                if matches {
+                    let data = section.data().map_err(|e| {
+                        LayoutError::ObjectParseError(format!(
+                            "Failed to read section '{}': {}",
+                            name, e
+                        ))
+                    })?;
+                    return Ok(data.to_vec());
+                }
+            }
+        }
+
+        Err(LayoutError::ObjectParseError(format!(
+            "Could not find layout section for '{}'. Available sections: {:?}",
+            section_suffix,
+            obj.sections()
+                .filter_map(|s| s.name().ok())
+                .collect::<Vec<_>>()
+        )))
+    }
+}
+
+/// Parses a [size, align] layout from raw bytes.
+///
+/// Handles both 32-bit and 64-bit targets, and both endiannesses.
+fn parse_layout_from_bytes(
+    data: &[u8],
+    ptr_size: usize,
+    endian: object::Endianness,
+) -> LayoutResult<Layout> {
+    let expected_len = ptr_size * 2; // [usize; 2]
+    if data.len() < expected_len {
+        return Err(LayoutError::ObjectParseError(format!(
+            "Section data too short: expected {} bytes, got {}",
+            expected_len,
+            data.len()
+        )));
+    }
+
+    let (size, align) = match (ptr_size, endian) {
+        (8, object::Endianness::Little) => {
+            let size = u64::from_le_bytes(data[0..8].try_into().unwrap()) as usize;
+            let align = u64::from_le_bytes(data[8..16].try_into().unwrap()) as usize;
+            (size, align)
+        }
+        (8, object::Endianness::Big) => {
+            let size = u64::from_be_bytes(data[0..8].try_into().unwrap()) as usize;
+            let align = u64::from_be_bytes(data[8..16].try_into().unwrap()) as usize;
+            (size, align)
+        }
+        (4, object::Endianness::Little) => {
+            let size = u32::from_le_bytes(data[0..4].try_into().unwrap()) as usize;
+            let align = u32::from_le_bytes(data[4..8].try_into().unwrap()) as usize;
+            (size, align)
+        }
+        (4, object::Endianness::Big) => {
+            let size = u32::from_be_bytes(data[0..4].try_into().unwrap()) as usize;
+            let align = u32::from_be_bytes(data[4..8].try_into().unwrap()) as usize;
+            (size, align)
+        }
+        _ => {
+            return Err(LayoutError::ObjectParseError(format!(
+                "Unsupported pointer size: {}",
+                ptr_size
+            )));
+        }
+    };
+
+    Ok(Layout { size, align })
 }
 
 /// Returns the rustc version string.

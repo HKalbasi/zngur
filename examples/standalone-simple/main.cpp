@@ -1,7 +1,7 @@
 #include <iostream>
 #include <vector>
 
-#include "zngur-bridge/cpp/generated.h"
+#include "generated.h"
 
 // Rust values are available in the `::rust` namespace from their absolute path
 // in Rust
