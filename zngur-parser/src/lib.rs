@@ -24,10 +24,10 @@ pub type Span = SimpleSpan<usize>;
 mod tests;
 
 pub mod cfg;
-mod match_stmnt;
+mod conditional;
 
 use crate::cfg::{CargoEnvRustCfgProvider, ParsedMatchCfg, RustCfgProvider};
-use match_stmnt::{ParsedMatch, match_item};
+use conditional::{ParsedConditionMany, match_item};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Spanned<T> {
@@ -45,6 +45,9 @@ type ParserInput<'a> = chumsky::input::MappedInput<
         ) -> (&'x Token<'x>, &'x SimpleSpan),
     >,
 >;
+
+type BoxedZngParser<'a, Item> =
+    chumsky::Boxed<ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>>;
 
 /// Effective trait alias for verbose chumsky Parser Trait
 trait ZngParser<'a, Item>:
@@ -226,7 +229,7 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
-    MatchOnCfg(ParsedMatch<'a, ParsedMatchCfg<'a>, ParsedItem<'a>>),
+    MatchOnCfg(ParsedConditionMany<'a, ParsedMatchCfg<'a>, ParsedItem<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -300,7 +303,7 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
-    MatchOnCfg(ParsedMatch<'a, ParsedMatchCfg<'a>, ParsedTypeItem<'a>>),
+    MatchOnCfg(ParsedConditionMany<'a, ParsedMatchCfg<'a>, ParsedTypeItem<'a>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1139,6 +1142,8 @@ enum Token<'a> {
     KwExtern,
     KwImpl,
     KwImport,
+    KwIf,
+    KwElse,
     KwMatch,
     Ident(&'a str),
     Str(&'a str),
@@ -1162,6 +1167,8 @@ impl<'a> Token<'a> {
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
             "import" => Token::KwImport,
+            "if" => Token::KwIf,
+            "else" => Token::KwElse,
             "match" => Token::KwMatch,
             x => Token::Ident(x),
         }
@@ -1208,6 +1215,8 @@ impl Display for Token<'_> {
             Token::KwExtern => write!(f, "extern"),
             Token::KwImpl => write!(f, "impl"),
             Token::KwImport => write!(f, "import"),
+            Token::KwIf => write!(f, "if"),
+            Token::KwElse => write!(f, "else"),
             Token::KwMatch => write!(f, "match"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),

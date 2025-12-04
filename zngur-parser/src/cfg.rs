@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     ParseContext, Span, Spanned, Token, ZngParser,
-    match_stmnt::{MatchPattern, Matchable},
+    conditional::{MatchPattern, Matchable},
     spanned,
 };
 use chumsky::prelude::*;
@@ -213,16 +213,7 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
             .map(|item| ParsedMatchCfg { keys: item })
     }
 
-    fn eval<
-        'a,
-        Item: crate::match_stmnt::MatchItem<'a> + 'a,
-        Items: IntoIterator<Item = (Self::Pattern, Vec<Spanned<Item>>)>,
-    >(
-        &self,
-        arms: Items,
-        ctx: &mut ParseContext,
-    ) -> Vec<Spanned<Item::Processed>> {
-        let mut items = Vec::new();
+    fn eval(&self, pattern: &Self::Pattern, ctx: &mut ParseContext) -> bool {
         let cfg = ctx.get_config_provider();
         let scrutinee = self
             .keys
@@ -259,19 +250,10 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
                 }
             })
             .collect::<Vec<_>>();
-        for (pattern, body) in arms {
-            if pattern.matches(&scrutinee, ctx) {
-                items.extend(body.into_iter().map(|item| {
-                    let span = item.span;
-                    Spanned {
-                        inner: item.inner.process(ctx),
-                        span,
-                    }
-                }))
-            }
-        }
-        items
+
+        pattern.matches(&scrutinee, ctx)
     }
+
 }
 
 impl ParsedMatchCfgPattern<'_> {
