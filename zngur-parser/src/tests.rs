@@ -161,6 +161,8 @@ type MyString {
     #layout(size = 24, align = 8);
 }
     "#,
+        "test.zng".into(),
+        &NullCfg,
     );
     let ty = parsed.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -181,6 +183,8 @@ mod crate {
     }
 }
     "#,
+        "test.zng".into(),
+        &NullCfg,
     );
     let ty = parsed.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -234,6 +238,8 @@ type Example {
     #layout(size = 1, align = 1);
 }
     "#,
+        "test.zng".into(),
+        &NullCfg,
         &resolver,
     );
     assert_eq!(parsed.types.len(), 2);

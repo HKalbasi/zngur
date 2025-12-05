@@ -28,7 +28,7 @@ mod conditional;
 
 use crate::{
     cfg::{CargoEnvRustCfgProvider, CfgConditional, RustCfgProvider},
-    conditional::{Condition, ConditionalItem, ManyItemBody, conditional_item},
+    conditional::{Condition, ConditionalItem, NItems, conditional_item},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -231,7 +231,7 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
-    MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, ManyItemBody>),
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, NItems>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -305,7 +305,7 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
-    MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, ManyItemBody>),
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, NItems>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -1640,35 +1640,38 @@ fn inner_type_item<'a>()
             Token::Str(c) => c,
         })
         .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-    let match_stmt = conditional_item::<'a, ParsedTypeItem<'a>, ManyItemBody, CfgConditional<'a>>()
-        .map(ParsedTypeItem::MatchOnCfg);
-    match_stmt.or(choice((
-        layout,
-        traits,
-        constructor,
-        field,
-        cpp_value,
-        cpp_ref,
-        method()
-            .then(
-                just(Token::KwUse)
-                    .ignore_then(path())
-                    .map(Some)
-                    .or(empty().to(None)),
-            )
-            .then(
-                just(Token::Ident("deref"))
-                    .ignore_then(rust_type())
-                    .map(Some)
-                    .or(empty().to(None)),
-            )
-            .map(|((data, use_path), deref)| ParsedTypeItem::Method {
-                deref,
-                use_path,
-                data,
-            }),
-    ))
-    .then_ignore(just(Token::Semicolon)))
+    recursive(|item| {
+        let match_stmt =
+            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedTypeItem::MatchOnCfg);
+
+        match_stmt.or(choice((
+            layout,
+            traits,
+            constructor,
+            field,
+            cpp_value,
+            cpp_ref,
+            method()
+                .then(
+                    just(Token::KwUse)
+                        .ignore_then(path())
+                        .map(Some)
+                        .or(empty().to(None)),
+                )
+                .then(
+                    just(Token::Ident("deref"))
+                        .ignore_then(rust_type())
+                        .map(Some)
+                        .or(empty().to(None)),
+                )
+                .map(|((data, use_path), deref)| ParsedTypeItem::Method {
+                    deref,
+                    use_path,
+                    data,
+                }),
+        ))
+        .then_ignore(just(Token::Semicolon)))
+    })
 }
 
 fn type_item<'a>()
@@ -1763,7 +1766,8 @@ fn item<'a>()
             just(Token::KwMod)
                 .ignore_then(path())
                 .then(
-                    item.repeated()
+                    item.clone()
+                        .repeated()
                         .collect::<Vec<_>>()
                         .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
                 )
@@ -1775,8 +1779,7 @@ fn item<'a>()
             additional_include_item(),
             import_item(),
             alias(),
-            conditional_item::<ParsedItem<'a>, ManyItemBody, CfgConditional<'a>>()
-                .map(ParsedItem::MatchOnCfg),
+            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedItem::MatchOnCfg),
         ))
     })
     .boxed()
@@ -1833,22 +1836,10 @@ impl<'a> conditional::BodyItem for crate::ParsedTypeItem<'a> {
     }
 }
 
-impl<'src> conditional::BodyItemParse<'src> for crate::ParsedTypeItem<'src> {
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::inner_type_item().boxed()
-    }
-}
-
 impl<'a> conditional::BodyItem for crate::ParsedItem<'a> {
     type Processed = ProcessedItemOrAlias<'a>;
 
     fn process(self, ctx: &mut ParseContext) -> Self::Processed {
         crate::process_parsed_item(self, ctx)
-    }
-}
-
-impl<'src> conditional::BodyItemParse<'src> for crate::ParsedItem<'src> {
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::item()
     }
 }
