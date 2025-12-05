@@ -5,7 +5,7 @@ use std::{
 
 use crate::{
     ParseContext, Span, Spanned, Token, ZngParser,
-    conditional::{MatchPattern, Matchable},
+    conditional::{MatchPattern, MatchPatternParse, Matchable, MatchableParse},
     spanned,
 };
 use chumsky::prelude::*;
@@ -111,7 +111,7 @@ impl RustCfgProvider for CargoEnvRustCfgProvider {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ParsedCfgScrutinee<'src> {
+pub(crate) enum CfgScrutinee<'src> {
     Key(&'src str),
     KeyWithItem(&'src str, &'src str),
     Feature(&'src str),
@@ -127,13 +127,13 @@ pub(crate) enum ProcessedCfgScrutinee {
 
 /// Match on config keys and features
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ParsedMatchCfg<'src> {
+pub(crate) struct CfgConditional<'src> {
     /// a list of confg key paths
-    pub keys: Vec<ParsedCfgScrutinee<'src>>,
+    pub keys: Vec<CfgScrutinee<'src>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ParsedMatchCfgPatternItem<'src> {
+pub(crate) enum CfgPatternItem<'src> {
     Empty, // a `_` pattern
     Some,  // the config has "some" value for the key
     None,  // the config has "no" value for the key
@@ -141,21 +141,22 @@ pub(crate) enum ParsedMatchCfgPatternItem<'src> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum ParsedMatchCfgPattern<'src> {
-    Single(Vec<ParsedMatchCfgPatternItem<'src>>, Span),
-    Tuple(Vec<Vec<ParsedMatchCfgPatternItem<'src>>>, Span),
+pub(crate) enum CfgPattern<'src> {
+    Single(Vec<CfgPatternItem<'src>>, Span),
+    Tuple(Vec<Vec<CfgPatternItem<'src>>>, Span),
 }
 
-impl<'src> MatchPattern<'src> for ParsedMatchCfgPattern<'src> {
+impl<'src> MatchPattern for CfgPattern<'src> {}
+impl<'src> MatchPatternParse<'src> for CfgPattern<'src> {
     fn parser() -> impl ZngParser<'src, Self> {
         let or_pat = choice((
-            just(Token::Underscore).to(ParsedMatchCfgPatternItem::Empty),
+            just(Token::Underscore).to(CfgPatternItem::Empty),
             spanned(select! {
                 Token::Str(c) => c
             })
-            .map(ParsedMatchCfgPatternItem::Value),
-            just(Token::Ident("Some")).to(ParsedMatchCfgPatternItem::Some),
-            just(Token::Ident("None")).to(ParsedMatchCfgPatternItem::None),
+            .map(CfgPatternItem::Value),
+            just(Token::Ident("Some")).to(CfgPatternItem::Some),
+            just(Token::Ident("None")).to(CfgPatternItem::None),
         ))
         .separated_by(just(Token::Pipe))
         .at_least(1)
@@ -173,45 +174,18 @@ impl<'src> MatchPattern<'src> for ParsedMatchCfgPattern<'src> {
             )
             .map(|items| {
                 let span = items.span;
-                ParsedMatchCfgPattern::Tuple(items.inner, span)
+                CfgPattern::Tuple(items.inner, span)
             }),
             spanned(or_pat).map(|pat| {
                 let span = pat.span;
-                ParsedMatchCfgPattern::Single(pat.inner, span)
+                CfgPattern::Single(pat.inner, span)
             }),
         ))
     }
 }
 
-impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
-    type Pattern = ParsedMatchCfgPattern<'src>;
-    fn parser() -> impl ZngParser<'src, Self> {
-        just([Token::Sharp, Token::Ident("cfg")])
-            .ignore_then(
-                (select! {Token::Ident(c) => c})
-                    .separated_by(just(Token::Dot))
-                    .at_least(1)
-                    .at_most(2)
-                    .collect::<Vec<_>>()
-                    .map(|item| {
-                        match &item[..] {
-                            [key] if key == &"feature" => ParsedCfgScrutinee::AllFeatures,
-                            [key, item] if key == &"feature" => ParsedCfgScrutinee::Feature(item),
-                            [key] => ParsedCfgScrutinee::Key(key),
-                            [key, item] => ParsedCfgScrutinee::KeyWithItem(key, item),
-                            // the above at_least(1) and at_most(2) calls
-                            // prevent this branch
-                            _ => unreachable!(),
-                        }
-                    })
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .at_least(1)
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(|item| ParsedMatchCfg { keys: item })
-    }
+impl<'src> Matchable for CfgConditional<'src> {
+    type Pattern = CfgPattern<'src>;
 
     fn eval(&self, pattern: &Self::Pattern, ctx: &mut ParseContext) -> bool {
         let cfg = ctx.get_config_provider();
@@ -219,7 +193,7 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
             .keys
             .iter()
             .map(|key| match key {
-                ParsedCfgScrutinee::Key(key) => cfg
+                CfgScrutinee::Key(key) => cfg
                     .get_cfg(key)
                     .map(|values| {
                         if values.is_empty() {
@@ -229,7 +203,7 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
                         }
                     })
                     .unwrap_or(ProcessedCfgScrutinee::Empty),
-                ParsedCfgScrutinee::KeyWithItem(key, item) => cfg
+                CfgScrutinee::KeyWithItem(key, item) => cfg
                     .get_cfg(key)
                     .and_then(|values| {
                         values
@@ -238,10 +212,10 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
                             .then_some(ProcessedCfgScrutinee::Some)
                     })
                     .unwrap_or(ProcessedCfgScrutinee::Empty),
-                ParsedCfgScrutinee::AllFeatures => {
+                CfgScrutinee::AllFeatures => {
                     ProcessedCfgScrutinee::Values(cfg.get_features())
                 }
-                ParsedCfgScrutinee::Feature(feature) => {
+                CfgScrutinee::Feature(feature) => {
                     if cfg.get_features().iter().any(|value| value == feature) {
                         ProcessedCfgScrutinee::Some
                     } else {
@@ -253,10 +227,39 @@ impl<'src> Matchable<'src> for ParsedMatchCfg<'src> {
 
         pattern.matches(&scrutinee, ctx)
     }
-
 }
 
-impl ParsedMatchCfgPattern<'_> {
+impl<'src> MatchableParse<'src> for CfgConditional<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        just([Token::Sharp, Token::Ident("cfg")])
+            .ignore_then(
+                (select! {Token::Ident(c) => c})
+                    .separated_by(just(Token::Dot))
+                    .at_least(1)
+                    .at_most(2)
+                    .collect::<Vec<_>>()
+                    .map(|item| {
+                        match &item[..] {
+                            [key] if key == &"feature" => CfgScrutinee::AllFeatures,
+                            [key, item] if key == &"feature" => CfgScrutinee::Feature(item),
+                            [key] => CfgScrutinee::Key(key),
+                            [key, item] => CfgScrutinee::KeyWithItem(key, item),
+                            // the above at_least(1) and at_most(2) calls
+                            // prevent this branch
+                            _ => unreachable!(),
+                        }
+                    })
+                    .separated_by(just(Token::Comma))
+                    .allow_trailing()
+                    .at_least(1)
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+            )
+            .map(|item| CfgConditional { keys: item })
+    }
+}
+
+impl CfgPattern<'_> {
     fn matches(&self, scrutinee: &[ProcessedCfgScrutinee], ctx: &mut ParseContext) -> bool {
         match self {
             Self::Single(pat, span) => {
@@ -285,7 +288,7 @@ impl ParsedMatchCfgPattern<'_> {
     }
 }
 
-impl ParsedMatchCfgPatternItem<'_> {
+impl CfgPatternItem<'_> {
     fn matches(&self, scrutinee: &ProcessedCfgScrutinee) -> bool {
         use ProcessedCfgScrutinee as PCS;
         match self {

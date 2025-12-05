@@ -1,69 +1,75 @@
-use crate::{ParseContext, ProcessedItemOrAlias, Spanned, Token, ZngParser, spanned};
+use crate::{BoxedZngParser, ParseContext, Spanned, Token, ZngParser, spanned};
 use chumsky::prelude::*;
-use std::marker::PhantomData;
 
 /// a type that can be matched against a Pattern
-pub trait Matchable<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+pub trait Matchable: core::fmt::Debug + Clone + PartialEq + Eq {
     /// A pattern type to match Self against
-    type Pattern: MatchPattern<'src>;
-    /// return a parser for the item as it would appear in an `#if` or `#match` statment
-    fn parser() -> impl ZngParser<'src, Self>;
+    type Pattern: MatchPattern;
     /// compare self to `Pattern`
     fn eval(&self, pattern: &Self::Pattern, ctx: &mut ParseContext) -> bool;
 }
 
+/// a type that can be matched against a Pattern
+pub trait MatchableParse<'src>: Matchable {
+    /// return a parser for the item as it would appear in an `#if` or `#match` statment
+    fn parser() -> impl ZngParser<'src, Self>;
+}
+
+pub trait MatchPattern: core::fmt::Debug + Clone + PartialEq + Eq {}
+
 /// a Pattern tha can be matched against
-pub trait MatchPattern<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+pub trait MatchPatternParse<'src>: MatchPattern {
     /// return a parser for for the pattern
     fn parser() -> impl ZngParser<'src, Self>;
 }
 
-/// a trait for an item that can appear inside the block of a conditional statment
-pub trait BodyItem<'src>: Sized + core::fmt::Debug + Clone + PartialEq + Eq {
+pub trait BodyItem: core::fmt::Debug {
     /// The type Self turns into when added into the Spec
     type Processed;
 
     /// Transform self into `Processed` type
     fn process(self, ctx: &mut ParseContext) -> Self::Processed;
+}
 
+pub trait ConcreteBodyItem: BodyItem + core::fmt::Debug + Clone + PartialEq + Eq {}
+impl<T: BodyItem + core::fmt::Debug + Clone + PartialEq + Eq> ConcreteBodyItem for T {}
+
+/// a trait for an item that can appear inside the block of a conditional statment
+pub trait BodyItemParse<'src>: ConcreteBodyItem {
     /// return a parser for the item
     fn parser() -> impl ZngParser<'src, Self>;
 }
 
 /// a type that hold the body of a conditional statment
-pub trait ConditionBody<'src, Pattern: MatchPattern<'src> + 'src, Item: BodyItem<'src> + 'src>:
-    core::fmt::Debug + Clone + PartialEq + Eq
-{
+pub trait ConditionBody<Pattern: MatchPattern, Item: ConcreteBodyItem>: core::fmt::Debug {
     /// the pattern that guards this body
     fn pattern(&self) -> &Pattern;
-    /// Take the items from inside the body consuming self
-    fn take_items(self) -> impl IntoIterator<Item = Spanned<Item>>;
 }
 
 /// a trait that marks the Cardinality of items inside a body (One? or Many?)
-pub trait ConditionBodyCardinality<'src, Item: BodyItem<'src> + 'src>:
+pub trait ConditionBodyCardinality<Item: ConcreteBodyItem>:
     core::fmt::Debug + Clone + PartialEq + Eq
 {
     /// the type that hold the body of the conditional statment
-    type Body<Pattern: MatchPattern<'src> + 'src>: ConditionBody<'src, Pattern, Item>;
+    type Body<Pattern: MatchPattern>: ConditionBody<Pattern, Item> + Clone + PartialEq + Eq;
     /// the type that holds the items in the body of a conditional statment
     type Block: core::fmt::Debug + Clone + PartialEq + Eq + IntoIterator<Item = Spanned<Item>>;
     /// the type that hold the items of a passing body
-    type EvalResult: IntoIterator<Item = Spanned<<Item as BodyItem<'src>>::Processed>>;
+    type EvalResult: IntoIterator<Item = Spanned<<Item as BodyItem>::Processed>>;
     /// transform a single item into Self::Block
     fn single_to_block(item: Spanned<Item>) -> Self::Block;
     /// create a new empty Self::Bock
     fn empty_block() -> Self::Block;
     /// create a new Self::Body from a block and the pattern that guards it
-    fn new_body<Pattern: MatchPattern<'src> + 'src>(
+    fn new_body<Pattern: MatchPattern>(
         pattern: Spanned<Pattern>,
         block: Self::Block,
     ) -> Self::Body<Pattern>;
     /// transform a block into it's processed result
-    fn pass_block(block: Self::Block, ctx: &mut ParseContext) -> Self::EvalResult;
+    fn pass_block(block: &Self::Block, ctx: &mut ParseContext) -> Self::EvalResult;
     /// trasnform a body into it's processed result
-    fn pass_body<Pattern: MatchPattern<'src> + 'src>(
-        body: Self::Body<Pattern>,
+    fn pass_body<Pattern: MatchPattern>(
+        body: &Self::Body<Pattern>,
         ctx: &mut ParseContext,
     ) -> Self::EvalResult;
 }
@@ -71,51 +77,38 @@ pub trait ConditionBodyCardinality<'src, Item: BodyItem<'src> + 'src>:
 /// a trait for a conditional item in a parsed spec
 /// evaluated through dynamic dispatch to allow different types to appear in the arms of the same
 /// conditional statment `#if type_1 = pat {} #else if type_2 = pat {}`
-pub trait ConditionalItem<
-    'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
->
-{
+pub trait ConditionalItem<Item: ConcreteBodyItem, Cardinality: ConditionBodyCardinality<Item>> {
     /// Evaluate the statment and produce resulting items of the first arm that passes
-    fn eval(self: Box<Self>, ctx: &mut ParseContext) -> Option<Cardinality::EvalResult>;
+    fn eval(&self, ctx: &mut ParseContext) -> Option<Cardinality::EvalResult>;
 }
 
 /// a body of a conditional statment that holds 0..N Items
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedConditionBodyMany<'src, Pattern: MatchPattern<'src>, Item: BodyItem<'src>> {
+pub struct ConditionBodyMany<Pattern: MatchPattern, Item: ConcreteBodyItem> {
     pub pattern: Spanned<Pattern>,
     pub block: Vec<Spanned<Item>>,
-    _pd: PhantomData<&'src Item>,
 }
 
 /// a body of a conditional statment that holds 0..1 items
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedConditionBodySingle<'src, Pattern: MatchPattern<'src>, Item: BodyItem<'src>> {
+pub struct ConditionBodySingle<Pattern: MatchPattern, Item: ConcreteBodyItem> {
     pub pattern: Spanned<Pattern>,
     pub block: Option<Spanned<Item>>,
-    _pd: PhantomData<&'src Item>,
 }
 
-impl<'src, Pattern: MatchPattern<'src> + 'src, Item: BodyItem<'src> + 'src>
-    ConditionBody<'src, Pattern, Item> for ParsedConditionBodyMany<'src, Pattern, Item>
+impl<Pattern: MatchPattern, Item: ConcreteBodyItem> ConditionBody<Pattern, Item>
+    for ConditionBodyMany<Pattern, Item>
 {
     fn pattern(&self) -> &Pattern {
         &self.pattern.inner
     }
-    fn take_items(self) -> impl IntoIterator<Item = Spanned<Item>> {
-        self.block
-    }
 }
 
-impl<'src, Pattern: MatchPattern<'src> + 'src, Item: BodyItem<'src> + 'src>
-    ConditionBody<'src, Pattern, Item> for ParsedConditionBodySingle<'src, Pattern, Item>
+impl<Pattern: MatchPattern, Item: ConcreteBodyItem> ConditionBody<Pattern, Item>
+    for ConditionBodySingle<Pattern, Item>
 {
     fn pattern(&self) -> &Pattern {
         &self.pattern.inner
-    }
-    fn take_items(self) -> impl IntoIterator<Item = Spanned<Item>> {
-        self.block
     }
 }
 
@@ -123,10 +116,10 @@ impl<'src, Pattern: MatchPattern<'src> + 'src, Item: BodyItem<'src> + 'src>
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct SingleItemBody;
 
-impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for SingleItemBody {
-    type Body<Pattern: MatchPattern<'src> + 'src> = ParsedConditionBodySingle<'src, Pattern, Item>;
+impl<Item: ConcreteBodyItem> ConditionBodyCardinality<Item> for SingleItemBody {
+    type Body<Pattern: MatchPattern> = ConditionBodySingle<Pattern, Item>;
     type Block = Option<Spanned<Item>>;
-    type EvalResult = Option<Spanned<<Item as BodyItem<'src>>::Processed>>;
+    type EvalResult = Option<Spanned<<Item as BodyItem>::Processed>>;
 
     fn single_to_block(item: Spanned<Item>) -> Self::Block {
         Some(item)
@@ -136,19 +129,15 @@ impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for
         None
     }
 
-    fn new_body<Pattern: MatchPattern<'src> + 'src>(
+    fn new_body<Pattern: MatchPattern>(
         pattern: Spanned<Pattern>,
         block: Self::Block,
     ) -> Self::Body<Pattern> {
-        ParsedConditionBodySingle {
-            pattern,
-            block,
-            _pd: PhantomData,
-        }
+        ConditionBodySingle { pattern, block }
     }
 
-    fn pass_block(block: Self::Block, ctx: &mut ParseContext) -> Self::EvalResult {
-        block.map(|item| {
+    fn pass_block(block: &Self::Block, ctx: &mut ParseContext) -> Self::EvalResult {
+        block.clone().map(|item| {
             let span = item.span;
             Spanned {
                 span,
@@ -157,11 +146,11 @@ impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for
         })
     }
 
-    fn pass_body<Pattern: MatchPattern<'src> + 'src>(
-        body: Self::Body<Pattern>,
+    fn pass_body<Pattern: MatchPattern>(
+        body: &Self::Body<Pattern>,
         ctx: &mut ParseContext,
     ) -> Self::EvalResult {
-        Self::pass_block(body.block, ctx)
+        Self::pass_block(&body.block, ctx)
     }
 }
 
@@ -169,10 +158,10 @@ impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub struct ManyItemBody;
 
-impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for ManyItemBody {
-    type Body<Pattern: MatchPattern<'src> + 'src> = ParsedConditionBodyMany<'src, Pattern, Item>;
+impl<Item: ConcreteBodyItem> ConditionBodyCardinality<Item> for ManyItemBody {
+    type Body<Pattern: MatchPattern> = ConditionBodyMany<Pattern, Item>;
     type Block = Vec<Spanned<Item>>;
-    type EvalResult = Vec<Spanned<<Item as BodyItem<'src>>::Processed>>;
+    type EvalResult = Vec<Spanned<<Item as BodyItem>::Processed>>;
 
     fn single_to_block(item: Spanned<Item>) -> Self::Block {
         vec![item]
@@ -182,20 +171,17 @@ impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for
         Vec::new()
     }
 
-    fn new_body<Pattern: MatchPattern<'src> + 'src>(
+    fn new_body<Pattern: MatchPattern>(
         pattern: Spanned<Pattern>,
         block: Self::Block,
     ) -> Self::Body<Pattern> {
-        ParsedConditionBodyMany {
-            pattern,
-            block,
-            _pd: PhantomData,
-        }
+        ConditionBodyMany { pattern, block }
     }
 
-    fn pass_block(block: Self::Block, ctx: &mut ParseContext) -> Self::EvalResult {
+    fn pass_block(block: &Self::Block, ctx: &mut ParseContext) -> Self::EvalResult {
         block
-            .into_iter()
+            .iter()
+            .cloned()
             .map(|item| {
                 let span = item.span;
                 Spanned {
@@ -206,141 +192,148 @@ impl<'src, Item: BodyItem<'src> + 'src> ConditionBodyCardinality<'src, Item> for
             .collect()
     }
 
-    fn pass_body<Pattern: MatchPattern<'src> + 'src>(
-        body: Self::Body<Pattern>,
+    fn pass_body<Pattern: MatchPattern>(
+        body: &Self::Body<Pattern>,
         ctx: &mut ParseContext,
     ) -> Self::EvalResult {
-        Self::pass_block(body.block, ctx)
+        Self::pass_block(&body.block, ctx)
     }
 }
 
 /// a branch of an `#if` statment
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedConditionBranch<
-    'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
+pub struct ConditionBranch<
+    Scrutinee: Matchable,
+    Item: ConcreteBodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
 > {
     pub scrutinee: Spanned<Scrutinee>,
-    pub body: <Cardinality as ConditionBodyCardinality<'src, Item>>::Body<
-        <Scrutinee as Matchable<'src>>::Pattern,
-    >,
+    pub body:
+        <Cardinality as ConditionBodyCardinality<Item>>::Body<<Scrutinee as Matchable>::Pattern>,
 }
 
 /// a complete `#if {} #else if #else {}` statment
-pub struct ParsedCondition<
-    'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionIf<
+    Scrutinee: Matchable,
+    Item: ConcreteBodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
 > {
-    pub arms: Vec<Box<dyn ConditionalItem<'src, Item, Cardinality> + 'src>>,
+    pub arms: Vec<ConditionBranch<Scrutinee, Item, Cardinality>>,
     pub fallback: Option<Cardinality::Block>,
 }
 
 /// a `#match` statment
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ParsedConditionMatch<
-    'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
+pub struct ConditionMatch<
+    Scrutinee: Matchable,
+    Item: ConcreteBodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
 > {
     pub scrutinee: Spanned<Scrutinee>,
     pub arms: Vec<
         Spanned<
-            <Cardinality as ConditionBodyCardinality<'src, Item>>::Body<
-                <Scrutinee as Matchable<'src>>::Pattern,
+            <Cardinality as ConditionBodyCardinality<Item>>::Body<
+                <Scrutinee as Matchable>::Pattern,
             >,
         >,
     >,
 }
 
-impl<
-    'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
-> ConditionalItem<'src, Item, Cardinality>
-    for ParsedConditionBranch<'src, Scrutinee, Item, Cardinality>
+impl<Scrutinee: Matchable, Item: ConcreteBodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionBranch<Scrutinee, Item, Cardinality>
 {
     fn eval(
-        self: Box<Self>,
+        &self,
         ctx: &mut ParseContext,
-    ) -> Option<<Cardinality as ConditionBodyCardinality<'src, Item>>::EvalResult> {
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
         let pattern = self.body.pattern();
         if self.scrutinee.inner.eval(pattern, ctx) {
-            return Some(
-                <Cardinality as ConditionBodyCardinality<'src, Item>>::pass_body(self.body, ctx),
-            );
+            return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_body(
+                &self.body, ctx,
+            ));
         }
         None
     }
 }
 
-impl<
-    'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
-> ConditionalItem<'src, Item, Cardinality>
-    for ParsedConditionMatch<'src, Scrutinee, Item, Cardinality>
+impl<Scrutinee: Matchable, Item: ConcreteBodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionMatch<Scrutinee, Item, Cardinality>
 {
     fn eval(
-        self: Box<Self>,
+        &self,
         ctx: &mut ParseContext,
-    ) -> Option<<Cardinality as ConditionBodyCardinality<'src, Item>>::EvalResult> {
-        for arm in self.arms {
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        for arm in &self.arms {
             let pattern = arm.inner.pattern();
             if self.scrutinee.inner.eval(pattern, ctx) {
-                return Some(
-                    <Cardinality as ConditionBodyCardinality<'src, Item>>::pass_body(
-                        arm.inner, ctx,
-                    ),
-                );
+                return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_body(
+                    &arm.inner, ctx,
+                ));
             }
         }
         None
     }
 }
 
-impl<'src, Item: BodyItem<'src> + 'src, Cardinality: ConditionBodyCardinality<'src, Item>>
-    ConditionalItem<'src, Item, Cardinality> for ParsedCondition<'src, Item, Cardinality>
+impl<Scrutinee: Matchable, Item: ConcreteBodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionIf<Scrutinee, Item, Cardinality>
 {
     fn eval(
-        self: Box<Self>,
+        &self,
         ctx: &mut ParseContext,
-    ) -> Option<<Cardinality as ConditionBodyCardinality<'src, Item>>::EvalResult> {
-        for arm in self.arms {
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        for arm in &self.arms {
             if let Some(result) = arm.eval(ctx) {
                 return Some(result);
             }
         }
-        if let Some(fallback) = self.fallback {
-            return Some(
-                <Cardinality as ConditionBodyCardinality<'src, Item>>::pass_block(fallback, ctx),
-            );
+        if let Some(fallback) = &self.fallback {
+            return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_block(
+                fallback, ctx,
+            ));
         }
         None
     }
 }
 
-/// a trait that helps build combined parsers for ConditionalItem's that accept `#if {} #else {}` or `#match`
-pub trait Condition<
-    'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
->
+/// a conditional item behind an if or match statment
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Condition<
+    Scrutinee: Matchable,
+    Item: ConcreteBodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
+> {
+    If(ConditionIf<Scrutinee, Item, Cardinality>),
+    Match(ConditionMatch<Scrutinee, Item, Cardinality>),
+}
+
+impl<Scrutinee: Matchable, Item: ConcreteBodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for Condition<Scrutinee, Item, Cardinality>
 {
-    fn if_parser() -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, Cardinality> + 'src>>;
-    fn match_parser()
-    -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, Cardinality> + 'src>>;
+    fn eval(
+        &self,
+        ctx: &mut ParseContext,
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        match self {
+            Self::If(item) => item.eval(ctx),
+            Self::Match(item) => item.eval(ctx),
+        }
+    }
+}
+
+/// a trait that helps build combined parsers for ConditionalItem's that accept `#if {} #else {}` or `#match`
+pub trait Conditional<'src, Item: BodyItemParse<'src>, Cardinality: ConditionBodyCardinality<Item>>
+{
+    type Scrutinee: MatchableParse<'src>;
+    fn if_parser() -> BoxedZngParser<'src, Condition<Self::Scrutinee, Item, Cardinality>>;
+    fn match_parser() -> BoxedZngParser<'src, Condition<Self::Scrutinee, Item, Cardinality>>;
 }
 
 /// a psraser for aa block used in a SingleItemBody
-pub fn block_for_single<'src, Item: BodyItem<'src>>() -> impl ZngParser<'src, Option<Spanned<Item>>>
-{
-    spanned(<Item as BodyItem>::parser())
+pub fn block_for_single<'src, Item: BodyItemParse<'src>>()
+-> impl ZngParser<'src, Option<Spanned<Item>>> {
+    spanned(<Item as BodyItemParse>::parser())
         .repeated()
         .at_most(1)
         .collect::<Vec<_>>()
@@ -351,8 +344,9 @@ pub fn block_for_single<'src, Item: BodyItem<'src>>() -> impl ZngParser<'src, Op
 }
 
 /// a parser for a block used in a ManyItemBody
-pub fn block_for_many<'src, Item: BodyItem<'src>>() -> impl ZngParser<'src, Vec<Spanned<Item>>> {
-    spanned(<Item as BodyItem>::parser())
+pub fn block_for_many<'src, Item: BodyItemParse<'src>>() -> impl ZngParser<'src, Vec<Spanned<Item>>>
+{
+    spanned(<Item as BodyItemParse>::parser())
         .repeated()
         .collect::<Vec<_>>()
 }
@@ -360,25 +354,28 @@ pub fn block_for_many<'src, Item: BodyItem<'src>>() -> impl ZngParser<'src, Vec<
 /// parser for a guarded block used in `#if`
 pub fn guarded_block<
     'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item>,
+    Scrutinee: MatchableParse<'src>,
+    Item: BodyItemParse<'src>,
+    Cardinality: ConditionBodyCardinality<Item>,
 >(
     block: impl ZngParser<'src, Cardinality::Block>,
     f: impl Fn(
-        Spanned<<Scrutinee as Matchable<'src>>::Pattern>,
-        <Cardinality as ConditionBodyCardinality<'src, Item>>::Block,
-    ) -> <Cardinality as ConditionBodyCardinality<'src, Item>>::Body<
-        <Scrutinee as Matchable<'src>>::Pattern,
+        Spanned<<Scrutinee as Matchable>::Pattern>,
+        <Cardinality as ConditionBodyCardinality<Item>>::Block,
+    ) -> <Cardinality as ConditionBodyCardinality<Item>>::Body<
+        <Scrutinee as Matchable>::Pattern,
     > + Clone,
-) -> impl ZngParser<'src, ParsedConditionBranch<'src, Scrutinee, Item, Cardinality>> {
-    spanned(<Scrutinee as Matchable>::parser())
+) -> impl ZngParser<'src, ConditionBranch<Scrutinee, Item, Cardinality>>
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
+{
+    spanned(<Scrutinee as MatchableParse<'src>>::parser())
         .then_ignore(just(Token::Eq))
         .then(spanned(
-            <<Scrutinee as Matchable>::Pattern as MatchPattern>::parser(),
+            <<Scrutinee as Matchable>::Pattern as MatchPatternParse<'src>>::parser(),
         ))
         .then(block.delimited_by(just(Token::BraceOpen), just(Token::BraceClose)))
-        .map(move |((scrutinee, pattern), block)| ParsedConditionBranch {
+        .map(move |((scrutinee, pattern), block)| ConditionBranch {
             scrutinee,
             body: f(pattern, block),
         })
@@ -387,13 +384,16 @@ pub fn guarded_block<
 /// parser for an `#if {} #else if {} #else {}` statment
 pub fn if_stmnt<
     'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item> + 'src,
+    Scrutinee: MatchableParse<'src>,
+    Item: BodyItemParse<'src>,
+    Cardinality: ConditionBodyCardinality<Item>,
 >(
-    guard: impl ZngParser<'src, ParsedConditionBranch<'src, Scrutinee, Item, Cardinality>> + 'src,
-    fallback: impl ZngParser<'src, Cardinality::Block> + 'src,
-) -> impl ZngParser<'src, ParsedCondition<'src, Item, Cardinality>> {
+    guard: impl ZngParser<'src, ConditionBranch<Scrutinee, Item, Cardinality>>,
+    fallback: impl ZngParser<'src, Cardinality::Block>,
+) -> impl ZngParser<'src, ConditionIf<Scrutinee, Item, Cardinality>>
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
+{
     just([Token::Sharp, Token::KwIf])
         .ignore_then(guard.clone())
         .then(
@@ -408,61 +408,62 @@ pub fn if_stmnt<
                 .or_not(),
         )
         .map(|((if_block, else_if_blocks), else_block)| {
-            let mut arms: Vec<Box<dyn ConditionalItem<Item, Cardinality> + 'src>> =
-                vec![Box::new(if_block)];
-            arms.extend(else_if_blocks.into_iter().map(|arm| {
-                let boxed: Box<dyn ConditionalItem<Item, Cardinality> + 'src> = Box::new(arm);
-                boxed
-            }));
-            ParsedCondition {
+            let mut arms: Vec<ConditionBranch<Scrutinee, Item, Cardinality>> = vec![if_block];
+            arms.extend(else_if_blocks);
+            ConditionIf {
                 arms,
                 fallback: else_block,
             }
         })
-        .boxed()
 }
 
 /// a paraser for the arm of a `#match` statment
 fn match_arm<
     'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item> + 'src,
+    Scrutinee: MatchableParse<'src>,
+    Item: BodyItemParse<'src>,
+    Cardinality: ConditionBodyCardinality<Item>,
 >(
-    block: impl ZngParser<'src, Cardinality::Block> + 'src,
+    block: impl ZngParser<'src, Cardinality::Block>,
 ) -> impl ZngParser<
     'src,
-    <Cardinality as ConditionBodyCardinality<'src, Item>>::Body<
-        <Scrutinee as Matchable<'src>>::Pattern,
-    >,
-> {
+    <Cardinality as ConditionBodyCardinality<Item>>::Body<<Scrutinee as Matchable>::Pattern>,
+>
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
+{
     let arm_choices = (
         block.delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
-        spanned(<Item as BodyItem>::parser())
-            .map(<Cardinality as ConditionBodyCardinality<'src, Item>>::single_to_block),
+        spanned(<Item as BodyItemParse>::parser())
+            .map(<Cardinality as ConditionBodyCardinality<Item>>::single_to_block),
         just([Token::BraceOpen, Token::BraceClose])
-            .map(|_| <Cardinality as ConditionBodyCardinality<'src, Item>>::empty_block()),
+            .map(|_| <Cardinality as ConditionBodyCardinality<Item>>::empty_block()),
     );
-    spanned(<<Scrutinee as Matchable>::Pattern as MatchPattern>::parser())
-        .then(just(Token::ArrowArm).ignore_then(choice(arm_choices)))
-        .map(|(pattern, block)| {
-            <Cardinality as ConditionBodyCardinality<'src, Item>>::new_body(pattern, block)
-        })
+    spanned(<<Scrutinee as Matchable>::Pattern as MatchPatternParse<
+        'src,
+    >>::parser())
+    .then(just(Token::ArrowArm).ignore_then(choice(arm_choices)))
+    .map(|(pattern, block)| {
+        <Cardinality as ConditionBodyCardinality<Item>>::new_body(pattern, block)
+    })
 }
 
 /// a parser for a `#match` statment
 fn match_stmt<
     'src,
-    Scrutinee: Matchable<'src> + 'src,
-    Item: BodyItem<'src> + 'src,
-    Cardinality: ConditionBodyCardinality<'src, Item> + 'src,
+    Scrutinee: MatchableParse<'src>,
+    Item: BodyItemParse<'src>,
+    Cardinality: ConditionBodyCardinality<Item>,
 >(
-    block: impl ZngParser<'src, Cardinality::Block> + 'src,
-) -> impl ZngParser<'src, ParsedConditionMatch<'src, Scrutinee, Item, Cardinality>> {
+    block: impl ZngParser<'src, Cardinality::Block>,
+) -> impl ZngParser<'src, ConditionMatch<Scrutinee, Item, Cardinality>>
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
+{
     let arm = match_arm::<Scrutinee, Item, Cardinality>(block);
 
     just([Token::Sharp, Token::KwMatch])
-        .ignore_then(spanned(<Scrutinee as Matchable>::parser()))
+        .ignore_then(spanned(<Scrutinee as MatchableParse>::parser()))
         .then(
             spanned(arm)
                 .separated_by(just(Token::Comma))
@@ -470,90 +471,74 @@ fn match_stmt<
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
-        .map(|(scrutinee, arms)| ParsedConditionMatch { scrutinee, arms })
-        .boxed()
+        .map(|(scrutinee, arms)| ConditionMatch { scrutinee, arms })
 }
 
-impl<'src, T: Matchable<'src> + 'src, Item: BodyItem<'src> + 'src>
-    Condition<'src, Item, SingleItemBody> for T
+pub fn conditional_item<
+    'src,
+    Item: BodyItemParse<'src>,
+    Cardinality: ConditionBodyCardinality<Item>,
+    Cond: Conditional<'src, Item, Cardinality>,
+>() -> impl ZngParser<
+    'src,
+    Condition<<Cond as Conditional<'src, Item, Cardinality>>::Scrutinee, Item, Cardinality>,
+> {
+    let if_parser = <Cond as Conditional<'src, Item, Cardinality>>::if_parser();
+    let match_parser = <Cond as Conditional<'src, Item, Cardinality>>::match_parser();
+    choice((if_parser, match_parser))
+}
+
+impl<'src, Scrutinee: MatchableParse<'src> + 'src, Item: BodyItemParse<'src> + 'src>
+    Conditional<'src, Item, SingleItemBody> for Scrutinee
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
 {
-    fn if_parser()
-    -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, SingleItemBody> + 'src>> {
+    type Scrutinee = Scrutinee;
+    fn if_parser() -> BoxedZngParser<'src, Condition<Scrutinee, Item, SingleItemBody>> {
         let block = block_for_single::<Item>();
-        let guard = guarded_block::<T, Item, SingleItemBody>(block.clone(), |pattern, item| {
-            ParsedConditionBodySingle {
-                pattern,
-                block: item,
-                _pd: PhantomData,
-            }
-        });
+        let guard =
+            guarded_block::<Scrutinee, Item, SingleItemBody>(block.clone(), |pattern, item| {
+                ConditionBodySingle {
+                    pattern,
+                    block: item,
+                }
+            });
 
-        if_stmnt::<T, Item, SingleItemBody>(guard, block).map(|item| {
-            let boxed: Box<dyn ConditionalItem<'src, Item, SingleItemBody> + 'src> = Box::new(item);
-            boxed
-        })
+        if_stmnt::<Scrutinee, Item, SingleItemBody>(guard, block)
+            .map(|item| Condition::<Scrutinee, Item, SingleItemBody>::If(item))
+            .boxed()
     }
 
-    fn match_parser()
-    -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, SingleItemBody> + 'src>> {
+    fn match_parser() -> BoxedZngParser<'src, Condition<Scrutinee, Item, SingleItemBody>> {
         let block = block_for_single::<Item>();
-        match_stmt::<T, Item, SingleItemBody>(block).map(|item| {
-            let boxed: Box<dyn ConditionalItem<'src, Item, SingleItemBody> + 'src> = Box::new(item);
-            boxed
-        })
+        match_stmt::<Scrutinee, Item, SingleItemBody>(block)
+            .map(|item| Condition::<Scrutinee, Item, SingleItemBody>::Match(item))
+            .boxed()
     }
 }
 
-impl<'src, T: Matchable<'src> + 'src, Item: BodyItem<'src> + 'src>
-    Condition<'src, Item, ManyItemBody> for T
+impl<'src, Scrutinee: MatchableParse<'src> + 'src, Item: BodyItemParse<'src> + 'src>
+    Conditional<'src, Item, ManyItemBody> for Scrutinee
+where
+    <Scrutinee as Matchable>::Pattern: MatchPatternParse<'src>,
 {
-    fn if_parser() -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, ManyItemBody> + 'src>>
-    {
+    type Scrutinee = Scrutinee;
+    fn if_parser() -> BoxedZngParser<'src, Condition<Scrutinee, Item, ManyItemBody>> {
         let block = block_for_many::<Item>();
-        let guard = guarded_block::<T, Item, ManyItemBody>(block.clone(), |pattern, block| {
-            ParsedConditionBodyMany {
-                pattern,
-                block,
-                _pd: PhantomData,
-            }
-        });
+        let guard =
+            guarded_block::<Scrutinee, Item, ManyItemBody>(block.clone(), |pattern, block| {
+                ConditionBodyMany { pattern, block }
+            });
 
-        if_stmnt::<T, Item, ManyItemBody>(guard, block).map(|item| {
-            let boxed: Box<dyn ConditionalItem<'src, Item, ManyItemBody> + 'src> = Box::new(item);
-            boxed
-        })
+        if_stmnt::<Scrutinee, Item, ManyItemBody>(guard, block)
+            .map(|item| Condition::<Scrutinee, Item, ManyItemBody>::If(item))
+            .boxed()
     }
 
-    fn match_parser()
-    -> impl ZngParser<'src, Box<dyn ConditionalItem<'src, Item, ManyItemBody> + 'src>> {
+    fn match_parser() -> BoxedZngParser<'src, Condition<Scrutinee, Item, ManyItemBody>> {
         let block = block_for_many::<Item>();
-        match_stmt::<T, Item, ManyItemBody>(block).map(|item| {
-            let boxed: Box<dyn ConditionalItem<'src, Item, ManyItemBody> + 'src> = Box::new(item);
-            boxed
-        })
-    }
-}
-
-impl<'src> BodyItem<'src> for crate::ParsedTypeItem<'src> {
-    type Processed = Self;
-
-    fn process(self, _ctx: &mut ParseContext) -> Self::Processed {
-        self
-    }
-
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::inner_type_item().boxed()
-    }
-}
-
-impl<'src> BodyItem<'src> for crate::ParsedItem<'src> {
-    type Processed = ProcessedItemOrAlias<'src>;
-
-    fn process(self, ctx: &mut ParseContext) -> Self::Processed {
-        crate::process_parsed_item(self, ctx)
-    }
-
-    fn parser() -> impl ZngParser<'src, Self> {
-        crate::item()
+        match_stmt::<Scrutinee, Item, ManyItemBody>(block)
+            .map(|item| Condition::<Scrutinee, Item, ManyItemBody>::Match(item))
+            .boxed()
     }
 }

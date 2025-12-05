@@ -26,11 +26,13 @@ mod tests;
 pub mod cfg;
 mod conditional;
 
-use crate::cfg::{CargoEnvRustCfgProvider, ParsedMatchCfg, RustCfgProvider};
-use conditional::{ParsedConditionMany, match_item};
+use crate::{
+    cfg::{CargoEnvRustCfgProvider, CfgConditional, RustCfgProvider},
+    conditional::{Condition, ConditionalItem, ManyItemBody, conditional_item},
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Spanned<T> {
+pub struct Spanned<T> {
     inner: T,
     span: Span,
 }
@@ -47,7 +49,7 @@ type ParserInput<'a> = chumsky::input::MappedInput<
 >;
 
 type BoxedZngParser<'a, Item> =
-    chumsky::Boxed<ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>>;
+    chumsky::Boxed<'a, 'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>>;
 
 /// Effective trait alias for verbose chumsky Parser Trait
 trait ZngParser<'a, Item>:
@@ -229,7 +231,7 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
-    MatchOnCfg(ParsedConditionMany<'a, ParsedMatchCfg<'a>, ParsedItem<'a>>),
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, ManyItemBody>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -303,7 +305,7 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
-    MatchOnCfg(ParsedConditionMany<'a, ParsedMatchCfg<'a>, ParsedTypeItem<'a>>),
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, ManyItemBody>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -502,7 +504,7 @@ impl ProcessedItem<'_> {
                         }
                         ParsedTypeItem::MatchOnCfg(match_) => {
                             let result = match_.eval(ctx);
-                            if !result.is_empty() {
+                            if let Some(result) = result {
                                 to_process.extend(result);
                             }
                         }
@@ -1063,6 +1065,7 @@ fn process_parsed_item<'a>(
         ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
             match_
                 .eval(ctx)
+                .unwrap_or_default() // unwrap or empty
                 .into_iter()
                 .map(|item| item.inner)
                 .collect(),
@@ -1637,8 +1640,8 @@ fn inner_type_item<'a>()
             Token::Str(c) => c,
         })
         .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-    let match_stmt =
-        match_item::<ParsedMatchCfg<'a>, ParsedTypeItem<'a>>().map(ParsedTypeItem::MatchOnCfg);
+    let match_stmt = conditional_item::<'a, ParsedTypeItem<'a>, ManyItemBody, CfgConditional<'a>>()
+        .map(ParsedTypeItem::MatchOnCfg);
     match_stmt.or(choice((
         layout,
         traits,
@@ -1772,7 +1775,8 @@ fn item<'a>()
             additional_include_item(),
             import_item(),
             alias(),
-            match_item::<ParsedMatchCfg<'a>, ParsedItem<'a>>().map(ParsedItem::MatchOnCfg),
+            conditional_item::<ParsedItem<'a>, ManyItemBody, CfgConditional<'a>>()
+                .map(ParsedItem::MatchOnCfg),
         ))
     })
     .boxed()
@@ -1819,4 +1823,32 @@ fn path<'a>()
             span: extra.span(),
         })
         .boxed()
+}
+
+impl<'a> conditional::BodyItem for crate::ParsedTypeItem<'a> {
+    type Processed = Self;
+
+    fn process(self, _ctx: &mut ParseContext) -> Self::Processed {
+        self
+    }
+}
+
+impl<'src> conditional::BodyItemParse<'src> for crate::ParsedTypeItem<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::inner_type_item().boxed()
+    }
+}
+
+impl<'a> conditional::BodyItem for crate::ParsedItem<'a> {
+    type Processed = ProcessedItemOrAlias<'a>;
+
+    fn process(self, ctx: &mut ParseContext) -> Self::Processed {
+        crate::process_parsed_item(self, ctx)
+    }
+}
+
+impl<'src> conditional::BodyItemParse<'src> for crate::ParsedItem<'src> {
+    fn parser() -> impl ZngParser<'src, Self> {
+        crate::item()
+    }
 }
