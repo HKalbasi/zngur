@@ -66,8 +66,6 @@ pub trait ConditionBodyCardinality<Item: BodyItem>:
 }
 
 /// a trait for a conditional item in a parsed spec
-/// evaluated through dynamic dispatch to allow different types to appear in the arms of the same
-/// conditional statment `#if type_1 = pat {} #else if type_2 = pat {}`
 pub trait ConditionalItem<Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>> {
     /// Evaluate the statment and produce resulting items of the first arm that passes
     fn eval(&self, ctx: &mut ParseContext) -> Option<Cardinality::EvalResult>;
