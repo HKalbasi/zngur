@@ -403,16 +403,17 @@ where
             just([Token::Sharp, Token::KwElse, Token::KwIf])
                 .ignore_then(guard)
                 .repeated()
-                .collect::<Vec<_>>(),
+                .collect::<Vec<_>>()
+                .or_not(),
         )
         .then(
             just([Token::Sharp, Token::KwElse])
-                .ignore_then(fallback)
+                .ignore_then(fallback.delimited_by(just(Token::BraceOpen), just(Token::BraceClose)))
                 .or_not(),
         )
         .map(|((if_block, else_if_blocks), else_block)| {
             let mut arms: Vec<ConditionBranch<Scrutinee, Item, Cardinality>> = vec![if_block];
-            arms.extend(else_if_blocks);
+            arms.extend(else_if_blocks.unwrap_or_default());
             ConditionIf {
                 arms,
                 fallback: else_block,
@@ -470,7 +471,7 @@ where
         .ignore_then(spanned(<Scrutinee as MatchableParse>::parser()))
         .then(
             spanned(arm)
-                .separated_by(just(Token::Comma))
+                .separated_by(just(Token::Comma).or_not())
                 .allow_trailing()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),

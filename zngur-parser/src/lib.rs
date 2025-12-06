@@ -1641,10 +1641,7 @@ fn inner_type_item<'a>()
         })
         .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
     recursive(|item| {
-        let match_stmt =
-            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedTypeItem::MatchOnCfg);
-
-        match_stmt.or(choice((
+        let inner_item = choice((
             layout,
             traits,
             constructor,
@@ -1669,8 +1666,12 @@ fn inner_type_item<'a>()
                     use_path,
                     data,
                 }),
-        ))
-        .then_ignore(just(Token::Semicolon)))
+        ));
+
+        let match_stmt =
+            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedTypeItem::MatchOnCfg);
+
+        choice((match_stmt, inner_item.then_ignore(just(Token::Semicolon))))
     })
 }
 

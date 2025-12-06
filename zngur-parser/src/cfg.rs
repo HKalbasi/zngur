@@ -23,17 +23,17 @@ pub struct InMemoryRustCfgProvider {
 }
 
 impl InMemoryRustCfgProvider {
-    pub fn new<CfgPairs, CfgKey, CfgValues, CfgValue, FeatureValues, FeatureValue>(
+    pub fn new<'a, CfgPairs, CfgKey, CfgValues, FeatureValues>(
         cfg_vlaues: CfgPairs,
         features: FeatureValues,
     ) -> Self
     where
-        CfgPairs: IntoIterator<Item = (CfgKey, CfgValues)>,
-        CfgKey: AsRef<str>,
-        CfgValues: IntoIterator<Item = CfgValue>,
-        CfgValue: AsRef<str>,
-        FeatureValues: IntoIterator<Item = FeatureValue>,
-        FeatureValue: AsRef<str>,
+        CfgPairs: IntoIterator<Item = &'a (CfgKey, CfgValues)>,
+        CfgKey: AsRef<str> + 'a,
+        CfgValues: Clone + IntoIterator + 'a,
+        <CfgValues as IntoIterator>::Item: AsRef<str>,
+        FeatureValues: IntoIterator,
+        FeatureValues::Item: AsRef<str> + 'a,
     {
         InMemoryRustCfgProvider {
             cfg: Rc::new(
@@ -43,6 +43,7 @@ impl InMemoryRustCfgProvider {
                         (
                             key.as_ref().to_string(),
                             values
+                                .clone()
                                 .into_iter()
                                 .map(|value| value.as_ref().to_string())
                                 .collect::<Vec<_>>(),
@@ -212,9 +213,7 @@ impl<'src> Matchable for CfgConditional<'src> {
                             .then_some(ProcessedCfgScrutinee::Some)
                     })
                     .unwrap_or(ProcessedCfgScrutinee::Empty),
-                CfgScrutinee::AllFeatures => {
-                    ProcessedCfgScrutinee::Values(cfg.get_features())
-                }
+                CfgScrutinee::AllFeatures => ProcessedCfgScrutinee::Values(cfg.get_features()),
                 CfgScrutinee::Feature(feature) => {
                     if cfg.get_features().iter().any(|value| value == feature) {
                         ProcessedCfgScrutinee::Some
@@ -266,13 +265,22 @@ impl CfgPattern<'_> {
                 if scrutinee.len() == 1 {
                     let scrutinee = scrutinee.first().unwrap();
                     pat.iter().any(|pat| pat.matches(scrutinee))
+                } else if pat.len() == 1
+                    && let Some(CfgPatternItem::Empty) = pat.first()
+                {
+                    // empty pattern matches all
+                    true
                 } else {
                     ctx.add_error_str("Can not match pattern against multiple cfg values.", *span);
                     false
                 }
             }
             Self::Tuple(pats, span) => {
-                if pats.len() != scrutinee.len() {
+                if scrutinee.len() == 1 {
+                    let scrutinee = scrutinee.first().unwrap();
+                    pats.iter()
+                        .all(|pat| pat.iter().any(|pat| pat.matches(scrutinee)))
+                } else if pats.len() != scrutinee.len() {
                     ctx.add_error_str(
                         "Number of pattern values and number of config values does not match.",
                         *span,
