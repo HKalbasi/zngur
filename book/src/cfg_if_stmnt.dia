@@ -1,0 +1,10 @@
+{
+ ["#if" 
+   [<["(" 'cfg-expr' ["," 'cfg-expr'] * `repeat` ")"], 'cfg-expr'>]#`The Scrutinee` "="
+   'pattern-expr'#`Pattern` ["{" 'item'? * `repeat` "}"]#`Item Block`
+ ],
+ ["#else" "if" 
+   [<["(" 'cfg-expr' ["," 'cfg-expr'] * `repeat` ")"], 'cfg-expr'>]#`The Scrutinee` "="
+   'pattern-expr'#`Pattern` ["{" 'item'? * `repeat` "}"]#`Item Block` ]? * `repeat`,
+ ["#else" ["{" 'item'? * `repeat` "}"]#`Item Block` ]?  
+}

@@ -1,0 +1,11 @@
+{
+  ["#match" [<["(" 'cfg-expr' ["," 'cfg-expr'] * `repeat` ")"], 'cfg-expr'>]#`The Scrutinee` "{"],
+  {
+    [[ 'pattern-expr'#`Pattern` "=>" <
+        ["{" 'item'? * `repeat` "}"],
+        'item'
+      >#`Item Block` ","?
+    ] * `repeat`]
+  },
+  ["}"]
+}
