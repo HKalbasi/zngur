@@ -480,9 +480,9 @@ static EMPTY_CFG: [(&str, &[&str]); 0] = [];
 fn test_if_conditional_type_item() {
     let source = r#"
 type ::std::string::String {
-    #if #cfg(target_arch) = "64" {
+    #if cfg!(target_arch) = "64" {
         #layout(size = 24, align = 8);
-    } #else if #cfg(target_arch) = "32" {
+    } #else if cfg!(target_arch) = "32" {
         #layout(size = 12, align = 4);
     } #else {
         // silly size for testing
@@ -510,16 +510,16 @@ type ::std::string::String {
 
 #[test]
 fn test_match_conditional_type_item() {
-    // single item arm
-    // optional comma seperator arm
-    // empty pattern arm
     let source = r#"
 type ::std::string::String {
-    #match #cfg(target_arch) {
+    #match cfg!(target_arch) {
+        // single item arm
         "64" => #layout(size = 24, align = 8);
-        "32" => {
+        // match usize numbers
+        32 => {
             #layout(size = 12, align = 4);
         },
+     
         _ => {
             // silly size for testing
             #layout(size = 27, align = 9);
@@ -566,7 +566,7 @@ type CfgPathPairs<'a> = &'a [(&'a [(&'a str, &'a [&'a str])], &'a [&'a str], &'a
 #[test]
 fn conditional_if_spec_item() {
     let source = r#"
-#if #cfg(feature) = "foo" {
+#if cfg!(feature) = "foo" {
     type crate::Foo {
         #layout(size = 1, align = 1);
     }
@@ -587,7 +587,7 @@ fn conditional_if_spec_item() {
 #[test]
 fn conditional_match_spec_item() {
     let source = r#"
-#match #cfg(feature) {
+#match cfg!(feature) {
     "foo" => type crate::Foo {
         #layout(size = 1, align = 1);
     }
@@ -608,13 +608,16 @@ fn conditional_match_spec_item() {
 #[test]
 fn match_pattern_single_cfg() {
     let source = r#"
-#match #cfg(feature) {
+#match cfg!(feature) {
     "bar" | "zigza" => type crate::BarZigZa {
         #layout(size = 1, align = 1);
     }
     // match two values from a cfg value as a set 
-    // TODO:? (only works when matching a single cfg key)
-    ("foo" , "baz") => type crate::FooBaz {
+    "foo" & "baz" => type crate::FooBaz {
+        #layout(size = 1, align = 1);
+    }
+    // negative matching (no feature baz)
+    "foo" & !"baz" => type crate::FooNoBaz {
         #layout(size = 1, align = 1);
     }
     _ => {
@@ -625,7 +628,8 @@ fn match_pattern_single_cfg() {
 }
     "#;
     let pairs: CfgPathPairs = &[
-        (&EMPTY_CFG, &["foo"], &["crate", "Zoop"]),
+        (&EMPTY_CFG, &EMPTY_FEATURES, &["crate", "Zoop"]),
+        (&EMPTY_CFG, &["foo"], &["crate", "FooNoBaz"]),
         (&EMPTY_CFG, &["bar"], &["crate", "BarZigZa"]),
         (&EMPTY_CFG, &["zigza"], &["crate", "BarZigZa"]),
         (&EMPTY_CFG, &["foo", "baz"], &["crate", "FooBaz"]),
@@ -636,12 +640,12 @@ fn match_pattern_single_cfg() {
 #[test]
 fn match_pattern_multi_cfg() {
     let source = r#"
-#match #cfg(feature.foo, target_arch) {
+#match (cfg!(feature.foo), cfg!(target_arch)) {
     // match two cfg keys as a set
     (Some, "32") => type crate::Foo32 {
         #layout(size = 1, align = 1);
     }
-    (None, "64") => type crate::NoFoo64 {
+    (None, 64) => type crate::NoFoo64 {
         #layout(size = 1, align = 1);
     }
     _ => {
@@ -663,13 +667,13 @@ fn match_pattern_multi_cfg() {
 #[test]
 fn match_pattern_multi_cfg_bad_pattern() {
     let source = r#"
-#match #cfg(feature.foo, target_arch) {
+#match (cfg!(feature.foo), cfg!(target_arch)) {
     (Some, "32") => type crate::Foo32 { 
         // would succeed if cfg match attempted
         #layout(size = 1, align = 1);
     }
     "64" => type crate::NoFoo64 { 
-        // will fail: cardinality of pattern and #cfg() don't match
+        // will fail: cardinality of pattern and tuple don't match
         #layout(size = 1, align = 1);
     }
     _ => {
@@ -683,12 +687,50 @@ fn match_pattern_multi_cfg_bad_pattern() {
         source,
         &InMemoryRustCfgProvider::new(&[("target_arch", &["64"])], &EMPTY_FEATURES),
         expect![[r#"
-            Error: Can not match pattern against multiple cfg values.
+            Error: Can not match single pattern against multiple cfg values.
                ╭─[test.zng:7:5]
                │
              7 │     "64" => type crate::NoFoo64 {
                │     ──┬─  
-               │       ╰─── Can not match pattern against multiple cfg values.
+               │       ╰─── Can not match single pattern against multiple cfg values.
+            ───╯
+        "#]],
+    );
+}
+
+#[test]
+fn match_pattern_multi_cfg_bad_pattern2() {
+    let source = r#"
+#match (cfg!(feature.foo), cfg!(target_arch), cfg!(target_feature) ) {
+    (Some, "32", "avx" & "avx2") => type crate::Foo32 { 
+        // would succeed if cfg match attempted
+        #layout(size = 1, align = 1);
+    }
+    (None, "64") => type crate::NoFoo64 { 
+        // will fail: cardinality of pattern and tuple don't match
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::SpecialFoo {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    let cfg: &[(&str, &[&str])] = &[
+        ("target_arch", &["64"]),
+        ("target_feature", &["avx", "avx2"]),
+    ];
+    check_fail_with_cfg(
+        source,
+        &InMemoryRustCfgProvider::new(cfg, &EMPTY_FEATURES),
+        expect![[r#"
+            Error: Number of patterns and number of scrutinees do not match.
+               ╭─[test.zng:7:5]
+               │
+             7 │     (None, "64") => type crate::NoFoo64 {
+               │     ──────┬─────  
+               │           ╰─────── Number of patterns and number of scrutinees do not match.
             ───╯
         "#]],
     );

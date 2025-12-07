@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::{
-    ParseContext, Span, Spanned, Token, ZngParser,
+    ParseContext, Span, Token, ZngParser,
     conditional::{MatchPattern, MatchPatternParse, Matchable, MatchableParse},
     spanned,
 };
@@ -111,7 +111,7 @@ impl RustCfgProvider for CargoEnvRustCfgProvider {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum CfgScrutinee<'src> {
     Key(&'src str),
     KeyWithItem(&'src str, &'src str),
@@ -125,12 +125,17 @@ pub(crate) enum ProcessedCfgScrutinee {
     Some,
     Values(Vec<String>),
 }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum ProcessedCfgConditional {
+    Single(ProcessedCfgScrutinee),
+    Tuple(Vec<ProcessedCfgScrutinee>),
+}
 
 /// Match on config keys and features
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct CfgConditional<'src> {
-    /// a list of confg key paths
-    pub keys: Vec<CfgScrutinee<'src>>,
+pub(crate) enum CfgConditional<'src> {
+    Single(CfgScrutinee<'src>),
+    Tuple(Vec<CfgScrutinee<'src>>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,50 +143,80 @@ pub(crate) enum CfgPatternItem<'src> {
     Empty, // a `_` pattern
     Some,  // the config has "some" value for the key
     None,  // the config has "no" value for the key
-    Value(Spanned<&'src str>),
+    Str(&'src str),
+    Number(usize),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CfgPattern<'src> {
-    Single(Vec<CfgPatternItem<'src>>, Span),
-    Tuple(Vec<Vec<CfgPatternItem<'src>>>, Span),
+    Single(CfgPatternItem<'src>, Span),
+    And(Vec<CfgPattern<'src>>, Span),
+    Or(Vec<CfgPattern<'src>>, Span),
+    Not(Box<CfgPattern<'src>>, Span),
+    Grouped(Box<CfgPattern<'src>>, Span),
+    Tuple(Vec<CfgPattern<'src>>, Span),
 }
 
 impl<'src> MatchPattern for CfgPattern<'src> {}
 impl<'src> MatchPatternParse<'src> for CfgPattern<'src> {
     fn parser() -> impl ZngParser<'src, Self> {
-        let or_pat = choice((
-            just(Token::Underscore).to(CfgPatternItem::Empty),
-            spanned(select! {
-                Token::Str(c) => c
-            })
-            .map(CfgPatternItem::Value),
-            just(Token::Ident("Some")).to(CfgPatternItem::Some),
-            just(Token::Ident("None")).to(CfgPatternItem::None),
-        ))
-        .separated_by(just(Token::Pipe))
-        .at_least(1)
-        .collect::<Vec<_>>();
-
-        choice((
-            spanned(
-                or_pat
-                    .clone()
-                    .separated_by(just(Token::Comma))
-                    .at_least(1)
-                    .allow_trailing()
-                    .collect::<Vec<_>>()
+        let single = recursive(|pat| {
+            let literals = select! {
+                Token::Str(c) => CfgPatternItem::Str(c),
+                Token::Number(n) => CfgPatternItem::Number(n),
+            };
+            let atom = choice((
+                spanned(literals),
+                spanned(just(Token::Underscore).to(CfgPatternItem::Empty)),
+                spanned(just(Token::Ident("Some")).to(CfgPatternItem::Some)),
+                spanned(just(Token::Ident("None")).to(CfgPatternItem::None)),
+            ))
+            .map(|item| CfgPattern::Single(item.inner, item.span))
+            .or(spanned(
+                pat.clone()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
             )
-            .map(|items| {
-                let span = items.span;
-                CfgPattern::Tuple(items.inner, span)
-            }),
-            spanned(or_pat).map(|pat| {
-                let span = pat.span;
-                CfgPattern::Single(pat.inner, span)
-            }),
-        ))
+            .map(|item| CfgPattern::Grouped(Box::new(item.inner), item.span)));
+
+            let not_pat = just(Token::Bang)
+                .repeated()
+                .foldr_with(atom, |_op, rhs, e| CfgPattern::Not(Box::new(rhs), e.span()));
+
+            let and_pat = not_pat.clone().foldl_with(
+                just(Token::And).ignore_then(not_pat).repeated(),
+                |lhs, rhs, e| match lhs {
+                    CfgPattern::And(mut items, _span) => {
+                        items.push(rhs);
+                        CfgPattern::And(items, e.span())
+                    }
+                    _ => CfgPattern::And(vec![lhs, rhs], e.span()),
+                },
+            );
+
+            let or_pat = and_pat.clone().foldl_with(
+                just(Token::Pipe).ignore_then(and_pat).repeated(),
+                |lhs, rhs, e| match lhs {
+                    CfgPattern::Or(mut items, _span) => {
+                        items.push(rhs);
+                        CfgPattern::Or(items, e.span())
+                    }
+                    _ => CfgPattern::Or(vec![lhs, rhs], e.span()),
+                },
+            );
+
+            or_pat
+        });
+
+        spanned(
+            single
+                .clone()
+                .separated_by(just(Token::Comma))
+                .at_least(1)
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(|item| CfgPattern::Tuple(item.inner, item.span))
+        .or(single)
     }
 }
 
@@ -190,10 +225,9 @@ impl<'src> Matchable for CfgConditional<'src> {
 
     fn eval(&self, pattern: &Self::Pattern, ctx: &mut ParseContext) -> bool {
         let cfg = ctx.get_config_provider();
-        let scrutinee = self
-            .keys
-            .iter()
-            .map(|key| match key {
+
+        let process = |key: &CfgScrutinee<'src>| -> ProcessedCfgScrutinee {
+            match key {
                 CfgScrutinee::Key(key) => cfg
                     .get_cfg(key)
                     .map(|values| {
@@ -221,8 +255,15 @@ impl<'src> Matchable for CfgConditional<'src> {
                         ProcessedCfgScrutinee::Empty
                     }
                 }
-            })
-            .collect::<Vec<_>>();
+            }
+        };
+
+        let scrutinee = match self {
+            Self::Single(key) => ProcessedCfgConditional::Single(process(key)),
+            Self::Tuple(keys) => {
+                ProcessedCfgConditional::Tuple(keys.iter().map(process).collect::<Vec<_>>())
+            }
+        };
 
         pattern.matches(&scrutinee, ctx)
     }
@@ -230,67 +271,99 @@ impl<'src> Matchable for CfgConditional<'src> {
 
 impl<'src> MatchableParse<'src> for CfgConditional<'src> {
     fn parser() -> impl ZngParser<'src, Self> {
-        just([Token::Sharp, Token::Ident("cfg")])
-            .ignore_then(
-                (select! {Token::Ident(c) => c})
-                    .separated_by(just(Token::Dot))
-                    .at_least(1)
-                    .at_most(2)
-                    .collect::<Vec<_>>()
-                    .map(|item| {
-                        match &item[..] {
-                            [key] if key == &"feature" => CfgScrutinee::AllFeatures,
-                            [key, item] if key == &"feature" => CfgScrutinee::Feature(item),
-                            [key] => CfgScrutinee::Key(key),
-                            [key, item] => CfgScrutinee::KeyWithItem(key, item),
-                            // the above at_least(1) and at_most(2) calls
-                            // prevent this branch
-                            _ => unreachable!(),
-                        }
-                    })
-                    .separated_by(just(Token::Comma))
-                    .allow_trailing()
-                    .at_least(1)
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(|item| CfgConditional { keys: item })
+        let directive = just([Token::Ident("cfg"), Token::Bang]).ignore_then(
+            (select! {Token::Ident(c) => c})
+                .separated_by(just(Token::Dot))
+                .at_least(1)
+                .at_most(2)
+                .collect::<Vec<_>>()
+                .map(|item| {
+                    match &item[..] {
+                        [key] if key == &"feature" => CfgScrutinee::AllFeatures,
+                        [key, item] if key == &"feature" => CfgScrutinee::Feature(item),
+                        [key] => CfgScrutinee::Key(key),
+                        [key, item] => CfgScrutinee::KeyWithItem(key, item),
+                        // the above at_least(1) and at_most(2) calls
+                        // prevent this branch
+                        _ => unreachable!(),
+                    }
+                })
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        );
+
+        choice((
+            directive.clone().map(|item| CfgConditional::Single(item)),
+            directive
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .at_least(1)
+                .collect::<Vec<_>>()
+                .map(|items| CfgConditional::Tuple(items))
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        ))
     }
 }
 
 impl CfgPattern<'_> {
-    fn matches(&self, scrutinee: &[ProcessedCfgScrutinee], ctx: &mut ParseContext) -> bool {
-        match self {
-            Self::Single(pat, span) => {
-                if scrutinee.len() == 1 {
-                    let scrutinee = scrutinee.first().unwrap();
-                    pat.iter().any(|pat| pat.matches(scrutinee))
-                } else if pat.len() == 1
-                    && let Some(CfgPatternItem::Empty) = pat.first()
-                {
-                    // empty pattern matches all
-                    true
-                } else {
-                    ctx.add_error_str("Can not match pattern against multiple cfg values.", *span);
-                    false
-                }
+    fn matches(&self, scrutinee: &ProcessedCfgConditional, ctx: &mut ParseContext) -> bool {
+        use ProcessedCfgConditional as PCC;
+        match (self, scrutinee) {
+            (Self::Tuple(pats, _), PCC::Single(scrutinee)) if pats.len() == 1 => {
+                let pat = pats.iter().last().unwrap();
+                // tuple is actually single
+                pat.matches(scrutinee, ctx)
             }
-            Self::Tuple(pats, span) => {
-                if scrutinee.len() == 1 {
-                    let scrutinee = scrutinee.first().unwrap();
-                    pats.iter()
-                        .all(|pat| pat.iter().any(|pat| pat.matches(scrutinee)))
-                } else if pats.len() != scrutinee.len() {
+            (Self::Single(pat, _), PCC::Tuple(scrutinees)) if scrutinees.len() == 1 => {
+                let scrutinee = scrutinees.iter().last().unwrap();
+                // tuple is actually single
+                pat.matches(scrutinee)
+            }
+            (Self::Single(CfgPatternItem::Empty, _), PCC::Tuple(_)) => {
+                // empty pattern matches anything
+                true
+            }
+            (Self::Tuple(_, span), PCC::Single(_)) => {
+                ctx.add_error_str(
+                    "Can not match tuple pattern against a single cfg value.",
+                    *span,
+                );
+                false
+            }
+            (
+                Self::Single(_, span)
+                | Self::Not(_, span)
+                | Self::And(_, span)
+                | Self::Or(_, span)
+                | Self::Grouped(_, span),
+                PCC::Tuple(_),
+            ) => {
+                ctx.add_error_str(
+                    "Can not match single pattern against multiple cfg values.",
+                    *span,
+                );
+                false
+            }
+            (Self::Tuple(pats, span), PCC::Tuple(scrutinees)) => {
+                if scrutinees.len() != pats.len() {
                     ctx.add_error_str(
-                        "Number of pattern values and number of config values does not match.",
+                        "Number of patterns and number of scrutinees do not match.",
                         *span,
                     );
                     false
                 } else {
                     pats.iter()
-                        .zip(scrutinee.iter())
-                        .all(|(pat, scrutinee)| pat.iter().any(|pat| pat.matches(scrutinee)))
+                        .zip(scrutinees.iter())
+                        .all(|(pat, scrutinee)| pat.matches(&PCC::Single(scrutinee.clone()), ctx))
                 }
+            }
+            (Self::Single(pat, _), PCC::Single(scrutinee)) => pat.matches(scrutinee),
+            (Self::Grouped(pat, _), PCC::Single(_)) => pat.matches(scrutinee, ctx),
+            (Self::Not(pat, _), PCC::Single(_)) => !pat.matches(scrutinee, ctx),
+            (Self::And(pats, _), PCC::Single(_)) => {
+                pats.iter().all(|pat| pat.matches(scrutinee, ctx))
+            }
+            (Self::Or(pats, _), PCC::Single(_)) => {
+                pats.iter().any(|pat| pat.matches(scrutinee, ctx))
             }
         }
     }
@@ -303,9 +376,15 @@ impl CfgPatternItem<'_> {
             Self::Empty => true,
             Self::Some => !matches!(scrutinee, PCS::Empty),
             Self::None => matches!(scrutinee, PCS::Empty),
-            Self::Value(v) => match &scrutinee {
+            Self::Str(v) => match &scrutinee {
                 PCS::Empty | PCS::Some => false,
-                PCS::Values(values) => values.iter().any(|value| value == v.inner),
+                PCS::Values(values) => values.iter().any(|value| value == v),
+            },
+            Self::Number(n) => match &scrutinee {
+                PCS::Empty | PCS::Some => false,
+                PCS::Values(values) => values
+                    .iter()
+                    .any(|value| value.parse::<usize>().map(|v| v == *n).unwrap_or(false)),
             },
         }
     }
