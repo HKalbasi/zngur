@@ -15,10 +15,15 @@ fn main() {
         .with_cpp_file(crate_dir.join("generated.cpp"))
         .with_h_file(crate_dir.join("generated.h"))
         .with_rs_file(crate_dir.join("./src/generated.rs"))
+        .with_output_dir(crate_dir.clone())
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).compiler(&cxx).std("c++17");
+    let my_build = my_build
+        .cpp(true)
+        .compiler(&cxx)
+        .include(&crate_dir)
+        .std("c++17");
     let my_build = || my_build.clone();
 
     my_build().file("generated.cpp").compile("zngur_generated");

@@ -44,18 +44,12 @@ macro_rules! splat {
 }
 
 #[derive(Template)]
-#[template(path = "cpp_header.sptl", escape = false)]
-pub(crate) struct CppHeaderTemplate<'a> {
-    pub(crate) panic_to_exception: &'a Option<PanicToExceptionSymbols>,
+#[template(path = "zngur_header.sptl", escape = false)]
+pub(crate) struct ZngurHeaderTemplate<'a> {
     pub(crate) additional_includes: &'a String,
-    pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
-    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
-    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
-    pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
-    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
 }
 
-impl<'a> CppHeaderTemplate<'a> {
+impl<'a> ZngurHeaderTemplate<'a> {
     // TODO: Docs - what do these represent? When will we change this list?
     fn builtin_types(&self) -> Vec<String> {
         let builtins = [8, 16, 32, 64]
@@ -76,7 +70,21 @@ impl<'a> CppHeaderTemplate<'a> {
             ])
             .collect()
     }
+}
 
+#[derive(Template)]
+#[template(path = "cpp_header.sptl", escape = false)]
+pub(crate) struct CppHeaderTemplate<'a> {
+    pub(crate) cpp_namespace: &'a String,
+    pub(crate) panic_to_exception: &'a Option<PanicToExceptionSymbols>,
+    pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
+    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
+    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
+}
+
+impl<'a> CppHeaderTemplate<'a> {
     fn panic_handler(&self) -> String {
         if let Some(symbols) = &self.panic_to_exception {
             format!(

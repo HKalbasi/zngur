@@ -9,7 +9,7 @@ use zngur_def::{CppRef, CppValue, RustTrait, ZngurField, ZngurMethodReceiver};
 
 use crate::{
     ZngurWellknownTraitData,
-    template::{CppHeaderTemplate, CppSourceTemplate},
+    template::{CppHeaderTemplate, CppSourceTemplate, ZngurHeaderTemplate},
 };
 use sailfish::Template;
 
@@ -41,16 +41,69 @@ impl CppPath {
         self.0.split_last().unwrap().0
     }
 
-    fn need_header(&self) -> bool {
-        self.0.first().map(|x| x.as_str()) == Some("rust")
-            && self.0 != ["rust", "Unit"]
-            && self.0 != ["rust", "Ref"]
-            && self.0 != ["rust", "RefMut"]
+    /// Returns true if this is an infrastructure template type defined in zngur.h.
+    ///
+    /// These types have generic template definitions in zngur.h and never appear
+    /// in type_defs as they don't need per-type specialization in the generated header.
+    pub(crate) fn is_infrastructure_template(&self) -> bool {
+        matches!(
+            self.0
+                .iter()
+                .map(|s| s.as_str())
+                .collect::<Vec<_>>()
+                .as_slice(),
+            ["rust", "Ref"]
+                | ["rust", "RefMut"]
+                | ["rust", "Raw"]
+                | ["rust", "RawMut"]
+                | ["rust", "FieldOwned"]
+                | ["rust", "FieldRef"]
+                | ["rust", "FieldRefMut"]
+                | ["rust", "ZngurCppOpaqueOwnedObject"]
+                | ["rust", "Tuple"] // generic Tuple, not Unit
+        )
     }
 
-    pub(crate) fn from_rust_path(path: &[String]) -> CppPath {
+    /// Returns true if this type is rust::Unit (the empty tuple).
+    pub(crate) fn is_unit(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Unit"
+    }
+
+    /// Returns true if this type is rust::Bool.
+    pub(crate) fn is_bool(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Bool"
+    }
+
+    /// Returns true if this type is rust::Str.
+    pub(crate) fn is_str(&self) -> bool {
+        self.0.len() == 2 && self.0[0] == "rust" && self.0[1] == "Str"
+    }
+
+    /// Returns whether this type needs a forward declaration in the generated header.
+    ///
+    /// Forward declarations are needed for user-defined types so they can be
+    /// referenced before their full definition. Returns false for:
+    /// - Primitive types (uint8_t, int32_t) - built-in to C++
+    /// - Infrastructure types (Ref, RefMut, Raw, etc.) - defined in zngur.h as generic templates
+    /// - Unit type - fully defined in zngur.h as Tuple<> specialization
+    fn needs_forward_declaration(&self) -> bool {
+        // Primitive types (like uint8_t, int32_t, etc.) have no namespace - just a single component
+        if self.0.len() == 1 {
+            return false;
+        }
+
+        // Skip infrastructure types defined in zngur.h
+        if self.is_infrastructure_template() || self.is_unit() {
+            return false;
+        }
+
+        // User types need forward declarations
+        true
+    }
+
+    pub(crate) fn from_rust_path(path: &[String], namespace: &str) -> CppPath {
         CppPath(
-            iter::once("rust")
+            iter::once(namespace)
                 .chain(path.iter().map(|x| x.as_str()))
                 .map(cpp_handle_keyword)
                 .map(|x| x.to_owned())
@@ -105,6 +158,16 @@ impl CppType {
         }
     }
 
+    /// Returns true if this type is rust::Bool.
+    pub(crate) fn is_bool(&self) -> bool {
+        self.path.is_bool()
+    }
+
+    /// Returns true if this type is rust::Str.
+    pub(crate) fn is_str(&self) -> bool {
+        self.path.is_str()
+    }
+
     pub(crate) fn specialization_decl(&self) -> String {
         if self.generic_args.is_empty() {
             format!("struct {}", self.path.name())
@@ -123,7 +186,7 @@ impl CppType {
             x.header_helper(state)?;
         }
 
-        if !self.path.need_header() {
+        if !self.path.needs_forward_declaration() {
             return Ok(());
         }
 
@@ -223,7 +286,12 @@ pub(crate) struct State {
 impl State {
     fn remove_no_except_in_panic(&mut self) {
         if self.panic_to_exception.is_some() {
+            // Remove noexcept when converting panics to exceptions
+            // Handle various cases: " noexcept ", " noexcept;", " noexcept{", etc.
             self.text = self.text.replace(" noexcept ", " ");
+            self.text = self.text.replace(" noexcept;", ";");
+            self.text = self.text.replace(" noexcept{", "{");
+            self.text = self.text.replace(" noexcept}", "}");
         }
     }
 }
@@ -350,10 +418,10 @@ pub struct CppFile {
 }
 
 impl CppFile {
-    fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_h_file(&self, state: &mut State, cpp_namespace: &str) -> std::fmt::Result {
         let template = CppHeaderTemplate {
+            cpp_namespace: &cpp_namespace.to_owned(),
             panic_to_exception: &self.panic_to_exception,
-            additional_includes: &self.additional_includes,
             fn_deps: &self.fn_defs,
             type_defs: &self.type_defs,
             trait_defs: &self.trait_defs,
@@ -362,6 +430,13 @@ impl CppFile {
         };
         state.text += template.render().unwrap().as_str();
         Ok(())
+    }
+
+    fn emit_zngur_h_file(&self) -> String {
+        let template = ZngurHeaderTemplate {
+            additional_includes: &self.additional_includes,
+        };
+        template.render().unwrap()
     }
 
     fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
@@ -380,7 +455,7 @@ impl CppFile {
         Ok(())
     }
 
-    pub fn render(self) -> (String, Option<String>) {
+    pub fn render(self, cpp_namespace: &str) -> (String, String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception.clone(),
@@ -389,12 +464,21 @@ impl CppFile {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception.clone(),
         };
-        self.emit_h_file(&mut h_file).unwrap();
+        let mut zngur_h_state = State {
+            text: self.emit_zngur_h_file(),
+            panic_to_exception: self.panic_to_exception.clone(),
+        };
+        self.emit_h_file(&mut h_file, cpp_namespace).unwrap();
         let mut is_cpp_needed = false;
         self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
             .unwrap();
         h_file.remove_no_except_in_panic();
-        (h_file.text, is_cpp_needed.then_some(cpp_file.text))
+        zngur_h_state.remove_no_except_in_panic();
+        (
+            h_file.text,
+            zngur_h_state.text,
+            is_cpp_needed.then_some(cpp_file.text),
+        )
     }
 }
 
