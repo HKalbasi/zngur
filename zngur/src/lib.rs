@@ -118,7 +118,8 @@ impl Zngur {
             }
 
             // Then add the primary header content, but skip the #include <zngur.h> line
-            let primary_without_include = generated.primary_header
+            let primary_without_include = generated
+                .primary_header
                 .lines()
                 .filter(|line| !line.contains("#include <zngur.h>"))
                 .collect::<Vec<_>>()
