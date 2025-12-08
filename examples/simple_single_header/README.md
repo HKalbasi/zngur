@@ -24,11 +24,13 @@ make
 ## When to use single-header mode
 
 Use `--single-header` when:
+
 - You want simpler build configuration (no need to manage include paths for utility headers)
 - You're migrating from an older version of zngur
 - You have a simple project that doesn't need the modularity of split headers
 
 Use split headers (default) when:
+
 - You have multiple zngur-generated libraries that can share the same `zngur.h`
 - You want faster incremental compilation (changes to your types don't require recompiling the infrastructure)
 - You want cleaner separation between infrastructure and user code

@@ -9,9 +9,11 @@ Zngur generates both Rust and C++ files from a `.zng` interface definition file.
 By default, Zngur generates one Rust file and three C++ files:
 
 **Rust:**
+
 1. **`generated.rs`** - Rust bridge code and FFI declarations
 
 **C++:**
+
 1. **`zngur.h`** - Foundation header with core utilities
 2. **`generated.h`** - Main header with Rust type wrappers and inline functions
 3. **`generated.cpp`** - Implementation file with method bodies and C++ bridge code
@@ -19,6 +21,7 @@ By default, Zngur generates one Rust file and three C++ files:
 This mode provides better modularity and allows `zngur.h` to be shared across multiple independent Zngur-generated libraries.
 
 **Usage:**
+
 ```bash
 zngur g main.zng -o output_dir
 ```
@@ -30,6 +33,7 @@ The `-o` flag specifies where `zngur.h` should be generated. You must add this d
 For backward compatibility and simpler build setups, you can use the `--single-header` flag to merge `zngur.h` into `generated.h`:
 
 **Usage:**
+
 ```bash
 zngur g main.zng --single-header
 ```
@@ -37,9 +41,11 @@ zngur g main.zng --single-header
 This generates one Rust file and two C++ files:
 
 **Rust:**
+
 1. **`generated.rs`** - Rust bridge code and FFI declarations
 
 **C++:**
+
 1. **`generated.h`** - Contains both foundation utilities and type wrappers
 2. **`generated.cpp`** - Implementation file
 
@@ -109,6 +115,7 @@ pub extern "C" fn _zngur_mangled_name(i0: *mut u8, i1: *mut u8, o: *mut u8) {
 ```
 
 These functions:
+
 - Use mangled names to avoid symbol conflicts
 - Accept arguments and return value as raw `*mut u8` pointers
 - Use `ptr::read` to move values from C++ to Rust
@@ -859,10 +866,13 @@ This creates a clear and predictable naming scheme.
 Zngur's generated files work together to enable seamless bidirectional interop:
 
 ### Rust Side (Both Modes)
+
 - **`generated.rs`** contains FFI bridge functions, trait wrappers, and compile-time assertions
 
 ### Split-Header Mode (Default)
+
 **C++:**
+
 - **`zngur.h`** provides reusable infrastructure (templates, utilities, base types)
 - **`generated.h`** defines C++ wrappers, with type declarations and inline functions
 - **`generated.cpp`** contains method implementations and C++ → Rust call bridges
@@ -870,7 +880,9 @@ Zngur's generated files work together to enable seamless bidirectional interop:
 The separation between foundation and application-specific code reduces compilation time, enables header reuse across multiple libraries, and keeps template functions inline for performance.
 
 ### Single-Header Mode (`--single-header`)
+
 **C++:**
+
 - **`generated.h`** contains both infrastructure and type wrappers (merged)
 - **`generated.cpp`** contains method implementations and C++ → Rust call bridges
 
