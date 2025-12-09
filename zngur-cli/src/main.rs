@@ -29,6 +29,13 @@ enum Command {
         #[arg(long)]
         rs_file: Option<PathBuf>,
 
+        /// Path of the dependency file (.d file) to generate
+        ///
+        /// The dependency file lists all .zng files that were processed.
+        /// This can be used by build systems to detect when regeneration is needed.
+        #[arg(long)]
+        depfile: Option<PathBuf>,
+
         /// A unique string which is included in zngur symbols to prevent duplicate
         /// symbols in linker
         ///
@@ -55,6 +62,7 @@ fn main() {
             cpp_file,
             h_file,
             rs_file,
+            depfile,
             mangling_base,
             cpp_namespace,
         } => {
@@ -66,6 +74,9 @@ fn main() {
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
                 .with_rs_file(rs_file);
+            if let Some(depfile) = depfile {
+                zng = zng.with_depfile(depfile);
+            }
             if let Some(mangling_base) = mangling_base {
                 zng = zng.with_mangling_base(&mangling_base);
             }

@@ -151,7 +151,7 @@ type MyString {
 }
     "#,
     );
-    let ty = parsed.types.first().expect("no type parsed");
+    let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
         panic!("no match?");
     };
@@ -171,7 +171,7 @@ mod crate {
 }
     "#,
     );
-    let ty = parsed.types.first().expect("no type parsed");
+    let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
         panic!("no match?");
     };
@@ -225,7 +225,7 @@ type Example {
     "#,
         &resolver,
     );
-    assert_eq!(parsed.types.len(), 2);
+    assert_eq!(parsed.spec.types.len(), 2);
 }
 
 #[test]
@@ -396,4 +396,80 @@ type A {
 }
         "#,
     );
+}
+
+// Tests for processed_files tracking (depfile support)
+
+#[test]
+fn processed_files_single_file() {
+    let parsed = ParsedZngFile::parse_str(
+        r#"
+type A {
+    #layout(size = 1, align = 1);
+}
+        "#,
+    );
+    // Should have exactly one file (test.zng)
+    assert_eq!(parsed.processed_files.len(), 1);
+    assert_eq!(
+        parsed.processed_files[0].file_name().unwrap().to_str().unwrap(),
+        "test.zng"
+    );
+}
+
+#[test]
+fn processed_files_with_import() {
+    let resolver = MockFilesystem::new(vec![(
+        "./imported.zng",
+        "type Imported { #layout(size = 1, align = 1); }",
+    )]);
+
+    let parsed = ParsedZngFile::parse_str_with_resolver(
+        r#"
+import "./imported.zng";
+type Main {
+    #layout(size = 1, align = 1);
+}
+        "#,
+        &resolver,
+    );
+    // Should have two files: main (test.zng) + imported
+    assert_eq!(parsed.processed_files.len(), 2);
+    let file_names: Vec<_> = parsed
+        .processed_files
+        .iter()
+        .map(|p| p.file_name().unwrap().to_str().unwrap())
+        .collect();
+    assert!(file_names.contains(&"test.zng"));
+    assert!(file_names.contains(&"imported.zng"));
+}
+
+#[test]
+fn processed_files_with_nested_imports() {
+    let resolver = MockFilesystem::new(vec![
+        ("./a.zng", r#"import "./b.zng"; type A { #layout(size = 1, align = 1); }"#),
+        ("./b.zng", r#"import "./c.zng"; type B { #layout(size = 1, align = 1); }"#),
+        ("./c.zng", "type C { #layout(size = 1, align = 1); }"),
+    ]);
+
+    let parsed = ParsedZngFile::parse_str_with_resolver(
+        r#"
+import "./a.zng";
+type Main {
+    #layout(size = 1, align = 1);
+}
+        "#,
+        &resolver,
+    );
+    // Should have four files: main + a + b + c
+    assert_eq!(parsed.processed_files.len(), 4);
+    let file_names: Vec<_> = parsed
+        .processed_files
+        .iter()
+        .map(|p| p.file_name().unwrap().to_str().unwrap())
+        .collect();
+    assert!(file_names.contains(&"test.zng"));
+    assert!(file_names.contains(&"a.zng"));
+    assert!(file_names.contains(&"b.zng"));
+    assert!(file_names.contains(&"c.zng"));
 }
