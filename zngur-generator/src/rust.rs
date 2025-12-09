@@ -6,7 +6,7 @@ use sha2::{Digest, Sha256};
 use crate::{
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
     cpp::{
-        CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
+        CppFnSig, CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
         PanicToExceptionSymbols,
     },
 };
@@ -712,7 +712,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         output: &RustType,
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
-    ) -> String {
+    ) -> CppFnSig {
         let mut mangled_name = self.mangle_name(rust_name) + "_" + &hash_of_sig(&inputs);
         if deref.is_some() {
             mangled_name += "_deref";
@@ -728,6 +728,14 @@ pub extern "C" fn {mangled_name}("#
         for n in 0..inputs.len() {
             w!(self, "i{n}: *mut u8, ");
         }
+        let (modified_output, is_impl_trait) = if let RustType::Impl(tr, bounds) = output {
+            (
+                RustType::Boxed(Box::new(RustType::Dyn(tr.clone(), bounds.clone()))),
+                true,
+            )
+        } else {
+            (output.clone(), false)
+        };
         wln!(self, "o: *mut u8) {{ unsafe {{");
         self.wrap_in_catch_unwind(|this| {
             if let Some(use_path) = use_path {
@@ -737,9 +745,11 @@ pub extern "C" fn {mangled_name}("#
                     wln!(this, "    use ::{};", use_path.iter().join("::"));
                 }
             }
+
             w!(
                 this,
-                "    ::std::ptr::write(o as *mut {output}, {rust_name}("
+                "    ::std::ptr::write(o as *mut {modified_output}, {impl_trait} {rust_name}(",
+                impl_trait = if is_impl_trait { "Box::new( " } else { "" },
             );
             match deref {
                 Some(Mutability::Mut) => w!(this, "::std::ops::DerefMut::deref_mut"),
@@ -749,10 +759,18 @@ pub extern "C" fn {mangled_name}("#
             for (n, ty) in inputs.iter().enumerate() {
                 w!(this, "(::std::ptr::read(i{n} as *mut {ty})), ");
             }
-            wln!(this, "));");
+            if is_impl_trait {
+                wln!(this, ")));");
+            } else {
+                wln!(this, "));");
+            }
         });
         wln!(self, " }} }}");
-        mangled_name
+        CppFnSig {
+            rust_link_name: mangled_name,
+            inputs: inputs.iter().map(|ty| ty.into_cpp()).collect(),
+            output: modified_output.into_cpp(),
+        }
     }
 
     pub(crate) fn add_wellknown_trait(

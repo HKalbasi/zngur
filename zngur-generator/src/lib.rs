@@ -137,8 +137,9 @@ impl ZngurGenerator {
                     use_path,
                     deref,
                 } = method_details;
-                let (rusty_inputs, inputs) = real_inputs_of_method(&method, &ty);
-                let rust_link_name = rust_file.add_function(
+                let rusty_inputs = real_inputs_of_method(&method, &ty);
+
+                let sig = rust_file.add_function(
                     &format!(
                         "<{}>::{}::<{}>",
                         deref.as_ref().map(|x| &x.0).unwrap_or(&ty),
@@ -153,11 +154,7 @@ impl ZngurGenerator {
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
                     kind: method.receiver,
-                    sig: CppFnSig {
-                        rust_link_name,
-                        inputs,
-                        output: method.output.into_cpp(),
-                    },
+                    sig,
                 });
             }
             cpp_file.type_defs.push(CppTypeDefinition {
@@ -207,7 +204,7 @@ impl ZngurGenerator {
             });
         }
         for func in zng.funcs {
-            let rust_link_name = rust_file.add_function(
+            let sig = rust_file.add_function(
                 &func.path.to_string(),
                 &func.inputs,
                 &func.output,
@@ -216,11 +213,7 @@ impl ZngurGenerator {
             );
             cpp_file.fn_defs.push(CppFnDefinition {
                 name: CppPath::from_rust_path(&func.path.path),
-                sig: CppFnSig {
-                    rust_link_name,
-                    inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                    output: func.output.into_cpp(),
-                },
+                sig,
             });
         }
         for func in zng.extern_cpp_funcs {
@@ -249,7 +242,8 @@ impl ZngurGenerator {
                     .iter()
                     .zip(&rust_link_names)
                     .map(|(method, link_name)| {
-                        let (_, inputs) = real_inputs_of_method(method, &impl_block.ty);
+                        let inputs = real_inputs_of_method(method, &impl_block.ty);
+                        let inputs = inputs.iter().map(|ty| ty.into_cpp()).collect();
                         (
                             cpp_handle_keyword(&method.name).to_owned(),
                             CppFnSig {
@@ -267,7 +261,7 @@ impl ZngurGenerator {
     }
 }
 
-fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> (Vec<RustType>, Vec<CppType>) {
+fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> Vec<RustType> {
     let receiver_type = match method.receiver {
         ZngurMethodReceiver::Static => None,
         ZngurMethodReceiver::Ref(m) => Some(RustType::Ref(m, Box::new(ty.clone()))),
@@ -277,6 +271,5 @@ fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> (Vec<RustType>,
         .into_iter()
         .chain(method.inputs.clone())
         .collect::<Vec<_>>();
-    let inputs = rusty_inputs.iter().map(|x| x.into_cpp()).collect_vec();
-    (rusty_inputs, inputs)
+    rusty_inputs
 }
