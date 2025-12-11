@@ -1,0 +1,15 @@
+Print debug -- 5
+Print debug -- "hello"
+Print debug -- 4
+Print debug -- "foo"
+Print debug -- "foo"
+Print debug -- "Rust futures are lazy"
+Async func 1
+Future done with result 43
+Async func 2
+Future done with result 44
+Print debug -- "Before calling impl_future"
+Before async block
+Print debug -- "Before polling impl_future"
+Inside async block
+Future done with result 45

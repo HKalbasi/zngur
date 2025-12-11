@@ -642,6 +642,7 @@ enum ParsedRustType<'a> {
     Boxed(Box<ParsedRustType<'a>>),
     Slice(Box<ParsedRustType<'a>>),
     Dyn(ParsedRustTrait<'a>, Vec<&'a str>),
+    Impl(ParsedRustTrait<'a>, Vec<&'a str>),
     Tuple(Vec<ParsedRustType<'a>>),
     Adt(ParsedRustPathAndGenerics<'a>),
 }
@@ -655,6 +656,10 @@ impl ParsedRustType<'_> {
             ParsedRustType::Boxed(s) => RustType::Boxed(Box::new(s.to_zngur(scope))),
             ParsedRustType::Slice(s) => RustType::Slice(Box::new(s.to_zngur(scope))),
             ParsedRustType::Dyn(tr, bounds) => RustType::Dyn(
+                tr.to_zngur(scope),
+                bounds.into_iter().map(|x| x.to_owned()).collect(),
+            ),
+            ParsedRustType::Impl(tr, bounds) => RustType::Impl(
                 tr.to_zngur(scope),
                 bounds.into_iter().map(|x| x.to_owned()).collect(),
             ),
@@ -1015,6 +1020,7 @@ enum Token<'a> {
     Comma,
     Semicolon,
     KwAs,
+    KwAsync,
     KwDyn,
     KwUse,
     KwFor,
@@ -1037,6 +1043,7 @@ impl<'a> Token<'a> {
     fn ident_or_kw(ident: &'a str) -> Self {
         match ident {
             "as" => Token::KwAs,
+            "async" => Token::KwAsync,
             "dyn" => Token::KwDyn,
             "mod" => Token::KwMod,
             "type" => Token::KwType,
@@ -1078,6 +1085,7 @@ impl Display for Token<'_> {
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
             Token::KwAs => write!(f, "as"),
+            Token::KwAsync => write!(f, "async"),
             Token::KwDyn => write!(f, "dyn"),
             Token::KwUse => write!(f, "use"),
             Token::KwFor => write!(f, "for"),
@@ -1189,7 +1197,8 @@ fn rust_type<'a>()
         let adt = pg.clone().map(ParsedRustType::Adt);
 
         let dyn_trait = just(Token::KwDyn)
-            .ignore_then(rust_trait(parser.clone()))
+            .or(just(Token::KwImpl))
+            .then(rust_trait(parser.clone()))
             .then(
                 just(Token::Plus)
                     .ignore_then(select! {
@@ -1198,7 +1207,11 @@ fn rust_type<'a>()
                     .repeated()
                     .collect::<Vec<_>>(),
             )
-            .map(|(x, y)| ParsedRustType::Dyn(x, y));
+            .map(|((token, first), rest)| match token {
+                Token::KwDyn => ParsedRustType::Dyn(first, rest),
+                Token::KwImpl => ParsedRustType::Impl(first, rest),
+                _ => unreachable!(),
+            });
         let boxed = just(Token::Ident("Box"))
             .then(rust_generics(parser.clone()))
             .map(|(_, x)| {
@@ -1364,8 +1377,10 @@ fn rust_trait<'a>(
 fn method<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
 {
-    just(Token::KwFn)
-        .ignore_then(select! {
+    spanned(just(Token::KwAsync))
+        .or_not()
+        .then_ignore(just(Token::KwFn))
+        .then(select! {
             Token::Ident(c) => c,
         })
         .then(
@@ -1376,7 +1391,7 @@ fn method<'a>()
                 .or(empty().to(vec![])),
         )
         .then(fn_args(rust_type()))
-        .map(|((name, generics), args)| {
+        .map(|(((opt_async, name), generics), args)| {
             let is_self = |c: &ParsedRustType<'_>| {
                 if let ParsedRustType::Adt(c) = c {
                     c.path.start == ParsedPathStart::Relative
@@ -1393,12 +1408,27 @@ fn method<'a>()
                 }
                 _ => (args.0, ZngurMethodReceiver::Static),
             };
+            let mut output = args.1;
+            if let Some(async_kw) = opt_async {
+                output = ParsedRustType::Impl(
+                    ParsedRustTrait::Normal(ParsedRustPathAndGenerics {
+                        path: ParsedPath {
+                            start: ParsedPathStart::Absolute,
+                            segments: vec!["std", "future", "Future"],
+                            span: async_kw.span,
+                        },
+                        generics: vec![],
+                        named_generics: vec![("Output", output)],
+                    }),
+                    vec![],
+                )
+            }
             ParsedMethod {
                 name,
                 receiver,
                 generics,
                 inputs,
-                output: args.1,
+                output,
             }
         })
 }
