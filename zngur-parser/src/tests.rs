@@ -80,12 +80,12 @@ type () {
 }
     "#,
         expect![[r#"
-            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
+            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
                ╭─[test.zng:4:5]
                │
              4 │     welcome_traits(Copy);
                │     ───────┬──────  
-               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'fn', or '}'
+               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
             ───╯
         "#]],
     );

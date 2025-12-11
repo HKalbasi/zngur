@@ -41,5 +41,6 @@ mod crate {
 
     fn async_func1() -> impl ::std::future::Future<Output = i32>;
     async fn async_func2() -> i32;
+    async fn impl_future() -> i32;
     fn busy_wait_future(Box<dyn ::std::future::Future<Output = i32>>) -> i32;
 }

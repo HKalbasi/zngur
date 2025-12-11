@@ -18,4 +18,12 @@ int main() {
   rust::crate::argument_position_impl_trait(
       "Rust futures are lazy"_rs.to_owned());
   rust::crate::busy_wait_future(std::move(future));
+  rust::crate::busy_wait_future(rust::crate::async_func2());
+
+  rust::crate::argument_position_impl_trait(
+      "Before calling impl_future"_rs.to_owned());
+  future = rust::crate::impl_future();
+  rust::crate::argument_position_impl_trait(
+      "Before polling impl_future"_rs.to_owned());
+  rust::crate::busy_wait_future(std::move(future));
 }

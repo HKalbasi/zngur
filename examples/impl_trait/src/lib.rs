@@ -23,6 +23,19 @@ async fn async_func1() -> i32 {
     43
 }
 
+async fn async_func2() -> i32 {
+    println!("Async func 2");
+    44
+}
+
+fn impl_future() -> impl Future<Output = i32> {
+    println!("Before async block");
+    async {
+        println!("Inside async block");
+        45
+    }
+}
+
 fn busy_wait_future<T: Debug>(fut: Box<dyn Future<Output = T>>) -> T {
     let mut fut = Box::into_pin(fut);
     let waker = Waker::noop();
