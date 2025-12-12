@@ -19,7 +19,7 @@ mod rust;
 mod template;
 
 pub use rust::RustFile;
-pub use zngur_parser::ParsedZngFile;
+pub use zngur_parser::{ParseResult, ParsedZngFile};
 
 pub use zngur_def::*;
 

@@ -16,6 +16,15 @@ use zngur_def::{
 
 pub type Span = SimpleSpan<usize>;
 
+/// Result of parsing a .zng file, containing both the spec and the list of all processed files.
+#[derive(Debug)]
+pub struct ParseResult {
+    /// The parsed Zngur specification
+    pub spec: ZngurSpec,
+    /// All .zng files that were processed (main file + transitive imports)
+    pub processed_files: Vec<std::path::PathBuf>,
+}
+
 #[cfg(test)]
 mod tests;
 
@@ -729,26 +738,32 @@ struct ParseContext<'a, 'b> {
     depth: usize,
     reports: Vec<Report<'b, (String, std::ops::Range<usize>)>>,
     source_cache: std::collections::HashMap<std::path::PathBuf, String>,
+    /// All .zng files processed during parsing (main file + imports)
+    processed_files: Vec<std::path::PathBuf>,
 }
 
 impl<'a, 'b> ParseContext<'a, 'b> {
     fn new(path: std::path::PathBuf, text: &'a str) -> Self {
+        let processed_files = vec![path.clone()];
         Self {
             path,
             text,
             depth: 0,
             reports: Vec::new(),
             source_cache: HashMap::new(),
+            processed_files,
         }
     }
 
     fn with_depth(path: std::path::PathBuf, text: &'a str, depth: usize) -> Self {
+        let processed_files = vec![path.clone()];
         Self {
             path,
             text,
             depth,
             reports: Vec::new(),
             source_cache: HashMap::new(),
+            processed_files,
         }
     }
 
@@ -782,7 +797,9 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         self.add_errors([Rich::custom(span, error)].into_iter());
     }
 
-    fn consume_errors_from(&mut self, other: ParseContext<'_, 'b>) {
+    fn consume_from(&mut self, mut other: ParseContext<'_, 'b>) {
+        // Always merge processed files, regardless of errors
+        self.processed_files.append(&mut other.processed_files);
         if other.has_errors() {
             self.reports.extend(other.reports);
             self.source_cache.insert(other.path, other.text.to_string());
@@ -905,7 +922,7 @@ impl<'a> ParsedZngFile<'a> {
                         let mut nested_ctx =
                             ParseContext::with_depth(dirname.join(&import.0), &text, ctx.depth + 1);
                         Self::parse_into(zngur, &mut nested_ctx, resolver);
-                        ctx.consume_errors_from(nested_ctx);
+                        ctx.consume_from(nested_ctx);
                     }
                     Err(_) => {
                         // TODO: emit a better error. How should we get a span here?
@@ -925,7 +942,8 @@ impl<'a> ParsedZngFile<'a> {
         }
     }
 
-    pub fn parse(path: std::path::PathBuf) -> ZngurSpec {
+    /// Parse a .zng file and return both the spec and list of all processed files.
+    pub fn parse(path: std::path::PathBuf) -> ParseResult {
         let mut zngur = ZngurSpec::default();
         let text = std::fs::read_to_string(&path).unwrap();
         let mut ctx = ParseContext::new(path, &text);
@@ -933,28 +951,41 @@ impl<'a> ParsedZngFile<'a> {
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
         }
-        zngur
+        ParseResult {
+            spec: zngur,
+            processed_files: ctx.processed_files,
+        }
     }
 
-    pub fn parse_str(text: &str) -> ZngurSpec {
+    /// Parse a .zng file from a string. Mainly useful for testing.
+    pub fn parse_str(text: &str) -> ParseResult {
         let mut zngur = ZngurSpec::default();
         let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
         }
-        zngur
+        ParseResult {
+            spec: zngur,
+            processed_files: ctx.processed_files,
+        }
     }
 
     #[cfg(test)]
-    pub(crate) fn parse_str_with_resolver(text: &str, resolver: &impl ImportResolver) -> ZngurSpec {
+    pub(crate) fn parse_str_with_resolver(
+        text: &str,
+        resolver: &impl ImportResolver,
+    ) -> ParseResult {
         let mut zngur = ZngurSpec::default();
         let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
         Self::parse_into(&mut zngur, &mut ctx, resolver);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
         }
-        zngur
+        ParseResult {
+            spec: zngur,
+            processed_files: ctx.processed_files,
+        }
     }
 }
 

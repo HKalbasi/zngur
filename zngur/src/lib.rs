@@ -20,6 +20,7 @@ use zngur_generator::{ParsedZngFile, ZngurGenerator};
 ///     .with_cpp_file(out_dir.join("generated.cpp"))
 ///     .with_h_file(out_dir.join("generated.h"))
 ///     .with_rs_file(out_dir.join("generated.rs"))
+///     .with_depfile(out_dir.join("zngur.d"))
 ///     .generate();
 /// ```
 pub struct Zngur {
@@ -27,6 +28,7 @@ pub struct Zngur {
     h_file_path: Option<PathBuf>,
     cpp_file_path: Option<PathBuf>,
     rs_file_path: Option<PathBuf>,
+    depfile_path: Option<PathBuf>,
     mangling_base: Option<String>,
     cpp_namespace: Option<String>,
 }
@@ -38,6 +40,7 @@ impl Zngur {
             h_file_path: None,
             cpp_file_path: None,
             rs_file_path: None,
+            depfile_path: None,
             mangling_base: None,
             cpp_namespace: None,
         }
@@ -58,6 +61,15 @@ impl Zngur {
         self
     }
 
+    /// Set the path for the dependency file (.d file) output.
+    ///
+    /// The dependency file lists all .zng files that were processed (main file + imports).
+    /// This can be used by build systems to detect when regeneration is needed.
+    pub fn with_depfile(mut self, path: impl AsRef<Path>) -> Self {
+        self.depfile_path = Some(path.as_ref().to_owned());
+        self
+    }
+
     pub fn with_mangling_base(mut self, mangling_base: &str) -> Self {
         self.mangling_base = Some(mangling_base.to_owned());
         self
@@ -69,7 +81,8 @@ impl Zngur {
     }
 
     pub fn generate(self) {
-        let mut file = ZngurGenerator::build_from_zng(ParsedZngFile::parse(self.zng_file));
+        let parse_result = ParsedZngFile::parse(self.zng_file);
+        let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
         let h_file_path = self.h_file_path.expect("No h file path provided");
@@ -101,19 +114,49 @@ impl Zngur {
             .replace("namespace rust", &format!("namespace {cpp_namespace}"));
         cpp = cpp.map(|cpp| cpp.replace("rust::", &format!("{cpp_namespace}::")));
 
-        File::create(rs_file_path)
+        File::create(&rs_file_path)
             .unwrap()
             .write_all(rust.as_bytes())
             .unwrap();
-        File::create(h_file_path)
+        File::create(&h_file_path)
             .unwrap()
             .write_all(h.as_bytes())
             .unwrap();
-        if let Some(cpp) = cpp {
-            let cpp_file_path = self.cpp_file_path.expect("No cpp file path provided");
+        if let Some(cpp) = &cpp {
+            let cpp_file_path = self
+                .cpp_file_path
+                .as_ref()
+                .expect("No cpp file path provided");
             File::create(cpp_file_path)
                 .unwrap()
                 .write_all(cpp.as_bytes())
+                .unwrap();
+        }
+
+        // Write dependency file if requested
+        if let Some(depfile_path) = self.depfile_path {
+            let mut targets = vec![
+                h_file_path.display().to_string(),
+                rs_file_path.display().to_string(),
+            ];
+            if let Some(cpp_path) = self.cpp_file_path {
+                if cpp.is_some() {
+                    targets.push(cpp_path.display().to_string());
+                }
+            }
+
+            // Format: "target1 target2: dep1 dep2 dep3"
+            let deps: Vec<String> = parse_result
+                .processed_files
+                .iter()
+                .map(|p| p.display().to_string())
+                .collect();
+
+            let depfile_content = format!("{}: {}\n", targets.join(" "), deps.join(" "));
+
+            File::create(depfile_path)
+                .unwrap()
+                .write_all(depfile_content.as_bytes())
                 .unwrap();
         }
     }
