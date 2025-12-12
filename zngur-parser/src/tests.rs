@@ -412,7 +412,11 @@ type A {
     // Should have exactly one file (test.zng)
     assert_eq!(parsed.processed_files.len(), 1);
     assert_eq!(
-        parsed.processed_files[0].file_name().unwrap().to_str().unwrap(),
+        parsed.processed_files[0]
+            .file_name()
+            .unwrap()
+            .to_str()
+            .unwrap(),
         "test.zng"
     );
 }
@@ -447,8 +451,14 @@ type Main {
 #[test]
 fn processed_files_with_nested_imports() {
     let resolver = MockFilesystem::new(vec![
-        ("./a.zng", r#"import "./b.zng"; type A { #layout(size = 1, align = 1); }"#),
-        ("./b.zng", r#"import "./c.zng"; type B { #layout(size = 1, align = 1); }"#),
+        (
+            "./a.zng",
+            r#"import "./b.zng"; type A { #layout(size = 1, align = 1); }"#,
+        ),
+        (
+            "./b.zng",
+            r#"import "./c.zng"; type B { #layout(size = 1, align = 1); }"#,
+        ),
         ("./c.zng", "type C { #layout(size = 1, align = 1); }"),
     ]);
 

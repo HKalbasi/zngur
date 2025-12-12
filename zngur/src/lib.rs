@@ -123,7 +123,10 @@ impl Zngur {
             .write_all(h.as_bytes())
             .unwrap();
         if let Some(cpp) = &cpp {
-            let cpp_file_path = self.cpp_file_path.as_ref().expect("No cpp file path provided");
+            let cpp_file_path = self
+                .cpp_file_path
+                .as_ref()
+                .expect("No cpp file path provided");
             File::create(cpp_file_path)
                 .unwrap()
                 .write_all(cpp.as_bytes())
@@ -132,7 +135,10 @@ impl Zngur {
 
         // Write dependency file if requested
         if let Some(depfile_path) = self.depfile_path {
-            let mut targets = vec![h_file_path.display().to_string(), rs_file_path.display().to_string()];
+            let mut targets = vec![
+                h_file_path.display().to_string(),
+                rs_file_path.display().to_string(),
+            ];
             if let Some(cpp_path) = self.cpp_file_path {
                 if cpp.is_some() {
                     targets.push(cpp_path.display().to_string());

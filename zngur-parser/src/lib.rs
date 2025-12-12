@@ -967,7 +967,10 @@ impl<'a> ParsedZngFile<'a> {
     }
 
     #[cfg(test)]
-    pub(crate) fn parse_str_with_resolver(text: &str, resolver: &impl ImportResolver) -> ParseResult {
+    pub(crate) fn parse_str_with_resolver(
+        text: &str,
+        resolver: &impl ImportResolver,
+    ) -> ParseResult {
         let mut zngur = ZngurSpec::default();
         let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
         Self::parse_into(&mut zngur, &mut ctx, resolver);
