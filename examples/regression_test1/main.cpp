@@ -110,9 +110,20 @@ void test_floats() {
   zngur_dbg(fvec);
 }
 
+void test_dyn_fn_with_multiple_arguments() {
+  auto scope = rust::crate::Scoped::new_("Test dyn Fn() with multiple arguments"_rs);
+  rust::crate::call_dyn_fn_multi_args(rust::Box<rust::Dyn<rust::Fn<int32_t, rust::crate::Scoped, rust::Ref<rust::Str>, rust::Unit>>>::make_box(
+      [](int32_t arg0, rust::crate::Scoped arg1, rust::Ref<rust::Str> arg2) {
+        std::cout << "Inner function called" << std::endl;
+        return rust::Unit{};
+      }
+  ));
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
   test_field_underlying_conversions();
   test_floats();
+  test_dyn_fn_with_multiple_arguments();
 }

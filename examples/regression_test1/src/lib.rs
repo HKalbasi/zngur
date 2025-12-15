@@ -23,3 +23,9 @@ impl Drop for Scoped {
         println!();
     }
 }
+
+fn call_dyn_fn_multi_args(func: Box<dyn Fn(i32, crate::Scoped, &str)>) {
+    let scope = Scoped::new("scope passed to dyn Fn");
+    func(2, scope, "hello");
+    println!("End of call_dyn_fn_multi_args");
+}
