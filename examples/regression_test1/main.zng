@@ -89,3 +89,11 @@ type crate::Scoped {
 
     fn new(&str) -> crate::Scoped;
 }
+
+type Box<dyn Fn(i32, crate::Scoped, &str)> {
+    #layout(size = 16, align = 8);
+}
+
+mod crate {
+    fn call_dyn_fn_multi_args(Box<dyn Fn(i32, crate::Scoped, &str)>);
+}

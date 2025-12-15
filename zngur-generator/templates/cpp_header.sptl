@@ -928,7 +928,7 @@ namespace rust {
   <% match tr { Some(CppTraitDefinition::Fn { sig }) => { %>
     <% let as_std_function = format!("::std::function< {}({})>", sig.output, sig.inputs.iter().join(", ")); %>
     <% let ii_names = splat!(&sig.inputs, |n, x|, "::rust::__zngur_internal_move_from_rust< {x} >(i{n})"); %>
-    <% let uint8_t_ix = splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n},"); %>
+    <% let uint8_t_ix = if sig.inputs.is_empty() { "".to_owned() } else { splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n}") + ", " }; %>
     <% let out_ty = &sig.output; %>
 
     inline <%- name %> <%- name %>::make_box(<%- as_std_function %> f) {

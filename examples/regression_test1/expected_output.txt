@@ -77,3 +77,11 @@ Test floats -- started
 ]
 Test floats -- finished
 
+Test dyn Fn() with multiple arguments -- started
+scope passed to dyn Fn -- started
+Inner function called
+scope passed to dyn Fn -- finished
+
+End of call_dyn_fn_multi_args
+Test dyn Fn() with multiple arguments -- finished
+
