@@ -85,3 +85,23 @@ scope passed to dyn Fn -- finished
 End of call_dyn_fn_multi_args
 Test dyn Fn() with multiple arguments -- finished
 
+Test Ref<Ref<T>> -- started
+[main.cpp:131] strvec = [
+    "a str",
+    "foobar",
+    "a third str",
+]
+[main.cpp:132] strvec.get(0) = Some(
+    "a str",
+)
+[main.cpp:133] strvec.get(2) = Some(
+    "a third str",
+)
+[main.cpp:134] *strvec.get(1).unwrap() = "foobar"
+[main.cpp:136] strvec = [
+    "a str",
+    "floopy doop",
+    "a third str",
+]
+Test Ref<Ref<T>> -- finished
+
