@@ -120,10 +120,27 @@ void test_dyn_fn_with_multiple_arguments() {
   ));
 }
 
+void test_refref() {
+  auto scope = rust::crate::Scoped::new_("Test Ref<Ref<T>>"_rs);
+
+  rust::std::vec::Vec<rust::Ref<rust::Str>> strvec = rust::std::vec::Vec<rust::Ref<rust::Str>>::new_();
+
+  strvec.push("a str"_rs);
+  strvec.push("foobar"_rs);
+  strvec.push("a third str"_rs);
+  zngur_dbg(strvec);
+  zngur_dbg(strvec.get(0));
+  zngur_dbg(strvec.get(2));
+  zngur_dbg(*strvec.get(1).unwrap());
+  *strvec.get_mut(1).unwrap() = "floopy doop"_rs;
+  zngur_dbg(strvec);
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
   test_field_underlying_conversions();
   test_floats();
   test_dyn_fn_with_multiple_arguments();
+  test_refref();
 }

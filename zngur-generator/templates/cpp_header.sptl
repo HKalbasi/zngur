@@ -24,17 +24,35 @@
 #define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 
 namespace rust {
-  template<typename T>
-  uint8_t* __zngur_internal_data_ptr(const T& t) noexcept ;
 
   template<typename T>
-  void __zngur_internal_assume_init(T& t) noexcept ;
+  struct __zngur_internal {
+    static inline uint8_t* data_ptr(const T& t) noexcept;
+    static void assume_init(T& t) noexcept ;
+    static void assume_deinit(T& t) noexcept ;
+    static inline void check_init(const T&) noexcept;
+    static inline size_t size_of() noexcept ;
+  };
 
   template<typename T>
-  void __zngur_internal_assume_deinit(T& t) noexcept ;
+  inline uint8_t* __zngur_internal_data_ptr(const T& t) noexcept {
+    return __zngur_internal<T>::data_ptr(t);
+  }
 
   template<typename T>
-  inline size_t __zngur_internal_size_of() noexcept ;
+  void __zngur_internal_assume_init(T& t) noexcept {
+    __zngur_internal<T>::assume_init(t);
+  }
+
+  template<typename T>
+  void __zngur_internal_assume_deinit(T& t) noexcept {
+    __zngur_internal<T>::assume_deinit(t);
+  }
+
+  template<typename T>
+  inline size_t __zngur_internal_size_of() noexcept {
+    return __zngur_internal<T>::size_of();
+  }
 
   template<typename T>
   inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
@@ -51,7 +69,9 @@ namespace rust {
   }
 
   template<typename T>
-  inline void __zngur_internal_check_init(const T&) noexcept {}
+  inline void __zngur_internal_check_init(const T& t) noexcept {
+    __zngur_internal<T>::check_init(t);
+  }
 
   class ZngurCppOpaqueOwnedObject {
     uint8_t* data;
@@ -186,6 +206,74 @@ namespace rust {
     return ::std::forward<T>(input);
   }
 
+  // specializations for Refs of Refs
+<% for ref_kind in ["Ref",  "RefMut"] { %>
+  <% for nested_ref_kind in ["Ref", "RefMut"] { %>
+
+  template<typename T>
+  struct <%- ref_kind %> < <%- nested_ref_kind %> < T > > {
+    <%- ref_kind %>() {
+      data = 0;
+    }
+    <%- ref_kind %>(const <%- nested_ref_kind %> < T >& t) {
+      data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+
+    template<size_t OFFSET>
+    <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, OFFSET >& f) {
+      data = reinterpret_cast<size_t>(&f) + OFFSET;
+    }
+
+    <% if ref_kind == "Ref" { %>
+    template<size_t OFFSET>
+    <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, OFFSET >& f) {
+      data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+    <% } %>
+
+    template<size_t OFFSET>
+    <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, OFFSET >& f) {
+      data = *reinterpret_cast<const size_t*>(&f) + OFFSET;
+    }
+
+    <%- nested_ref_kind %>< T >& operator*() {
+      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(data);
+    }
+
+  private:
+    size_t data;
+    friend ::rust::__zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+    friend ::rust::ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+
+  };
+
+  template<typename T>
+  struct __zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
+    static inline uint8_t* data_ptr(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >& t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+    }
+    static inline void assume_init(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline void check_init(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline void assume_deinit(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline size_t size_of() noexcept {
+        return __zngur_internal_size_of< <%- nested_ref_kind %> < T > >({});
+    }
+  };
+
+  template<typename T>
+  struct ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
+    static inline void print(<%- ref_kind %> < <%- nested_ref_kind %> < T > > const& t) {
+      ::rust::__zngur_internal_check_init(t);
+      ::rust::ZngurPrettyPrinter< <%- nested_ref_kind %> < T > >::print( reinterpret_cast< const <%- nested_ref_kind %> < T > &>(t.data) );
+    }
+  };
+
+  <% } %>
+<% } %>
+
 <% for ty in self.builtin_types() { %>
   <% let needs_endif = ty == "::size_t"; %>
   <% if needs_endif { %>
@@ -193,39 +281,44 @@ namespace rust {
   <% } %>
 
   template<>
-  inline uint8_t* __zngur_internal_data_ptr< <%- ty %> >(const <%- ty %>& t) noexcept {
-    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-  }
+  struct __zngur_internal< <%- ty %> > {
+    static inline uint8_t* data_ptr(const <%- ty %>& t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %>&) noexcept {}
+    static inline void assume_deinit(<%- ty %>&) noexcept {}
+    static inline void check_init(<%- ty %>&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
 
   template<>
-  inline void __zngur_internal_assume_init< <%- ty %> >(<%- ty %>&) noexcept {}
-  template<>
-  inline void __zngur_internal_assume_deinit< <%- ty %> >(<%- ty %>&) noexcept {}
+  struct __zngur_internal< <%- ty %>* > {
+    static inline uint8_t* data_ptr(<%- ty %>* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %>*&) noexcept {}
+    static inline void assume_deinit(<%- ty %>*&) noexcept {}
+    static inline void check_init(<%- ty %>*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
 
   template<>
-  inline size_t __zngur_internal_size_of< <%- ty %> >() noexcept {
-    return sizeof(<%- ty %>);
-  }
+  struct __zngur_internal< <%- ty %> const* > {
+    static inline uint8_t* data_ptr(<%- ty %> const* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %> const*&) noexcept {}
+    static inline void assume_deinit(<%- ty %> const*&) noexcept {}
+    static inline void check_init(<%- ty %> const*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
 
-  template<>
-  inline uint8_t* __zngur_internal_data_ptr< <%- ty %>*>(<%- ty %>* const & t) noexcept {
-    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-  }
-
-  template<>
-  inline void __zngur_internal_assume_init< <%- ty %>*>(<%- ty %>*&) noexcept {}
-  template<>
-  inline void __zngur_internal_assume_deinit< <%- ty %>*>(<%- ty %>*&) noexcept {}
-
-  template<>
-  inline uint8_t* __zngur_internal_data_ptr< <%- ty %> const*>(<%- ty %> const* const & t) noexcept {
-    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
-  }
-
-  template<>
-  inline void __zngur_internal_assume_init< <%- ty %> const*>(<%- ty %> const*&) noexcept {}
-  template<>
-  inline void __zngur_internal_assume_deinit< <%- ty %> const*>(<%- ty %> const*&) noexcept {}
 
   template<>
   struct Ref< <%- ty %> > {
@@ -257,7 +350,7 @@ namespace rust {
 
   private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<Ref< <%- ty %> > >(const ::rust::Ref< <%- ty %> >& t) noexcept ;
+    friend ::rust::__zngur_internal<Ref< <%- ty %> > >;
     friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
 
   };
@@ -287,7 +380,7 @@ namespace rust {
     }
   private:
     size_t data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr<RefMut< <%- ty %> > >(const ::rust::RefMut< <%- ty %> >& t) noexcept ;
+    friend ::rust::__zngur_internal<RefMut< <%- ty %> > >;
     friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
   };
 
@@ -424,15 +517,13 @@ namespace rust {
 
   namespace rust {
     template<>
-    inline uint8_t* __zngur_internal_data_ptr< <%- td.ty %> >(const <%- td.ty %>& t) noexcept ;
-    template<>
-    inline void __zngur_internal_check_init< <%- td.ty %> >(const <%- td.ty %>& t) noexcept ;
-    template<>
-    inline void __zngur_internal_assume_init< <%- td.ty %> >(<%- td.ty %>& t) noexcept ;
-    template<>
-    inline void __zngur_internal_assume_deinit< <%- td.ty %> >(<%- td.ty %>& t) noexcept ;
-    template<>
-    inline size_t __zngur_internal_size_of< <%- td.ty %> >() noexcept ;
+    struct __zngur_internal< <%- td.ty %> > {
+      static inline uint8_t* data_ptr(const <%- td.ty %>& t) noexcept ;
+      static inline void check_init(const <%- td.ty %>& t) noexcept ;
+      static inline void assume_init(<%- td.ty %>& t) noexcept ;
+      static inline void assume_deinit(<%- td.ty %>& t) noexcept ;
+      static inline size_t size_of() noexcept ;
+    };
   }
 
   <%- td.ty.path.open_namespace() %>
@@ -455,10 +546,7 @@ namespace rust {
 
       <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
       <% } CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
-        friend uint8_t* ::rust::__zngur_internal_data_ptr< <%- td.ty %> >(const <%- td.ty %>& t) noexcept ;
-        friend void ::rust::__zngur_internal_check_init< <%- td.ty %> >(const <%- td.ty %>& t) noexcept ;
-        friend void ::rust::__zngur_internal_assume_init< <%- td.ty %> >(<%- td.ty %>& t) noexcept ;
-        friend void ::rust::__zngur_internal_assume_deinit< <%- td.ty %> >(<%- td.ty %>& t) noexcept ;
+        friend ::rust::__zngur_internal< <%- td.ty %> >;
         friend ::rust::ZngurPrettyPrinter< <%- td.ty %> >;
 
       <% if td.ty.path.to_string() == "::rust::Bool" { %>
@@ -596,13 +684,11 @@ namespace rust {
 namespace rust {
 
 <% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
-  template<>
-  inline size_t __zngur_internal_size_of< <%- td.ty %> >() noexcept {
+  inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
       return <%- size %>;
   }
 <% } CppLayoutPolicy::HeapAllocated { size_fn, .. } => { %>
-  template<>
-  inline size_t __zngur_internal_size_of< <%- td.ty %> >() noexcept {
+  inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
       return <%- size_fn %>();
   }
 <% } CppLayoutPolicy::OnlyByRef => { %>
@@ -612,37 +698,28 @@ namespace rust {
 
 <% if td.layout != CppLayoutPolicy::OnlyByRef { %>
   <% if is_copy { %>
-    template<>
-    inline void __zngur_internal_check_init< <%- td.ty %> >(const <%- td.ty %>&) noexcept {}
-
-    template<>
-    inline void __zngur_internal_assume_init< <%- td.ty %> >(<%- td.ty %>&) noexcept {}
-
-    template<>
-    inline void __zngur_internal_assume_deinit< <%- td.ty %> >(<%- td.ty %>&) noexcept {}
+    inline void __zngur_internal< <%- td.ty %> >::check_init(const <%- td.ty %>&) noexcept {}
+    inline void __zngur_internal< <%- td.ty %> >::assume_init(<%- td.ty %>&) noexcept {}
+    inline void __zngur_internal< <%- td.ty %> >::assume_deinit(<%- td.ty %>&) noexcept {}
   <% } else { %>
-    template<>
-    inline void __zngur_internal_check_init< <%- td.ty %> >(const <%- td.ty %>& t) noexcept {
+    inline void __zngur_internal< <%- td.ty %> >::check_init(const <%- td.ty %>& t) noexcept {
         if (!t.drop_flag) {
             ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type <%- td.ty %>" << ::std::endl;
             while (true) raise(SIGSEGV);
         }
     }
 
-    template<>
-    inline void __zngur_internal_assume_init< <%- td.ty %> >(<%- td.ty %>& t) noexcept {
+    inline void __zngur_internal< <%- td.ty %> >::assume_init(<%- td.ty %>& t) noexcept {
         t.drop_flag = true;
     }
 
-    template<>
-    inline void __zngur_internal_assume_deinit< <%- td.ty %> >(<%- td.ty %>& t) noexcept {
+    inline void __zngur_internal< <%- td.ty %> >::assume_deinit(<%- td.ty %>& t) noexcept {
         ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
         t.drop_flag = false;
     }
   <% } %>
 
-  template<>
-  inline uint8_t* __zngur_internal_data_ptr< <%- td.ty %> >(<%- td.ty %> const & t) noexcept {
+  inline uint8_t* __zngur_internal< <%- td.ty %> >::data_ptr(<%- td.ty %> const & t) noexcept {
       return const_cast<uint8_t*>(&t.data[0]);
   }
 
@@ -657,7 +734,7 @@ namespace rust {
   struct RefMut< <%- td.ty %> > {
   private:
     <% if is_unsized { %> ::std::array<size_t, 2> <% } else { %> size_t <% } %> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::RefMut< <%- td.ty %> > >(const ::rust::RefMut< <%- td.ty %> >& t) noexcept ;
+    friend ::rust::__zngur_internal< ::rust::RefMut< <%- td.ty %> > >;
     friend ::rust::ZngurPrettyPrinter< ::rust::RefMut< <%- td.ty %> > >;
   public:
     RefMut() {
@@ -727,23 +804,17 @@ namespace rust {
   }; // struct RefMut< <%- td.ty %> >
 
   template<>
-  inline uint8_t* __zngur_internal_data_ptr< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >& t) noexcept {
-      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
-  }
-
-  template<>
-  inline void __zngur_internal_assume_init< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {}
-
-  template<>
-  inline void __zngur_internal_check_init< RefMut < <%- td.ty %> > >(const RefMut< <%- td.ty %> >&) noexcept {}
-
-  template<>
-  inline void __zngur_internal_assume_deinit< RefMut < <%- td.ty %> > >(RefMut< <%- td.ty %> >&) noexcept {}
-
-  template<>
-  inline size_t __zngur_internal_size_of< RefMut < <%- td.ty %> > >() noexcept {
-      return <% if is_unsized { %>16<% } else { %>8<% } %>;
-  }
+  struct __zngur_internal< RefMut < <%- td.ty %> > > {
+    static inline uint8_t* data_ptr(const RefMut< <%- td.ty %> >& t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+    }
+    static inline void assume_init(RefMut< <%- td.ty %> >&) noexcept {}
+    static inline void check_init(const RefMut< <%- td.ty %> >&) noexcept {}
+    static inline void assume_deinit(RefMut< <%- td.ty %> >&) noexcept {}
+    static inline size_t size_of() noexcept {
+        return <% if is_unsized { %>16<% } else { %>8<% } %>;
+    }
+  };
 
 } // namespace rust
 
@@ -758,7 +829,7 @@ namespace rust {
   struct Ref< <%- td.ty %> > {
   private:
     <% if is_unsized { %> ::std::array<size_t, 2> <% } else { %> size_t <% } %> data;
-    friend uint8_t* ::rust::__zngur_internal_data_ptr< ::rust::Ref< <%- td.ty %> > >(const ::rust::Ref< <%- td.ty %> >& t) noexcept ;
+    friend ::rust::__zngur_internal< ::rust::Ref< <%- td.ty %> > >;
     friend ::rust::ZngurPrettyPrinter< ::rust::Ref< <%- td.ty %> > >;
   public:
     Ref() {
@@ -840,23 +911,17 @@ namespace rust {
 <% for ref_kind in ["Ref", "Raw", "RawMut"] { %>
 
 template<>
-inline uint8_t* __zngur_internal_data_ptr< <%- ref_kind %> < <%- td.ty %> > >(const <%- ref_kind %> < <%- td.ty %> >& t) noexcept {
-    return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
-}
-
-template<>
-inline void __zngur_internal_assume_init< <%- ref_kind %> < <%- td.ty %> > >(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
-
-template<>
-inline void __zngur_internal_check_init< <%- ref_kind %> < <%- td.ty %> > >(const <%- ref_kind %> < <%- td.ty %> >&) noexcept {}
-
-template<>
-inline void __zngur_internal_assume_deinit< <%- ref_kind %> < <%- td.ty %> > >(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
-
-template<>
-inline size_t __zngur_internal_size_of< <%- ref_kind %> < <%- td.ty %> > >() noexcept {
-    return <% if is_unsized { %>16<% } else { %>8<% } %>;
-}
+struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
+  static inline uint8_t* data_ptr(const <%- ref_kind %> < <%- td.ty %> >& t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.data));
+  }
+  static inline void assume_init(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
+  static inline void check_init(const <%- ref_kind %> < <%- td.ty %> >&) noexcept {}
+  static inline void assume_deinit(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
+  static inline size_t size_of() noexcept {
+      return <% if is_unsized { %>16<% } else { %>8<% } %>;
+  }
+};
 
 <% } %>
 
