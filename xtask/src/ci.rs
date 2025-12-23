@@ -79,6 +79,11 @@ pub fn main(fix: bool) -> Result<()> {
             eprintln!("Warning: Failed to format book: {}", e);
         }
     }
+
+    cmd!(sh, "cspell .")
+        .run()
+        .with_context(|| "Failed to check word spellings")?;
+
     // Check book formatting
     check_book_formatting().with_context(|| "Book formatting check failed")?;
 
