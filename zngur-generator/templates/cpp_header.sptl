@@ -11,6 +11,10 @@
 
 <%- self.additional_includes %>
 
+<% for def in self.rust_cfg_defines { %>
+#define <%- def %>
+<% } %>
+
 <% if let Some(symbols) = &self.panic_to_exception { %>
   namespace rust {
       class Panic {};

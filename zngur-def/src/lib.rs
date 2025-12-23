@@ -151,6 +151,7 @@ pub struct ZngurSpec {
     pub cpp_include_header_name: String,
     pub mangling_base: String,
     pub cpp_namespace: String,
+    pub rust_cfg: Vec<(String, Option<String>)>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

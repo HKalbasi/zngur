@@ -347,6 +347,7 @@ pub struct CppFile {
     pub exported_impls: Vec<CppExportedImplDefinition>,
     pub additional_includes: String,
     pub panic_to_exception: Option<PanicToExceptionSymbols>,
+    pub rust_cfg_defines: Vec<String>,
 }
 
 impl CppFile {
@@ -359,6 +360,7 @@ impl CppFile {
             trait_defs: &self.trait_defs,
             exported_impls: &self.exported_impls,
             exported_fn_defs: &self.exported_fn_defs,
+            rust_cfg_defines: &self.rust_cfg_defines,
         };
         state.text += template.render().unwrap().as_str();
         Ok(())
