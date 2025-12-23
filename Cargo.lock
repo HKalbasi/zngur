@@ -404,6 +404,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-conditional"
+version = "0.7.0"
+
+[[package]]
 name = "example-cxx_demo"
 version = "0.7.0"
 dependencies = [

@@ -1,0 +1,111 @@
+#convert_panic_to_exception
+
+type str {
+    wellknown_traits(?Sized, Debug);
+
+    fn as_ptr(&self) -> *const u8;
+    fn len(&self) -> usize;
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+
+    fn clone(&self) -> ::std::string::String;
+    fn push_str(&mut self, &str);
+    fn len(&self) -> usize;
+    fn as_str(&self) -> &str;
+}
+
+mod crate {
+
+    type KeyValuePair {
+        #layout(size = 32, align = 8);
+
+        wellknown_traits(Debug);
+
+        #if cfg!(feature."float-values") {
+            constructor { key: ::std::string::String, value: f64 };
+        } #else {
+            constructor { key: ::std::string::String, value: i32 };
+        }
+
+        fn self_size() -> usize;
+        fn self_align() -> usize;
+
+        field key (offset = 0, type = ::std::string::String );
+
+        #if cfg!(feature."float-values") {
+            field value (offset = 24, type = f64 );
+        } #else {
+            field value (offset = 24, type = i32 );
+        }
+    }
+
+}
+
+mod ::std {
+
+    type option::Option<usize> {
+        #layout(size = 16, align = 8);
+
+        constructor None;
+        constructor Some(usize);
+
+        fn unwrap(self) -> usize;
+    }
+
+    type option::Option<crate::KeyValuePair> {
+        #layout(size = 32, align = 8);
+
+        constructor None;
+        constructor Some(crate::KeyValuePair);
+
+        fn unwrap(self) -> crate::KeyValuePair;
+    }
+
+    type option::Option<&crate::KeyValuePair> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Copy);
+
+        constructor None;
+        constructor Some(&crate::KeyValuePair);
+
+        fn unwrap(self) -> &crate::KeyValuePair;
+    }
+
+
+    mod vec {
+        type Vec<crate::KeyValuePair> {
+            #layout(size = 24, align = 8);
+            
+            wellknown_traits(Debug);
+
+            fn new() -> Vec<crate::KeyValuePair>;
+            fn push(&mut self, crate::KeyValuePair);
+            fn get(&self, usize) -> ::std::option::Option<&crate::KeyValuePair> deref [crate::KeyValuePair];
+            fn iter(&self) -> ::std::slice::Iter<crate::KeyValuePair> deref [crate::KeyValuePair];
+        }
+    }
+
+    mod slice {
+        type Iter<crate::KeyValuePair> {
+            #layout(size = 16, align = 8);
+
+            fn len(&self) -> usize;
+            fn size_hint(&self) -> (usize, ::std::option::Option<usize>);
+            fn count(self) -> usize;
+            fn next(&mut self) -> ::std::option::Option<&crate::KeyValuePair>;
+        }
+    }
+
+}
+
+type (usize, ::std::option::Option<usize>) {
+    #layout(size = 24, align = 8);
+    wellknown_traits(Debug);
+
+    field 0 (offset = 0, type = usize);
+    field 1 (offset = 8, type = ::std::option::Option<usize> );
+}
