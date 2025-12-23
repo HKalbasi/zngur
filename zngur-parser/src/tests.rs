@@ -1,19 +1,39 @@
 use std::panic::catch_unwind;
 
 use expect_test::{Expect, expect};
-use zngur_def::{RustPathAndGenerics, RustType};
+use zngur_def::{LayoutPolicy, RustPathAndGenerics, RustType, ZngurSpec};
 
-use crate::{ImportResolver, ParsedZngFile};
+use crate::{
+    ImportResolver, ParsedZngFile,
+    cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
+};
 
 fn check_success(zng: &str) {
-    let _ = ParsedZngFile::parse_str(zng);
+    let _ = ParsedZngFile::parse_str(zng, NullCfg);
 }
 
 pub struct ErrorText(pub String);
 
 fn check_fail(zng: &str, error: Expect) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str(zng);
+        let _ = ParsedZngFile::parse_str(zng, NullCfg);
+    });
+    match r {
+        Ok(_) => panic!("Parsing succeeded but we expected fail"),
+        Err(e) => match e.downcast::<ErrorText>() {
+            Ok(t) => error.assert_eq(&t.0),
+            Err(e) => std::panic::resume_unwind(e),
+        },
+    }
+}
+
+fn check_fail_with_cfg(
+    zng: &str,
+    cfg: impl RustCfgProvider + std::panic::UnwindSafe + 'static,
+    error: Expect,
+) {
+    let r = catch_unwind(|| {
+        let _ = ParsedZngFile::parse_str(zng, cfg);
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -26,13 +46,35 @@ fn check_fail(zng: &str, error: Expect) {
 
 fn check_import_fail(zng: &str, error: Expect, resolver: &MockFilesystem) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str_with_resolver(zng, resolver);
+        let _ = ParsedZngFile::parse_str_with_resolver(zng, NullCfg, resolver);
     });
 
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
         Err(e) => match e.downcast::<ErrorText>() {
             Ok(t) => error.assert_eq(&t.0),
+            Err(e) => std::panic::resume_unwind(e),
+        },
+    }
+}
+
+// useful for debugging a test that should succeeded on parse
+fn catch_parse_fail(
+    zng: &str,
+    cfg: impl RustCfgProvider + std::panic::UnwindSafe + 'static,
+) -> crate::ParseResult {
+    let r = catch_unwind(move || ParsedZngFile::parse_str(zng, cfg));
+
+    match r {
+        Ok(r) => r,
+        Err(e) => match e.downcast::<ErrorText>() {
+            Ok(t) => {
+                eprintln!("{}", &t.0);
+                crate::ParseResult {
+                    spec: ZngurSpec::default(),
+                    processed_files: Vec::new(),
+                }
+            }
             Err(e) => std::panic::resume_unwind(e),
         },
     }
@@ -141,6 +183,15 @@ type crate::Way {
     );
 }
 
+macro_rules! assert_ty_path {
+    ($path_expected:expr, $ty:expr) => {{
+        let RustType::Adt(RustPathAndGenerics { path: p, .. }) = $ty else {
+            panic!("type `{:?}` is not a path", $ty);
+        };
+        assert_eq!(p.as_slice(), $path_expected);
+    }};
+}
+
 #[test]
 fn alias_expands_correctly() {
     let parsed = ParsedZngFile::parse_str(
@@ -150,6 +201,7 @@ type MyString {
     #layout(size = 24, align = 8);
 }
     "#,
+        NullCfg,
     );
     let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -170,6 +222,7 @@ mod crate {
     }
 }
     "#,
+        NullCfg,
     );
     let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -223,6 +276,7 @@ type Example {
     #layout(size = 1, align = 1);
 }
     "#,
+        NullCfg,
         &resolver,
     );
     assert_eq!(parsed.spec.types.len(), 2);
@@ -408,6 +462,7 @@ type A {
     #layout(size = 1, align = 1);
 }
         "#,
+        NullCfg,
     );
     // Should have exactly one file (test.zng)
     assert_eq!(parsed.processed_files.len(), 1);
@@ -435,6 +490,7 @@ type Main {
     #layout(size = 1, align = 1);
 }
         "#,
+        NullCfg,
         &resolver,
     );
     // Should have two files: main (test.zng) + imported
@@ -469,6 +525,7 @@ type Main {
     #layout(size = 1, align = 1);
 }
         "#,
+        NullCfg,
         &resolver,
     );
     // Should have four files: main + a + b + c
@@ -482,4 +539,327 @@ type Main {
     assert!(file_names.contains(&"a.zng"));
     assert!(file_names.contains(&"b.zng"));
     assert!(file_names.contains(&"c.zng"));
+}
+
+fn assert_layout(wanted_size: usize, wanted_align: usize, layout: &LayoutPolicy) {
+    if !matches!(layout, LayoutPolicy::StackAllocated { size, align } if *size == wanted_size && *align == wanted_align)
+    {
+        panic!(
+            "no match: StackAllocated {{ size: {wanted_size}, align: {wanted_align} }} != {:?} ",
+            layout
+        );
+    };
+}
+
+static EMPTY_CFG: [(&str, &[&str]); 0] = [];
+
+#[test]
+fn test_if_conditional_type_item() {
+    let source = r#"
+type ::std::string::String {
+    #if cfg!(target_pointer_width = "64") {
+        #layout(size = 24, align = 8);
+    } #else if cfg!(target_pointer_width = "32") {
+        #layout(size = 12, align = 4);
+    } #else {
+        // silly size for testing
+        #layout(size = 27, align = 9);
+    }
+}
+    "#;
+    let parsed = catch_parse_fail(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["64"])]),
+    );
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_layout(24, 8, &ty.layout);
+    let parsed = catch_parse_fail(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["32"])]),
+    );
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_layout(12, 4, &ty.layout);
+    let parsed = catch_parse_fail(source, NullCfg);
+    let ty = parsed.spec.types.first().expect("no type parsed");
+
+    assert_layout(27, 9, &ty.layout);
+}
+
+#[test]
+fn test_match_conditional_type_item() {
+    let source = r#"
+type ::std::string::String {
+    #match cfg!(target_pointer_width) {
+        // single item arm
+        "64" => #layout(size = 24, align = 8);
+        // match usize numbers
+        32 => {
+            #layout(size = 12, align = 4);
+        },
+     
+        _ => {
+            // silly size for testing
+            #layout(size = 27, align = 9);
+        }
+    }
+}
+    "#;
+    let parsed = catch_parse_fail(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["64"])]),
+    );
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_layout(24, 8, &ty.layout);
+    let parsed = catch_parse_fail(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["32"])]),
+    );
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_layout(12, 4, &ty.layout);
+    let parsed = catch_parse_fail(source, NullCfg);
+    let ty = parsed.spec.types.first().expect("no type parsed");
+
+    assert_layout(27, 9, &ty.layout);
+}
+
+macro_rules! test_paths_with_cfg {
+    ($src:expr, $features_path_pairs:expr) => {
+        for (cfg, path) in $features_path_pairs.iter().map(|(cfg, path)| {
+            (
+                cfg.into_iter().copied().collect::<Vec<_>>(),
+                path.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            )
+        }) {
+            let parsed =
+                catch_parse_fail($src, InMemoryRustCfgProvider::default().with_values(cfg));
+            let ty = parsed.spec.types.first().expect("no type parsed");
+            assert_ty_path!(path, &ty.ty);
+        }
+    };
+}
+
+type CfgPathPairs<'a> = &'a [(&'a [(&'a str, &'a [&'a str])], &'a [&'a str])];
+
+#[test]
+fn conditional_if_spec_item() {
+    let source = r#"
+#if cfg!(feature = "foo") {
+    type crate::Foo {
+        #layout(size = 1, align = 1);
+    }
+} #else {
+    type crate::Bar {
+        #layout(size = 1, align = 1);
+    }
+}
+    "#;
+
+    let pairs: CfgPathPairs = &[
+        (&[("feature", &["foo"])], &["crate", "Foo"]),
+        (&EMPTY_CFG, &["crate", "Bar"]),
+    ];
+    test_paths_with_cfg!(source, pairs);
+}
+
+#[test]
+fn conditional_match_spec_item() {
+    let source = r#"
+#match cfg!(feature) {
+    "foo" => type crate::Foo {
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::Bar {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    let pairs: CfgPathPairs = &[
+        (&[("feature", &["foo"])], &["crate", "Foo"]),
+        (&EMPTY_CFG, &["crate", "Bar"]),
+    ];
+    test_paths_with_cfg!(source, pairs);
+}
+
+#[test]
+fn match_pattern_single_cfg() {
+    let source = r#"
+#match cfg!(feature) {
+    "bar" | "zigza" => type crate::BarZigZa {
+        #layout(size = 1, align = 1);
+    }
+    // match two values from a cfg value as a set 
+    "foo" & "baz" => type crate::FooBaz {
+        #layout(size = 1, align = 1);
+    }
+    // negative matching (no feature baz)
+    "foo" & !"baz" => type crate::FooNoBaz {
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::Zoop {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    let pairs: CfgPathPairs = &[
+        (&EMPTY_CFG, &["crate", "Zoop"]),
+        (&[("feature", &["foo"])], &["crate", "FooNoBaz"]),
+        (&[("feature", &["bar"])], &["crate", "BarZigZa"]),
+        (&[("feature", &["zigza"])], &["crate", "BarZigZa"]),
+        (&[("feature", &["foo", "baz"])], &["crate", "FooBaz"]),
+    ];
+    test_paths_with_cfg!(source, pairs);
+}
+
+#[test]
+fn if_pattern_multi_cfg() {
+    let source = r#"
+// match two cfg keys as a set
+#if cfg!(feature.foo) && cfg!(target_pointer_width = 32) {
+    type crate::Foo32 {
+        #layout(size = 1, align = 1);
+    }
+} #else if cfg!(feature.foo = None) && cfg!(target_pointer_width = 64) {
+    type crate::NoFoo64 {
+        #layout(size = 1, align = 1);
+    }
+} #else if (cfg!(feature.foo = Some) && cfg!(target_pointer_width = 64)) || cfg!(feature.baz) {
+    type crate::Foo64_OrBaz {
+        #layout(size = 1, align = 1);
+    }
+} #else {
+    type crate::SpecialFoo {
+        #layout(size = 1, align = 1);
+    }
+}
+    "#;
+    let pairs: CfgPathPairs = &[
+        (
+            &[("target_pointer_width", &["32"]), ("feature", &["foo"])],
+            &["crate", "Foo32"],
+        ),
+        (
+            &[("target_pointer_width", &["64"]), ("feature", &["bar"])],
+            &["crate", "NoFoo64"],
+        ),
+        (
+            &[("target_pointer_width", &["64"]), ("feature", &["foo"])],
+            &["crate", "Foo64_OrBaz"],
+        ),
+        (
+            &[("target_pointer_width", &["32"]), ("feature", &["baz"])],
+            &["crate", "Foo64_OrBaz"],
+        ),
+        (&[("feature", &["foo"])], &["crate", "SpecialFoo"]),
+        (&EMPTY_CFG, &["crate", "SpecialFoo"]),
+    ];
+    test_paths_with_cfg!(source, pairs);
+}
+
+#[test]
+fn match_pattern_multi_cfg() {
+    let source = r#"
+#match (cfg!(feature.foo), cfg!(target_pointer_width)) {
+    // match two cfg keys as a set
+    (Some, "32") => type crate::Foo32 {
+        #layout(size = 1, align = 1);
+    }
+    (None, 64) => type crate::NoFoo64 {
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::SpecialFoo {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    let pairs: CfgPathPairs = &[
+        (
+            &[("target_pointer_width", &["32"]), ("feature", &["foo"])],
+            &["crate", "Foo32"],
+        ),
+        (
+            &[("target_pointer_width", &["64"]), ("feature", &["bar"])],
+            &["crate", "NoFoo64"],
+        ),
+        (&[("feature", &["foo"])], &["crate", "SpecialFoo"]),
+        (&EMPTY_CFG, &["crate", "SpecialFoo"]),
+    ];
+    test_paths_with_cfg!(source, pairs);
+}
+
+#[test]
+fn match_pattern_multi_cfg_bad_pattern() {
+    let source = r#"
+#match (cfg!(feature.foo), cfg!(target_pointer_width)) {
+    (Some, "32") => type crate::Foo32 { 
+        // would succeed if cfg match attempted
+        #layout(size = 1, align = 1);
+    }
+    "64" => type crate::NoFoo64 { 
+        // will fail: cardinality of pattern and tuple don't match
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::SpecialFoo {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    check_fail_with_cfg(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["64"])]),
+        expect![[r#"
+            Error: Can not match single pattern against multiple cfg values.
+               ╭─[test.zng:7:5]
+               │
+             7 │     "64" => type crate::NoFoo64 {
+               │     ──┬─  
+               │       ╰─── Can not match single pattern against multiple cfg values.
+            ───╯
+        "#]],
+    );
+}
+
+#[test]
+fn match_pattern_multi_cfg_bad_pattern2() {
+    let source = r#"
+#match (cfg!(feature.foo), cfg!(target_pointer_width), cfg!(target_feature) ) {
+    (Some, "32", "avx" & "avx2") => type crate::Foo32 { 
+        // would succeed if cfg match attempted
+        #layout(size = 1, align = 1);
+    }
+    (None, "64") => type crate::NoFoo64 { 
+        // will fail: cardinality of pattern and tuple don't match
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::SpecialFoo {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    let cfg: [(&str, &[&str]); 2] = [
+        ("target_pointer_width", &["64"]),
+        ("target_feature", &["avx", "avx2"]),
+    ];
+    check_fail_with_cfg(
+        source,
+        InMemoryRustCfgProvider::default().with_values(cfg),
+        expect![[r#"
+            Error: Number of patterns and number of scrutinees do not match.
+               ╭─[test.zng:7:5]
+               │
+             7 │     (None, "64") => type crate::NoFoo64 {
+               │     ──────┬─────  
+               │           ╰─────── Number of patterns and number of scrutinees do not match.
+            ───╯
+        "#]],
+    );
 }
