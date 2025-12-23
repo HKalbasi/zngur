@@ -52,6 +52,12 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
             )
             .run()
             .with_context(|| format!("Running example `{example}` failed"))?;
+            cmd!(
+                sh,
+                "bash -c 'if [ -e ./b.out ]; then ./b.out 2>&1 | sed -r s/thread.*\\(.*\\)/thread/g >> actual_output.txt; fi'"
+            )
+            .run()
+            .with_context(|| format!("Running example `{example}` b.out failed"))?;
         }
         if fix {
             sh.copy_file("./actual_output.txt", "./expected_output.txt")?;

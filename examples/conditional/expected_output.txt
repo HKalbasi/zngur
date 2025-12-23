@@ -1,0 +1,28 @@
+KVPair(size = 32, align = 8){foo : 1.000000}
+[main.cpp:44] pair = KeyValuePair {
+    key: "foo",
+    value: 1.0,
+}
+KVPair(size = 32, align = 8){bar : 2.000000}
+[main.cpp:44] pair = KeyValuePair {
+    key: "bar",
+    value: 2.0,
+}
+KVPair(size = 32, align = 8){baz : 3.000000}
+[main.cpp:44] pair = KeyValuePair {
+    key: "baz",
+    value: 3.0,
+}
+KVPair(size = 32, align = 8){abc : 4.000000}
+[main.cpp:44] pair = KeyValuePair {
+    key: "abc",
+    value: 4.0,
+}
+KVPair(size = 32, align = 8){foo : 1}
+[main.cpp:44] pair = KeyValuePair { key: "foo", value: 1, }(with debug_assertions)
+KVPair(size = 32, align = 8){bar : 2}
+[main.cpp:44] pair = KeyValuePair { key: "bar", value: 2, }(with debug_assertions)
+KVPair(size = 32, align = 8){baz : 3}
+[main.cpp:44] pair = KeyValuePair { key: "baz", value: 3, }(with debug_assertions)
+KVPair(size = 32, align = 8){abc : 4}
+[main.cpp:44] pair = KeyValuePair { key: "abc", value: 4, }(with debug_assertions)
