@@ -7,6 +7,146 @@ use crate::{
 };
 use chumsky::prelude::*;
 
+/// A configuration provider, Must be Clone.
+pub trait RustCfgProvider: CloneableCfg {
+    /// Gets values assoceated with a config key if it's present.
+    fn get_cfg(&self, key: &str) -> Option<Vec<String>>;
+    /// Gets a list of feature names that are enabeled
+    fn get_features(&self) -> Vec<String>;
+    /// Gets all config key:value pairs
+    ///
+    /// Returns a pair for every value of a key, if a key has no values emits a
+    /// (key, None) pair
+    fn get_cfg_pairs(&self) -> Vec<(String, Option<String>)>;
+}
+
+pub trait CloneableCfg {
+    fn clone_box(&self) -> Box<dyn RustCfgProvider>;
+}
+
+impl<T> CloneableCfg for T
+where
+    T: 'static + RustCfgProvider + Clone,
+{
+    fn clone_box(&self) -> Box<dyn RustCfgProvider> {
+        Box::new(self.clone())
+    }
+}
+
+#[derive(Copy, Clone)]
+pub struct NullCfg;
+
+impl RustCfgProvider for NullCfg {
+    fn get_cfg(&self, _key: &str) -> Option<Vec<String>> {
+        None
+    }
+    fn get_features(&self) -> Vec<String> {
+        Vec::new()
+    }
+    fn get_cfg_pairs(&self) -> Vec<(String, Option<String>)> {
+        Vec::new()
+    }
+}
+
+#[derive(Clone)]
+pub struct InMemoryRustCfgProvider {
+    cfg: HashMap<String, Vec<String>>,
+}
+
+const CARGO_FEATURE_PREFIX: &str = "CARGO_FEATURE_";
+const CARGO_CFG_PREFIX: &str = "CARGO_CFG_";
+
+impl InMemoryRustCfgProvider {
+    pub fn new() -> Self {
+        InMemoryRustCfgProvider {
+            cfg: HashMap::new(),
+        }
+    }
+
+    pub fn with_values<'a, CfgPairs, CfgKey, CfgValues>(mut self, cfg_vlaues: CfgPairs) -> Self
+    where
+        CfgPairs: IntoIterator<Item = (CfgKey, CfgValues)>,
+        CfgKey: AsRef<str> + 'a,
+        CfgValues: Clone + IntoIterator + 'a,
+        <CfgValues as IntoIterator>::Item: AsRef<str>,
+    {
+        for (key, values) in cfg_vlaues {
+            let entry = self.cfg.entry(key.as_ref().to_string()).or_default();
+            let values = values.clone().into_iter().map(|v| v.as_ref().to_string());
+            entry.reserve(values.size_hint().0);
+            for value in values {
+                if !entry.contains(&value) {
+                    entry.push(value);
+                }
+            }
+        }
+        self
+    }
+
+    pub fn load_from_cargo_env(mut self) -> Self {
+        // set to unify features that can appear in two locaitons
+        let mut features = HashSet::new();
+        for (k, v) in std::env::vars_os() {
+            // no panic if not unicode
+            let (Some(k), Some(v)) = (k.to_str(), v.to_str()) else {
+                continue;
+            };
+            if let Some(feature) = k.strip_prefix(CARGO_FEATURE_PREFIX) {
+                features.insert(feature.to_lowercase());
+            } else if let Some(key) = k.strip_prefix(CARGO_CFG_PREFIX) {
+                let key = key.to_lowercase();
+                let values: Vec<String> = v.split(",").map(str::to_owned).collect();
+                if key == "feature" {
+                    features.extend(values);
+                } else {
+                    let entry = self.cfg.entry(key.to_string()).or_default();
+                    entry.reserve(values.len());
+                    for value in values {
+                        if !entry.contains(&value) {
+                            entry.push(value);
+                        }
+                    }
+                }
+            }
+        }
+        if !features.is_empty() {
+            let features_entry = self.cfg.entry("feature".to_string()).or_default();
+            features_entry.reserve(features.len());
+            features_entry.extend(features);
+        }
+        self
+    }
+}
+
+impl Default for InMemoryRustCfgProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl RustCfgProvider for InMemoryRustCfgProvider {
+    fn get_cfg(&self, key: &str) -> Option<Vec<String>> {
+        self.cfg.get(key).map(|values| values.to_vec())
+    }
+    fn get_features(&self) -> Vec<String> {
+        self.cfg.get("feature").cloned().unwrap_or_default()
+    }
+    fn get_cfg_pairs(&self) -> Vec<(String, Option<String>)> {
+        self.cfg
+            .iter()
+            .flat_map(|(key, values)| {
+                if values.is_empty() {
+                    vec![(key.clone(), None)]
+                } else {
+                    values
+                        .iter()
+                        .map(|value| (key.clone(), Some(value.clone())))
+                        .collect()
+                }
+            })
+            .collect()
+    }
+}
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub(crate) enum CfgScrutinee<'src> {
