@@ -30,6 +30,12 @@ mod tests;
 
 pub mod cfg;
 mod conditional;
+
+use crate::{
+    cfg::{CfgConditional, RustCfgProvider},
+    conditional::{Condition, ConditionalItem, NItems, conditional_item},
+};
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spanned<T> {
     inner: T,
@@ -46,6 +52,19 @@ type ParserInput<'a> = chumsky::input::MappedInput<
         ) -> (&'x Token<'x>, &'x SimpleSpan),
     >,
 >;
+
+type BoxedZngParser<'a, Item> =
+    chumsky::Boxed<'a, 'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>>;
+
+/// Effective trait alias for verbose chumsky Parser Trait
+trait ZngParser<'a, Item>:
+    Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+}
+impl<'a, T, Item> ZngParser<'a, Item> for T where
+    T: Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+}
 
 #[derive(Debug)]
 pub struct ParsedZngFile<'a>(Vec<ParsedItem<'a>>);
@@ -217,6 +236,7 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, NItems>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -290,6 +310,7 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
+    MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, NItems>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -375,7 +396,9 @@ impl ProcessedItem<'_> {
                 let mut layout_span = None;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
-                for item in items {
+                let mut to_process = items;
+                to_process.reverse(); // create a stack of items to process
+                while let Some(item) = to_process.pop() {
                     let item_span = item.span;
                     let item = item.inner;
                     match item {
@@ -484,6 +507,12 @@ impl ProcessedItem<'_> {
                                 }
                             }
                             cpp_ref = Some(CppRef(cpp_type.to_owned()));
+                        }
+                        ParsedTypeItem::MatchOnCfg(match_) => {
+                            let result = match_.eval(ctx);
+                            if let Some(result) = result {
+                                to_process.extend(result);
+                            }
                         }
                     }
                 }
@@ -742,10 +771,11 @@ struct ParseContext<'a, 'b> {
     source_cache: std::collections::HashMap<std::path::PathBuf, String>,
     /// All .zng files processed during parsing (main file + imports)
     processed_files: Vec<std::path::PathBuf>,
+    cfg_provider: Box<dyn RustCfgProvider>,
 }
 
 impl<'a, 'b> ParseContext<'a, 'b> {
-    fn new(path: std::path::PathBuf, text: &'a str) -> Self {
+    fn new(path: std::path::PathBuf, text: &'a str, cfg: Box<dyn RustCfgProvider>) -> Self {
         let processed_files = vec![path.clone()];
         Self {
             path,
@@ -754,10 +784,16 @@ impl<'a, 'b> ParseContext<'a, 'b> {
             reports: Vec::new(),
             source_cache: HashMap::new(),
             processed_files,
+            cfg_provider: cfg,
         }
     }
 
-    fn with_depth(path: std::path::PathBuf, text: &'a str, depth: usize) -> Self {
+    fn with_depth(
+        path: std::path::PathBuf,
+        text: &'a str,
+        depth: usize,
+        cfg: Box<dyn RustCfgProvider>,
+    ) -> Self {
         let processed_files = vec![path.clone()];
         Self {
             path,
@@ -766,6 +802,7 @@ impl<'a, 'b> ParseContext<'a, 'b> {
             reports: Vec::new(),
             source_cache: HashMap::new(),
             processed_files,
+            cfg_provider: cfg,
         }
     }
 
@@ -866,6 +903,10 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         }
         exit(101);
     }
+
+    fn get_config_provider(&self) -> &dyn RustCfgProvider {
+        self.cfg_provider.as_ref()
+    }
 }
 
 /// A trait for types which can resolve filesystem-like paths relative to a given directory.
@@ -914,15 +955,24 @@ impl<'a> ParsedZngFile<'a> {
             ctx.emit_ariadne_errors();
         };
 
-        let (aliases, items) = ast.0.0.into_iter().partition_map(partition_parsed_item_vec);
+        let (aliases, items) = partition_parsed_items(
+            ast.0
+                .0
+                .into_iter()
+                .map(|item| process_parsed_item(item, ctx)),
+        );
         ProcessedZngFile::new(aliases, items).into_zngur_spec(zngur, ctx);
 
         if let Some(dirname) = ctx.path.to_owned().parent() {
             for import in std::mem::take(&mut zngur.imports) {
                 match resolver.resolve_import(dirname, &import.0) {
                     Ok(text) => {
-                        let mut nested_ctx =
-                            ParseContext::with_depth(dirname.join(&import.0), &text, ctx.depth + 1);
+                        let mut nested_ctx = ParseContext::with_depth(
+                            dirname.join(&import.0),
+                            &text,
+                            ctx.depth + 1,
+                            ctx.get_config_provider().clone_box(),
+                        );
                         Self::parse_into(zngur, &mut nested_ctx, resolver);
                         ctx.consume_from(nested_ctx);
                     }
@@ -945,12 +995,32 @@ impl<'a> ParsedZngFile<'a> {
     }
 
     /// Parse a .zng file and return both the spec and list of all processed files.
-    pub fn parse(path: std::path::PathBuf) -> ParseResult {
+    pub fn parse(path: std::path::PathBuf, cfg: Box<dyn RustCfgProvider>) -> ParseResult {
         let mut zngur = ZngurSpec::default();
+        zngur.rust_cfg.extend(cfg.get_cfg_pairs());
         let text = std::fs::read_to_string(&path).unwrap();
-        let mut ctx = ParseContext::new(path, &text);
+        let mut ctx = ParseContext::new(path.clone(), &text, cfg.clone_box());
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
         if ctx.has_errors() {
+            // add report of cfg values used
+            ctx.add_report(
+                Report::build(
+                    ReportKind::Custom("cfg values", ariadne::Color::Green),
+                    path.file_name().unwrap_or_default().to_string_lossy(),
+                    0,
+                )
+                .with_message(
+                    cfg.get_cfg_pairs()
+                        .into_iter()
+                        .map(|(key, value)| match value {
+                            Some(value) => format!("{key}=\"{value}\""),
+                            None => key,
+                        })
+                        .join("\n")
+                        .to_string(),
+                )
+                .finish(),
+            );
             ctx.emit_ariadne_errors();
         }
         ParseResult {
@@ -960,9 +1030,9 @@ impl<'a> ParsedZngFile<'a> {
     }
 
     /// Parse a .zng file from a string. Mainly useful for testing.
-    pub fn parse_str(text: &str) -> ParseResult {
+    pub fn parse_str(text: &str, cfg: impl RustCfgProvider + 'static) -> ParseResult {
         let mut zngur = ZngurSpec::default();
-        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
+        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text, Box::new(cfg));
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
@@ -976,10 +1046,11 @@ impl<'a> ParsedZngFile<'a> {
     #[cfg(test)]
     pub(crate) fn parse_str_with_resolver(
         text: &str,
+        cfg: impl RustCfgProvider + 'static,
         resolver: &impl ImportResolver,
     ) -> ParseResult {
         let mut zngur = ZngurSpec::default();
-        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text);
+        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text, Box::new(cfg));
         Self::parse_into(&mut zngur, &mut ctx, resolver);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
@@ -991,30 +1062,68 @@ impl<'a> ParsedZngFile<'a> {
     }
 }
 
-fn partition_parsed_item_vec(item: ParsedItem<'_>) -> Either<ParsedAlias<'_>, ProcessedItem<'_>> {
+pub(crate) enum ProcessedItemOrAlias<'a> {
+    Processed(ProcessedItem<'a>),
+    Alias(ParsedAlias<'a>),
+    ChildItems(Vec<ProcessedItemOrAlias<'a>>),
+}
+
+fn process_parsed_item<'a>(
+    item: ParsedItem<'a>,
+    ctx: &mut ParseContext,
+) -> ProcessedItemOrAlias<'a> {
+    use ProcessedItemOrAlias as Ret;
     match item {
-        ParsedItem::Alias(alias) => Either::Left(alias),
+        ParsedItem::Alias(alias) => Ret::Alias(alias),
         ParsedItem::ConvertPanicToException(span) => {
-            Either::Right(ProcessedItem::ConvertPanicToException(span))
+            Ret::Processed(ProcessedItem::ConvertPanicToException(span))
         }
         ParsedItem::CppAdditionalInclude(inc) => {
-            Either::Right(ProcessedItem::CppAdditionalInclude(inc))
+            Ret::Processed(ProcessedItem::CppAdditionalInclude(inc))
         }
         ParsedItem::Mod { path, items } => {
-            let (aliases, items): (Vec<ParsedAlias<'_>>, Vec<ProcessedItem<'_>>) =
-                items.into_iter().partition_map(partition_parsed_item_vec);
-            Either::Right(ProcessedItem::Mod {
+            let (aliases, items) = partition_parsed_items(
+                items.into_iter().map(|item| process_parsed_item(item, ctx)),
+            );
+            Ret::Processed(ProcessedItem::Mod {
                 path,
                 items,
                 aliases,
             })
         }
-        ParsedItem::Type { ty, items } => Either::Right(ProcessedItem::Type { ty, items }),
-        ParsedItem::Trait { tr, methods } => Either::Right(ProcessedItem::Trait { tr, methods }),
-        ParsedItem::Fn(method) => Either::Right(ProcessedItem::Fn(method)),
-        ParsedItem::ExternCpp(items) => Either::Right(ProcessedItem::ExternCpp(items)),
-        ParsedItem::Import(path) => Either::Right(ProcessedItem::Import(path)),
+        ParsedItem::Type { ty, items } => Ret::Processed(ProcessedItem::Type { ty, items }),
+        ParsedItem::Trait { tr, methods } => Ret::Processed(ProcessedItem::Trait { tr, methods }),
+        ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
+        ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
+        ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
+        ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
+            match_
+                .eval(ctx)
+                .unwrap_or_default() // unwrap or empty
+                .into_iter()
+                .map(|item| item.inner)
+                .collect(),
+        ),
     }
+}
+
+fn partition_parsed_items<'a>(
+    items: impl IntoIterator<Item = ProcessedItemOrAlias<'a>>,
+) -> (Vec<ParsedAlias<'a>>, Vec<ProcessedItem<'a>>) {
+    let mut aliases = Vec::new();
+    let mut processed = Vec::new();
+    for item in items.into_iter() {
+        match item {
+            ProcessedItemOrAlias::Processed(p) => processed.push(p),
+            ProcessedItemOrAlias::Alias(a) => aliases.push(a),
+            ProcessedItemOrAlias::ChildItems(children) => {
+                let (child_aliases, child_items) = partition_parsed_items(children);
+                aliases.extend(child_aliases);
+                processed.extend(child_items);
+            }
+        }
+    }
+    (aliases, processed)
 }
 
 impl<'a> ProcessedZngFile<'a> {
@@ -1490,112 +1599,111 @@ fn method<'a>()
         })
 }
 
-fn type_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
-    fn inner_item<'a>()
-    -> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>>
-    + Clone {
-        let property_item = (spanned(select! {
+fn inner_type_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+{
+    let property_item = (spanned(select! {
+        Token::Ident(c) => c,
+    }))
+    .then_ignore(just(Token::Eq))
+    .then(select! {
+        Token::Number(c) => c,
+    });
+    let layout = just([Token::Sharp, Token::Ident("layout")])
+        .ignore_then(
+            property_item
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(ParsedLayoutPolicy::StackAllocated)
+        .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
+        .or(just([Token::Sharp, Token::Ident("heap_allocated")])
+            .to(ParsedLayoutPolicy::HeapAllocated))
+        .map_with(|x, extra| ParsedTypeItem::Layout(extra.span(), x))
+        .boxed();
+    let trait_item = select! {
+        Token::Ident("Debug") => ZngurWellknownTrait::Debug,
+        Token::Ident("Copy") => ZngurWellknownTrait::Copy,
+    }
+    .or(just(Token::Question)
+        .then(just(Token::Ident("Sized")))
+        .to(ZngurWellknownTrait::Unsized));
+    let traits = just(Token::Ident("wellknown_traits"))
+        .ignore_then(
+            spanned(trait_item)
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(ParsedTypeItem::Traits)
+        .boxed();
+    let constructor_args = rust_type()
+        .separated_by(just(Token::Comma))
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+        .map(ParsedConstructorArgs::Tuple)
+        .or((select! {
             Token::Ident(c) => c,
-        }))
-        .then_ignore(just(Token::Eq))
+        })
+        .boxed()
+        .then_ignore(just(Token::Colon))
+        .then(rust_type())
+        .separated_by(just(Token::Comma))
+        .collect::<Vec<_>>()
+        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+        .map(ParsedConstructorArgs::Named))
+        .or(empty().to(ParsedConstructorArgs::Unit))
+        .boxed();
+    let constructor = just(Token::Ident("constructor")).ignore_then(
+        (select! {
+            Token::Ident(c) => Some(c),
+        })
+        .or(empty().to(None))
+        .then(constructor_args)
+        .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
+    );
+    let field = just(Token::Ident("field")).ignore_then(
+        (select! {
+            Token::Ident(c) => c.to_owned(),
+            Token::Number(c) => c.to_string(),
+        })
+        .then(
+            just(Token::Ident("offset"))
+                .then(just(Token::Eq))
+                .ignore_then(select! {
+                    Token::Number(c) => c,
+                })
+                .then(
+                    just(Token::Comma)
+                        .then(just(Token::KwType))
+                        .then(just(Token::Eq))
+                        .ignore_then(rust_type()),
+                )
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
+    );
+    let cpp_value = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_value")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
         .then(select! {
-            Token::Number(c) => c,
+            Token::Str(c) => c,
+        })
+        .map(|x| ParsedTypeItem::CppValue {
+            field: x.0,
+            cpp_type: x.1,
         });
-        let layout = just([Token::Sharp, Token::Ident("layout")])
-            .ignore_then(
-                property_item
-                    .separated_by(just(Token::Comma))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(ParsedLayoutPolicy::StackAllocated)
-            .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
-            .or(just([Token::Sharp, Token::Ident("heap_allocated")])
-                .to(ParsedLayoutPolicy::HeapAllocated))
-            .map_with(|x, extra| ParsedTypeItem::Layout(extra.span(), x))
-            .boxed();
-        let trait_item = select! {
-            Token::Ident("Debug") => ZngurWellknownTrait::Debug,
-            Token::Ident("Copy") => ZngurWellknownTrait::Copy,
-        }
-        .or(just(Token::Question)
-            .then(just(Token::Ident("Sized")))
-            .to(ZngurWellknownTrait::Unsized));
-        let traits = just(Token::Ident("wellknown_traits"))
-            .ignore_then(
-                spanned(trait_item)
-                    .separated_by(just(Token::Comma))
-                    .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(ParsedTypeItem::Traits)
-            .boxed();
-        let constructor_args = rust_type()
-            .separated_by(just(Token::Comma))
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
-            .map(ParsedConstructorArgs::Tuple)
-            .or((select! {
-                Token::Ident(c) => c,
-            })
-            .boxed()
-            .then_ignore(just(Token::Colon))
-            .then(rust_type())
-            .separated_by(just(Token::Comma))
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
-            .map(ParsedConstructorArgs::Named))
-            .or(empty().to(ParsedConstructorArgs::Unit))
-            .boxed();
-        let constructor = just(Token::Ident("constructor")).ignore_then(
-            (select! {
-                Token::Ident(c) => Some(c),
-            })
-            .or(empty().to(None))
-            .then(constructor_args)
-            .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
-        );
-        let field = just(Token::Ident("field")).ignore_then(
-            (select! {
-                Token::Ident(c) => c.to_owned(),
-                Token::Number(c) => c.to_string(),
-            })
-            .then(
-                just(Token::Ident("offset"))
-                    .then(just(Token::Eq))
-                    .ignore_then(select! {
-                        Token::Number(c) => c,
-                    })
-                    .then(
-                        just(Token::Comma)
-                            .then(just(Token::KwType))
-                            .then(just(Token::Eq))
-                            .ignore_then(rust_type()),
-                    )
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
-            )
-            .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
-        );
-        let cpp_value = just(Token::Sharp)
-            .then(just(Token::Ident("cpp_value")))
-            .ignore_then(select! {
-                Token::Str(c) => c,
-            })
-            .then(select! {
-                Token::Str(c) => c,
-            })
-            .map(|x| ParsedTypeItem::CppValue {
-                field: x.0,
-                cpp_type: x.1,
-            });
-        let cpp_ref = just(Token::Sharp)
-            .then(just(Token::Ident("cpp_ref")))
-            .ignore_then(select! {
-                Token::Str(c) => c,
-            })
-            .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-        choice((
+    let cpp_ref = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_ref")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
+        .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
+    recursive(|item| {
+        let inner_item = choice((
             layout,
             traits,
             constructor,
@@ -1620,13 +1728,21 @@ fn type_item<'a>()
                     use_path,
                     data,
                 }),
-        ))
-        .then_ignore(just(Token::Semicolon))
-    }
+        ));
+
+        let match_stmt =
+            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedTypeItem::MatchOnCfg);
+
+        choice((match_stmt, inner_item.then_ignore(just(Token::Semicolon))))
+    })
+}
+
+fn type_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
     just(Token::KwType)
         .ignore_then(spanned(rust_type()))
         .then(
-            spanned(inner_item())
+            spanned(inner_type_item())
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
@@ -1713,7 +1829,8 @@ fn item<'a>()
             just(Token::KwMod)
                 .ignore_then(path())
                 .then(
-                    item.repeated()
+                    item.clone()
+                        .repeated()
                         .collect::<Vec<_>>()
                         .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
                 )
@@ -1725,6 +1842,7 @@ fn item<'a>()
             additional_include_item(),
             import_item(),
             alias(),
+            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedItem::MatchOnCfg),
         ))
     })
     .boxed()
@@ -1771,4 +1889,20 @@ fn path<'a>()
             span: extra.span(),
         })
         .boxed()
+}
+
+impl<'a> conditional::BodyItem for crate::ParsedTypeItem<'a> {
+    type Processed = Self;
+
+    fn process(self, _ctx: &mut ParseContext) -> Self::Processed {
+        self
+    }
+}
+
+impl<'a> conditional::BodyItem for crate::ParsedItem<'a> {
+    type Processed = ProcessedItemOrAlias<'a>;
+
+    fn process(self, ctx: &mut ParseContext) -> Self::Processed {
+        crate::process_parsed_item(self, ctx)
+    }
 }
