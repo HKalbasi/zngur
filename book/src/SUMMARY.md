@@ -17,6 +17,7 @@
   - [`Box<dyn Fn>`]()
   - [Opaque C++ types](./call_cpp_from_rust/opaque.md)
 - [Import](./import.md)
+- [Conditional Compilation](./conditional_compilation.md)
 - [Safety](./safety.md)
 - [How it compares to other tools](./how_it_compares.md)
 - [Design decisions](./philosophy.md)
