@@ -7,7 +7,10 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use zngur_generator::{ParsedZngFile, ZngurGenerator};
+use zngur_generator::{
+    ParsedZngFile, ZngurGenerator,
+    cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
+};
 
 #[must_use]
 /// Builder for the Zngur generator.
@@ -31,6 +34,7 @@ pub struct Zngur {
     depfile_path: Option<PathBuf>,
     mangling_base: Option<String>,
     cpp_namespace: Option<String>,
+    rust_cfg: Option<Box<dyn RustCfgProvider>>,
 }
 
 impl Zngur {
@@ -43,6 +47,7 @@ impl Zngur {
             depfile_path: None,
             mangling_base: None,
             cpp_namespace: None,
+            rust_cfg: None,
         }
     }
 
@@ -80,8 +85,32 @@ impl Zngur {
         self
     }
 
+    pub fn with_rust_cargo_cfg(mut self) -> Self {
+        self.rust_cfg = Some(Box::new(
+            InMemoryRustCfgProvider::default().load_from_cargo_env(),
+        ));
+        self
+    }
+
+    pub fn with_rust_in_memory_cfg<'a, CfgPairs, CfgKey, CfgValues>(
+        mut self,
+        cfg_values: CfgPairs,
+    ) -> Self
+    where
+        CfgPairs: IntoIterator<Item = (CfgKey, CfgValues)>,
+        CfgKey: AsRef<str> + 'a,
+        CfgValues: Clone + IntoIterator + 'a,
+        <CfgValues as IntoIterator>::Item: AsRef<str>,
+    {
+        self.rust_cfg = Some(Box::new(
+            InMemoryRustCfgProvider::default().with_values(cfg_values),
+        ));
+        self
+    }
+
     pub fn generate(self) {
-        let parse_result = ParsedZngFile::parse(self.zng_file);
+        let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
+        let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
         let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
