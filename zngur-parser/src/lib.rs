@@ -30,7 +30,7 @@ mod tests;
 
 mod conditional;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-struct Spanned<T> {
+pub struct Spanned<T> {
     inner: T,
     span: Span,
 }
