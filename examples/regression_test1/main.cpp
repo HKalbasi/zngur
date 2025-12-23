@@ -132,7 +132,7 @@ void test_refref() {
   zngur_dbg(strvec.get(0));
   zngur_dbg(strvec.get(2));
   zngur_dbg(*strvec.get(1).unwrap());
-  *strvec.get_mut(1).unwrap() = "floopy doop"_rs;
+  *strvec.get_mut(1).unwrap() = "flip flop"_rs;
   zngur_dbg(strvec);
 }
 
