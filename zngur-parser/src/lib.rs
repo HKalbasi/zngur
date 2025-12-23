@@ -28,6 +28,7 @@ pub struct ParseResult {
 #[cfg(test)]
 mod tests;
 
+pub mod cfg;
 mod conditional;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Spanned<T> {
@@ -1033,6 +1034,7 @@ impl<'a> ProcessedZngFile<'a> {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 enum Token<'a> {
     Arrow,
+    ArrowArm,
     AngleOpen,
     AngleClose,
     BracketOpen,
@@ -1051,6 +1053,10 @@ enum Token<'a> {
     Question,
     Comma,
     Semicolon,
+    Pipe,
+    Underscore,
+    Dot,
+    Bang,
     KwAs,
     KwAsync,
     KwDyn,
@@ -1066,6 +1072,9 @@ enum Token<'a> {
     KwExtern,
     KwImpl,
     KwImport,
+    KwIf,
+    KwElse,
+    KwMatch,
     Ident(&'a str),
     Str(&'a str),
     Number(usize),
@@ -1089,6 +1098,9 @@ impl<'a> Token<'a> {
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
             "import" => Token::KwImport,
+            "if" => Token::KwIf,
+            "else" => Token::KwElse,
+            "match" => Token::KwMatch,
             x => Token::Ident(x),
         }
     }
@@ -1098,6 +1110,7 @@ impl Display for Token<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Token::Arrow => write!(f, "->"),
+            Token::ArrowArm => write!(f, "=>"),
             Token::AngleOpen => write!(f, "<"),
             Token::AngleClose => write!(f, ">"),
             Token::BracketOpen => write!(f, "["),
@@ -1116,6 +1129,10 @@ impl Display for Token<'_> {
             Token::Question => write!(f, "?"),
             Token::Comma => write!(f, ","),
             Token::Semicolon => write!(f, ";"),
+            Token::Pipe => write!(f, "|"),
+            Token::Underscore => write!(f, "_"),
+            Token::Dot => write!(f, "."),
+            Token::Bang => write!(f, "!"),
             Token::KwAs => write!(f, "as"),
             Token::KwAsync => write!(f, "async"),
             Token::KwDyn => write!(f, "dyn"),
@@ -1131,6 +1148,9 @@ impl Display for Token<'_> {
             Token::KwExtern => write!(f, "extern"),
             Token::KwImpl => write!(f, "impl"),
             Token::KwImport => write!(f, "import"),
+            Token::KwIf => write!(f, "if"),
+            Token::KwElse => write!(f, "else"),
+            Token::KwMatch => write!(f, "match"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -1143,6 +1163,7 @@ fn lexer<'src>()
     let token = choice((
         choice([
             just("->").to(Token::Arrow),
+            just("=>").to(Token::ArrowArm),
             just("<").to(Token::AngleOpen),
             just(">").to(Token::AngleClose),
             just("[").to(Token::BracketOpen),
@@ -1161,6 +1182,10 @@ fn lexer<'src>()
             just("?").to(Token::Question),
             just(",").to(Token::Comma),
             just(";").to(Token::Semicolon),
+            just("|").to(Token::Pipe),
+            just("_").to(Token::Underscore),
+            just(".").to(Token::Dot),
+            just("!").to(Token::Bang),
         ]),
         text::ident().map(Token::ident_or_kw),
         text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
