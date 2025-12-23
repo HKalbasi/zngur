@@ -53,6 +53,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
+    pub(crate) rust_cfg_defines: &'a Vec<String>,
 }
 
 impl<'a> CppHeaderTemplate<'a> {
