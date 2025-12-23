@@ -198,3 +198,163 @@ impl<Item: BodyItem> ConditionBodyCardinality<Item> for NItems {
     }
 }
 
+/// a guard for an #if statement
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ConditionGuard<Scrutinee: Matchable> {
+    Single {
+        scrutinee: Spanned<Scrutinee>,
+        pattern: Spanned<<Scrutinee as Matchable>::Pattern>,
+        span: Span,
+    },
+    And(Vec<ConditionGuard<Scrutinee>>, Span),
+    Or(Vec<ConditionGuard<Scrutinee>>, Span),
+    Not(Box<ConditionGuard<Scrutinee>>, Span),
+    Grouped(Box<ConditionGuard<Scrutinee>>, Span),
+}
+
+impl<Scrutinee: Matchable> ConditionGuard<Scrutinee> {
+    fn eval(&self, ctx: &mut ParseContext) -> bool {
+        match self {
+            Self::Single {
+                scrutinee, pattern, ..
+            } => scrutinee.inner.eval(&pattern.inner, ctx),
+            Self::And(items, _) => items.iter().all(|item| item.eval(ctx)),
+            Self::Or(items, _) => items.iter().any(|item| item.eval(ctx)),
+            Self::Not(item, _) => !item.eval(ctx),
+            Self::Grouped(item, _) => item.eval(ctx),
+        }
+    }
+}
+
+/// a branch of an `#if` statement
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionBranch<
+    Scrutinee: Matchable,
+    Item: BodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
+> {
+    pub scrutinee: Spanned<Scrutinee>,
+    pub body:
+        <Cardinality as ConditionBodyCardinality<Item>>::Body<<Scrutinee as Matchable>::Pattern>,
+}
+
+/// a complete `#if {} #else if #else {}` statement
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionIf<
+    Scrutinee: Matchable,
+    Item: BodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
+> {
+    pub arms: Vec<ConditionBranch<Scrutinee, Item, Cardinality>>,
+    pub fallback: Option<Cardinality::Block>,
+}
+
+/// a `#match` statement
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ConditionMatch<
+    Scrutinee: Matchable,
+    Item: BodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
+> {
+    pub scrutinee: Spanned<Scrutinee>,
+    pub arms: Vec<
+        Spanned<
+            <Cardinality as ConditionBodyCardinality<Item>>::Body<
+                <Scrutinee as Matchable>::Pattern,
+            >,
+        >,
+    >,
+}
+
+impl<Scrutinee: Matchable, Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionBranch<Scrutinee, Item, Cardinality>
+{
+    fn eval(
+        &self,
+        ctx: &mut ParseContext,
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        let pattern = self.body.pattern();
+        if self.scrutinee.inner.eval(pattern, ctx) {
+            return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_body(
+                &self.body, ctx,
+            ));
+        }
+        None
+    }
+}
+
+impl<Scrutinee: Matchable, Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionMatch<Scrutinee, Item, Cardinality>
+{
+    fn eval(
+        &self,
+        ctx: &mut ParseContext,
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        for arm in &self.arms {
+            let pattern = arm.inner.pattern();
+            if self.scrutinee.inner.eval(pattern, ctx) {
+                return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_body(
+                    &arm.inner, ctx,
+                ));
+            }
+        }
+        None
+    }
+}
+
+impl<Scrutinee: Matchable, Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for ConditionIf<Scrutinee, Item, Cardinality>
+{
+    fn eval(
+        &self,
+        ctx: &mut ParseContext,
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        for arm in &self.arms {
+            if let Some(result) = arm.eval(ctx) {
+                return Some(result);
+            }
+        }
+        if let Some(fallback) = &self.fallback {
+            return Some(<Cardinality as ConditionBodyCardinality<Item>>::pass_block(
+                fallback, ctx,
+            ));
+        }
+        None
+    }
+}
+
+/// a conditional item behind an if or match statement
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Condition<
+    Scrutinee: Matchable,
+    Item: BodyItem,
+    Cardinality: ConditionBodyCardinality<Item>,
+> {
+    If(ConditionIf<Scrutinee, Item, Cardinality>),
+    Match(ConditionMatch<Scrutinee, Item, Cardinality>),
+}
+
+impl<Scrutinee: Matchable, Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>>
+    ConditionalItem<Item, Cardinality> for Condition<Scrutinee, Item, Cardinality>
+{
+    fn eval(
+        &self,
+        ctx: &mut ParseContext,
+    ) -> Option<<Cardinality as ConditionBodyCardinality<Item>>::EvalResult> {
+        match self {
+            Self::If(item) => item.eval(ctx),
+            Self::Match(item) => item.eval(ctx),
+        }
+    }
+}
+
+/// a trait that helps build combined parsers for ConditionalItem's that accept `#if {} #else {}` or `#match`
+pub trait Conditional<'src, Item: BodyItem, Cardinality: ConditionBodyCardinality<Item>> {
+    type Scrutinee: MatchableParse<'src>;
+    fn if_parser(
+        item_parser: impl ZngParser<'src, Item> + 'src,
+    ) -> BoxedZngParser<'src, Condition<Self::Scrutinee, Item, Cardinality>>;
+    fn match_parser(
+        item_parser: impl ZngParser<'src, Item> + 'src,
+    ) -> BoxedZngParser<'src, Condition<Self::Scrutinee, Item, Cardinality>>;
+}
