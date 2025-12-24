@@ -27,7 +27,7 @@ pub trait MatchPattern: core::fmt::Debug + Clone + PartialEq + Eq {
     fn default_some(span: crate::Span) -> Self;
 }
 
-/// a Pattern tha can be matched against
+/// a Pattern that can be matched against
 pub trait MatchPatternParse<'src>: MatchPattern {
     /// return a parser for for the pattern
     fn parser() -> impl ZngParser<'src, Self>;
@@ -368,7 +368,7 @@ pub fn block_for_single<'src, Item: BodyItem>(
         .at_most(1)
         .collect::<Vec<_>>()
         .map(|items| {
-            // should be 1 or zero becasue of `.at_most(1)`
+            // should be 1 or zero because of `.at_most(1)`
             items.into_iter().next()
         })
 }
@@ -499,7 +499,7 @@ where
         })
 }
 
-/// a paraser for the arm of a `#match` statment
+/// a parser for the arm of a `#match` statement
 fn match_arm<
     'src,
     Scrutinee: MatchableParse<'src>,
@@ -571,7 +571,7 @@ pub fn conditional_item<
     let if_parser = <Cond as Conditional<'src, Item, Cardinality>>::if_parser(item_parser.clone());
     let match_parser = <Cond as Conditional<'src, Item, Cardinality>>::match_parser(item_parser).try_map_with(|match_, e| {
         if !e.state().unstable_features.cfg_match {
-            Err(Rich::custom(e.span(), "`#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file."))
+            Err(Rich::custom(e.span(), "`#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file."))
         } else {
             Ok(match_)
         }
