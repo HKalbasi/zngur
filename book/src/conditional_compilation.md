@@ -106,6 +106,8 @@ Match statements are an unstable feature, the syntax may change.
 ### Example
 
 ```zng
+#unstable(cfg_match)
+
 #match cfg!(feature) {
     "bar" | "zigza" => type crate::BarZigZa {
         #layout(size = 1, align = 1);

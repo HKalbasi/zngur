@@ -430,7 +430,7 @@ where
             });
 
         let and_pat = not_pat.clone().foldl_with(
-            just(Token::AndAnd)
+            just([Token::And, Token::And])
                 .ignore_then(not_pat)
                 .repeated(),
             |lhs, rhs, e| match lhs {
@@ -444,7 +444,7 @@ where
 
         // or pat
         and_pat.clone().foldl_with(
-            just(Token::PipePipe)
+            just([Token::Pipe, Token::Pipe])
                 .ignore_then(and_pat)
                 .repeated(),
             |lhs, rhs, e| match lhs {
@@ -459,10 +459,7 @@ where
 
     guard
         .then(block.delimited_by(just(Token::BraceOpen), just(Token::BraceClose)))
-        .map(move |(guard, block)| ConditionBranch {
-            guard,
-            block,
-        })
+        .map(move |(guard, block)| ConditionBranch { guard, block })
 }
 
 /// parser for an `#if {} #else if {} #else {}` statement
@@ -572,7 +569,13 @@ pub fn conditional_item<
     Condition<<Cond as Conditional<'src, Item, Cardinality>>::Scrutinee, Item, Cardinality>,
 > {
     let if_parser = <Cond as Conditional<'src, Item, Cardinality>>::if_parser(item_parser.clone());
-    let match_parser = <Cond as Conditional<'src, Item, Cardinality>>::match_parser(item_parser);
+    let match_parser = <Cond as Conditional<'src, Item, Cardinality>>::match_parser(item_parser).try_map_with(|match_, e| {
+        if !e.state().unstable_features.cfg_match {
+            Err(Rich::custom(e.span(), "`#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file."))
+        } else {
+            Ok(match_)
+        }
+    });
     choice((if_parser, match_parser))
 }
 
