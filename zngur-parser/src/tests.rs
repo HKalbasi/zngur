@@ -588,6 +588,8 @@ type ::std::string::String {
 #[test]
 fn test_match_conditional_type_item() {
     let source = r#"
+#unstable(cfg_match)
+
 type ::std::string::String {
     #match cfg!(target_pointer_width) {
         // single item arm
@@ -664,6 +666,8 @@ fn conditional_if_spec_item() {
 #[test]
 fn conditional_match_spec_item() {
     let source = r#"
+#unstable(cfg_match)
+
 #match cfg!(feature) {
     "foo" => type crate::Foo {
         #layout(size = 1, align = 1);
@@ -685,6 +689,8 @@ fn conditional_match_spec_item() {
 #[test]
 fn match_pattern_single_cfg() {
     let source = r#"
+#unstable(cfg_match)
+
 #match cfg!(feature) {
     "bar" | "zigza" => type crate::BarZigZa {
         #layout(size = 1, align = 1);
@@ -762,6 +768,8 @@ fn if_pattern_multi_cfg() {
 #[test]
 fn match_pattern_multi_cfg() {
     let source = r#"
+#unstable(cfg_match)
+
 #match (cfg!(feature.foo), cfg!(target_pointer_width)) {
     // match two cfg keys as a set
     (Some, "32") => type crate::Foo32 {
@@ -795,6 +803,8 @@ fn match_pattern_multi_cfg() {
 #[test]
 fn match_pattern_multi_cfg_bad_pattern() {
     let source = r#"
+#unstable(cfg_match)
+
 #match (cfg!(feature.foo), cfg!(target_pointer_width)) {
     (Some, "32") => type crate::Foo32 { 
         // would succeed if cfg match attempted
@@ -816,9 +826,9 @@ fn match_pattern_multi_cfg_bad_pattern() {
         InMemoryRustCfgProvider::default().with_values([("target_pointer_width", &["64"])]),
         expect![[r#"
             Error: Can not match single pattern against multiple cfg values.
-               ╭─[test.zng:7:5]
+               ╭─[test.zng:9:5]
                │
-             7 │     "64" => type crate::NoFoo64 {
+             9 │     "64" => type crate::NoFoo64 {
                │     ──┬─  
                │       ╰─── Can not match single pattern against multiple cfg values.
             ───╯
@@ -829,6 +839,8 @@ fn match_pattern_multi_cfg_bad_pattern() {
 #[test]
 fn match_pattern_multi_cfg_bad_pattern2() {
     let source = r#"
+#unstable(cfg_match)
+
 #match (cfg!(feature.foo), cfg!(target_pointer_width), cfg!(target_feature) ) {
     (Some, "32", "avx" & "avx2") => type crate::Foo32 { 
         // would succeed if cfg match attempted
@@ -854,12 +866,43 @@ fn match_pattern_multi_cfg_bad_pattern2() {
         InMemoryRustCfgProvider::default().with_values(cfg),
         expect![[r#"
             Error: Number of patterns and number of scrutinees do not match.
-               ╭─[test.zng:7:5]
+               ╭─[test.zng:9:5]
                │
-             7 │     (None, "64") => type crate::NoFoo64 {
+             9 │     (None, "64") => type crate::NoFoo64 {
                │     ──────┬─────  
                │           ╰─────── Number of patterns and number of scrutinees do not match.
             ───╯
+        "#]],
+    );
+}
+
+#[test]
+fn cfg_match_unstable() {
+    let source = r#"
+#match cfg!(feature) {
+    "foo" => type crate::Foo {
+        #layout(size = 1, align = 1);
+    }
+    _ => {
+        type crate::Bar {
+            #layout(size = 1, align = 1);
+        }
+    }
+}
+    "#;
+    check_fail_with_cfg(
+        source,
+        InMemoryRustCfgProvider::default().with_values([("feature", &["foo"])]),
+        expect![[r#"
+            Error: `#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+                ╭─[test.zng:2:1]
+                │
+              2 │ ╭─▶ #match cfg!(feature) {
+                ┆ ┆   
+             11 │ ├─▶ }
+                │ │       
+                │ ╰─────── `#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+            ────╯
         "#]],
     );
 }

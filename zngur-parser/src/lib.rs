@@ -53,16 +53,25 @@ type ParserInput<'a> = chumsky::input::MappedInput<
     >,
 >;
 
-type BoxedZngParser<'a, Item> =
-    chumsky::Boxed<'a, 'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>>;
+#[derive(Default)]
+pub struct UnstableFeatures {
+    pub cfg_match: bool,
+}
+
+#[derive(Default)]
+pub struct ZngParserState {
+    pub unstable_features: UnstableFeatures,
+}
+
+type ZngParserExtra<'a> =
+    extra::Full<Rich<'a, Token<'a>, Span>, extra::SimpleState<ZngParserState>, ()>;
+
+type BoxedZngParser<'a, Item> = chumsky::Boxed<'a, 'a, ParserInput<'a>, Item, ZngParserExtra<'a>>;
 
 /// Effective trait alias for verbose chumsky Parser Trait
-trait ZngParser<'a, Item>:
-    Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
-}
+trait ZngParser<'a, Item>: Parser<'a, ParserInput<'a>, Item, ZngParserExtra<'a>> + Clone {}
 impl<'a, T, Item> ZngParser<'a, Item> for T where
-    T: Parser<'a, ParserInput<'a>, Item, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
+    T: Parser<'a, ParserInput<'a>, Item, ZngParserExtra<'a>> + Clone
 {
 }
 
@@ -220,6 +229,7 @@ struct ParsedImportPath {
 enum ParsedItem<'a> {
     ConvertPanicToException(Span),
     CppAdditionalInclude(&'a str),
+    UnstableFeature(&'a str),
     Mod {
         path: ParsedPath<'a>,
         items: Vec<ParsedItem<'a>>,
@@ -948,7 +958,7 @@ impl<'a> ParsedZngFile<'a> {
         );
         let (ast, errs) = file_parser()
             .map_with(|ast, extra| (ast, extra.span()))
-            .parse(tokens)
+            .parse_with_state(tokens, &mut extra::SimpleState(ZngParserState::default()))
             .into_output_errors();
         let Some(ast) = ast else {
             ctx.add_errors(errs.into_iter().map(|e| e.map_token(|c| c.to_string())));
@@ -1063,6 +1073,7 @@ impl<'a> ParsedZngFile<'a> {
 }
 
 pub(crate) enum ProcessedItemOrAlias<'a> {
+    Ignore,
     Processed(ProcessedItem<'a>),
     Alias(ParsedAlias<'a>),
     ChildItems(Vec<ProcessedItemOrAlias<'a>>),
@@ -1077,6 +1088,10 @@ fn process_parsed_item<'a>(
         ParsedItem::Alias(alias) => Ret::Alias(alias),
         ParsedItem::ConvertPanicToException(span) => {
             Ret::Processed(ProcessedItem::ConvertPanicToException(span))
+        }
+        ParsedItem::UnstableFeature(_) => {
+            // ignore
+            Ret::Ignore
         }
         ParsedItem::CppAdditionalInclude(inc) => {
             Ret::Processed(ProcessedItem::CppAdditionalInclude(inc))
@@ -1114,6 +1129,7 @@ fn partition_parsed_items<'a>(
     let mut processed = Vec::new();
     for item in items.into_iter() {
         match item {
+            ProcessedItemOrAlias::Ignore => continue,
             ProcessedItemOrAlias::Processed(p) => processed.push(p),
             ProcessedItemOrAlias::Alias(a) => aliases.push(a),
             ProcessedItemOrAlias::ChildItems(children) => {
@@ -1315,8 +1331,7 @@ fn lexer<'src>()
         .collect()
 }
 
-fn alias<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn alias<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::KwUse)
         .ignore_then(path())
         .then_ignore(just(Token::KwAs))
@@ -1335,13 +1350,11 @@ fn alias<'a>()
 }
 
 fn file_parser<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedZngFile<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+-> impl Parser<'a, ParserInput<'a>, ParsedZngFile<'a>, ZngParserExtra<'a>> + Clone {
     item().repeated().collect::<Vec<_>>().map(ParsedZngFile)
 }
 
-fn rust_type<'a>()
--> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> {
+fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>> {
     let as_scalar = |s: &str, head: char| -> Option<u32> {
         let s = s.strip_prefix(head)?;
         s.parse().ok()
@@ -1422,18 +1435,12 @@ fn rust_type<'a>()
 }
 
 fn rust_generics<'a>(
-    rust_type: Boxed<
-        'a,
-        'a,
-        ParserInput<'a>,
-        ParsedRustType<'a>,
-        extra::Err<Rich<'a, Token<'a>, Span>>,
-    >,
+    rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
 ) -> impl Parser<
     'a,
     ParserInput<'a>,
     Vec<Either<(&'a str, ParsedRustType<'a>), ParsedRustType<'a>>>,
-    extra::Err<Rich<'a, Token<'a>, Span>>,
+    ZngParserExtra<'a>,
 > + Clone {
     let named_generic = select! {
         Token::Ident(c) => c,
@@ -1452,19 +1459,8 @@ fn rust_generics<'a>(
 }
 
 fn rust_path_and_generics<'a>(
-    rust_type: Boxed<
-        'a,
-        'a,
-        ParserInput<'a>,
-        ParsedRustType<'a>,
-        extra::Err<Rich<'a, Token<'a>, Span>>,
-    >,
-) -> impl Parser<
-    'a,
-    ParserInput<'a>,
-    ParsedRustPathAndGenerics<'a>,
-    extra::Err<Rich<'a, Token<'a>, Span>>,
-> + Clone {
+    rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
+) -> impl Parser<'a, ParserInput<'a>, ParsedRustPathAndGenerics<'a>, ZngParserExtra<'a>> + Clone {
     let generics = rust_generics(rust_type.clone());
     path()
         .then(generics.clone().repeated().at_most(1).collect::<Vec<_>>())
@@ -1480,19 +1476,9 @@ fn rust_path_and_generics<'a>(
 }
 
 fn fn_args<'a>(
-    rust_type: Boxed<
-        'a,
-        'a,
-        ParserInput<'a>,
-        ParsedRustType<'a>,
-        extra::Err<Rich<'a, Token<'a>, Span>>,
-    >,
-) -> impl Parser<
-    'a,
-    ParserInput<'a>,
-    (Vec<ParsedRustType<'a>>, ParsedRustType<'a>),
-    extra::Err<Rich<'a, Token<'a>, Span>>,
-> + Clone {
+    rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
+) -> impl Parser<'a, ParserInput<'a>, (Vec<ParsedRustType<'a>>, ParsedRustType<'a>), ZngParserExtra<'a>>
++ Clone {
     rust_type
         .clone()
         .separated_by(just(Token::Comma))
@@ -1508,8 +1494,8 @@ fn fn_args<'a>(
 }
 
 fn spanned<'a, T>(
-    parser: impl Parser<'a, ParserInput<'a>, T, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone,
-) -> impl Parser<'a, ParserInput<'a>, Spanned<T>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+    parser: impl Parser<'a, ParserInput<'a>, T, ZngParserExtra<'a>> + Clone,
+) -> impl Parser<'a, ParserInput<'a>, Spanned<T>, ZngParserExtra<'a>> + Clone {
     parser.map_with(|inner, extra| Spanned {
         inner,
         span: extra.span(),
@@ -1517,15 +1503,8 @@ fn spanned<'a, T>(
 }
 
 fn rust_trait<'a>(
-    rust_type: Boxed<
-        'a,
-        'a,
-        ParserInput<'a>,
-        ParsedRustType<'a>,
-        extra::Err<Rich<'a, Token<'a>, Span>>,
-    >,
-) -> impl Parser<'a, ParserInput<'a>, ParsedRustTrait<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+    rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
+) -> impl Parser<'a, ParserInput<'a>, ParsedRustTrait<'a>, ZngParserExtra<'a>> + Clone {
     let fn_trait = select! {
         Token::Ident(c) => c,
     }
@@ -1540,9 +1519,7 @@ fn rust_trait<'a>(
     rust_trait
 }
 
-fn method<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserExtra<'a>> + Clone {
     spanned(just(Token::KwAsync))
         .or_not()
         .then_ignore(just(Token::KwFn))
@@ -1600,8 +1577,7 @@ fn method<'a>()
 }
 
 fn inner_type_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone
-{
+-> impl Parser<'a, ParserInput<'a>, ParsedTypeItem<'a>, ZngParserExtra<'a>> + Clone {
     let property_item = (spanned(select! {
         Token::Ident(c) => c,
     }))
@@ -1737,8 +1713,7 @@ fn inner_type_item<'a>()
     })
 }
 
-fn type_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn type_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::KwType)
         .ignore_then(spanned(rust_type()))
         .then(
@@ -1751,8 +1726,8 @@ fn type_item<'a>()
         .boxed()
 }
 
-fn trait_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn trait_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone
+{
     just(Token::KwTrait)
         .ignore_then(spanned(rust_trait(rust_type())))
         .then(
@@ -1766,15 +1741,14 @@ fn trait_item<'a>()
         .boxed()
 }
 
-fn fn_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn fn_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedItem::Fn)
 }
 
 fn additional_include_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::Sharp)
         .ignore_then(
             just(Token::Ident("cpp_additional_includes"))
@@ -1788,7 +1762,7 @@ fn additional_include_item<'a>()
 }
 
 fn extern_cpp_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     let function = spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedExternCppItem::Function);
@@ -1822,10 +1796,29 @@ fn extern_cpp_item<'a>()
         .boxed()
 }
 
-fn item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn unstable_feature<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
+    just([Token::Sharp, Token::Ident("unstable")]).ignore_then(
+        select! { Token::Ident(feat) => feat }
+            .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+            .try_map_with(|feat, e| match feat {
+                "cfg_match" => {
+                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                    ctx.unstable_features.cfg_match = true;
+                    Ok(ParsedItem::UnstableFeature("cfg_match"))
+                }
+                _ => Err(Rich::custom(
+                    e.span(),
+                    format!("unknown unstable feature '{feat}'"),
+                )),
+            }),
+    )
+}
+
+fn item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     recursive(|item| {
         choice((
+            unstable_feature(),
             just(Token::KwMod)
                 .ignore_then(path())
                 .then(
@@ -1848,8 +1841,8 @@ fn item<'a>()
     .boxed()
 }
 
-fn import_item<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone
+{
     just(Token::KwImport)
         .ignore_then(select! {
             Token::Str(path) => path,
@@ -1864,8 +1857,7 @@ fn import_item<'a>()
         .boxed()
 }
 
-fn path<'a>()
--> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, extra::Err<Rich<'a, Token<'a>, Span>>> + Clone {
+fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra<'a>> + Clone {
     let start = choice((
         just(Token::ColonColon).to(ParsedPathStart::Absolute),
         just(Token::KwCrate)
