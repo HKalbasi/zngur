@@ -894,14 +894,14 @@ fn cfg_match_unstable() {
         source,
         InMemoryRustCfgProvider::default().with_values([("feature", &["foo"])]),
         expect![[r#"
-            Error: `#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+            Error: `#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
                 ╭─[test.zng:2:1]
                 │
               2 │ ╭─▶ #match cfg!(feature) {
                 ┆ ┆   
              11 │ ├─▶ }
                 │ │       
-                │ ╰─────── `#match` statments are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+                │ ╰─────── `#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
             ────╯
         "#]],
     );

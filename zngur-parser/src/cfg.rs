@@ -9,9 +9,9 @@ use chumsky::prelude::*;
 
 /// A configuration provider, Must be Clone.
 pub trait RustCfgProvider: CloneableCfg {
-    /// Gets values assoceated with a config key if it's present.
+    /// Gets values associated with a config key if it's present.
     fn get_cfg(&self, key: &str) -> Option<Vec<String>>;
-    /// Gets a list of feature names that are enabeled
+    /// Gets a list of feature names that are enabled
     fn get_features(&self) -> Vec<String>;
     /// Gets all config key:value pairs
     ///
@@ -63,14 +63,14 @@ impl InMemoryRustCfgProvider {
         }
     }
 
-    pub fn with_values<'a, CfgPairs, CfgKey, CfgValues>(mut self, cfg_vlaues: CfgPairs) -> Self
+    pub fn with_values<'a, CfgPairs, CfgKey, CfgValues>(mut self, cfg_values: CfgPairs) -> Self
     where
         CfgPairs: IntoIterator<Item = (CfgKey, CfgValues)>,
         CfgKey: AsRef<str> + 'a,
         CfgValues: Clone + IntoIterator + 'a,
         <CfgValues as IntoIterator>::Item: AsRef<str>,
     {
-        for (key, values) in cfg_vlaues {
+        for (key, values) in cfg_values {
             let entry = self.cfg.entry(key.as_ref().to_string()).or_default();
             let values = values.clone().into_iter().map(|v| v.as_ref().to_string());
             entry.reserve(values.size_hint().0);
@@ -84,7 +84,7 @@ impl InMemoryRustCfgProvider {
     }
 
     pub fn load_from_cargo_env(mut self) -> Self {
-        // set to unify features that can appear in two locaitons
+        // set to unify features that can appear in two locations
         let mut features = HashSet::new();
         for (k, v) in std::env::vars_os() {
             // no panic if not unicode
