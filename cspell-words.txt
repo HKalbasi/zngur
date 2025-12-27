@@ -7,6 +7,7 @@ barbazxxx
 blobstore
 cerr
 chumsky
+cloneable
 cout
 CPTE
 Crubit
@@ -15,13 +16,17 @@ cstddef
 cstdint
 cstring
 decltype
+delem
 deinit
 depfile
+deque
 digset
 discontiguous
 emsdk
 endl
 flto
+foldl
+foldr
 funcs
 fvec
 hkalbasi
@@ -51,6 +56,8 @@ Rustup
 rustup
 rustyline
 Rustyline
+scrutinee
+scrutinees
 serde
 SIGSEGV
 sptl
@@ -58,6 +65,7 @@ sref
 ssize
 staticlib
 strvec
+stmnt
 unimportability
 Uninit
 uninit
@@ -74,3 +82,6 @@ Zngur
 Zngur's
 zngur's
 zængɑr
+zigza
+floopy
+zoop
