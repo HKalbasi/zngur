@@ -556,6 +556,8 @@ static EMPTY_CFG: [(&str, &[&str]); 0] = [];
 #[test]
 fn test_if_conditional_type_item() {
     let source = r#"
+#unstable(cfg_if)
+
 type ::std::string::String {
     #if cfg!(target_pointer_width = "64") {
         #layout(size = 24, align = 8);
@@ -645,6 +647,8 @@ type CfgPathPairs<'a> = &'a [(&'a [(&'a str, &'a [&'a str])], &'a [&'a str])];
 #[test]
 fn conditional_if_spec_item() {
     let source = r#"
+#unstable(cfg_if)
+
 #if cfg!(feature = "foo") {
     type crate::Foo {
         #layout(size = 1, align = 1);
@@ -723,6 +727,7 @@ fn match_pattern_single_cfg() {
 #[test]
 fn if_pattern_multi_cfg() {
     let source = r#"
+#unstable(cfg_if)
 // match two cfg keys as a set
 #if cfg!(feature.foo) && cfg!(target_pointer_width = 32) {
     type crate::Foo32 {
@@ -894,14 +899,14 @@ fn cfg_match_unstable() {
         source,
         InMemoryRustCfgProvider::default().with_values([("feature", &["foo"])]),
         expect![[r#"
-            Error: `#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+            Error: `#match` statements are unstable. Enable them by using `#unstable(cfg_match)` at the top of the file.
                 ╭─[test.zng:2:1]
                 │
               2 │ ╭─▶ #match cfg!(feature) {
                 ┆ ┆   
              11 │ ├─▶ }
                 │ │       
-                │ ╰─────── `#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file.
+                │ ╰─────── `#match` statements are unstable. Enable them by using `#unstable(cfg_match)` at the top of the file.
             ────╯
         "#]],
     );
