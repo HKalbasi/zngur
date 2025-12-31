@@ -4,6 +4,8 @@ Zngur provides `#if {} #else if {} #else {}` and `#match` statements to control
 which items in you `.zng` file are emitted into the final IDL specification.
 These statements are both powered by pattern matching.
 
+**Note:** These statements are an unstable feature, the syntax may change. You need `#unstable(cfg_if)` and `#unstable(cfg_match)` to enable them.
+
 ## The Scrutinee
 
 The only scrutinee type currently available is `cfg!(key<.item>)`
@@ -49,8 +51,10 @@ To summarize:
 ### Example
 
 ```zng
+#unstable(cfg_if)
+
 // test if "foo" is in the `feature` set
-#if cfg!(feature = "foo") {
+#if cfg!(feature."foo") {
     type crate::Foo {
         #layout(size = 1, align = 1);
     }
@@ -98,8 +102,6 @@ Yow can combine conditions just like in rust
 ```
 
 ## Match Statements
-
-Match statements are an unstable feature, the syntax may change.
 
 ![Match statements](./cfg_match_stmnt.svg)
 

@@ -56,6 +56,7 @@ type ParserInput<'a> = chumsky::input::MappedInput<
 #[derive(Default)]
 pub struct UnstableFeatures {
     pub cfg_match: bool,
+    pub cfg_if: bool,
 }
 
 #[derive(Default)]
@@ -1806,6 +1807,11 @@ fn unstable_feature<'a>()
                     let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
                     ctx.unstable_features.cfg_match = true;
                     Ok(ParsedItem::UnstableFeature("cfg_match"))
+                }
+                "cfg_if" => {
+                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                    ctx.unstable_features.cfg_if = true;
+                    Ok(ParsedItem::UnstableFeature("cfg_if"))
                 }
                 _ => Err(Rich::custom(
                     e.span(),

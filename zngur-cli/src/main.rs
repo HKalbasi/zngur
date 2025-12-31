@@ -1,7 +1,11 @@
 use std::{collections::HashMap, path::PathBuf};
 
-use clap::{Args, Parser};
+use clap::Parser;
 use zngur::Zngur;
+
+use crate::cfg_extractor::{CfgFromRustc, cfg_from_rustc};
+
+mod cfg_extractor;
 
 #[derive(Clone)]
 struct CfgKey {
@@ -111,62 +115,6 @@ enum Command {
     },
 }
 
-#[derive(Args)]
-struct CfgFromRustc {
-    /// Load rust cfg values using `rustc --print cfg`
-    ///
-    /// values loaded are in addition to any values provided with `--cfg` or `--feature`
-    /// respects the `RUSTFLAGS` environment variable
-    #[arg(long, group = "rustc")]
-    load_cfg_from_rustc: bool,
-
-    /// Use `cargo rustc -- --print cfg` which allows automatically collecting profile flags and
-    /// features
-    ///
-    /// WARNING: because `cargo rustc --print` is unstable this uses `cargo rustc -- --print` which
-    /// may invoke side effects like downloading all crate dependencies
-    ///
-    /// (requires --load-cfg-from-rustc)
-    #[arg(long, group = "cargo_rustc", requires = "rustc")]
-    use_cargo_rustc: bool,
-
-    /// flags to pass to rustc when loading cfg values
-    ///
-    /// (requires --load-cfg-from-rustc)
-    #[arg(long, requires = "rustc")]
-    rustc_flags: Option<String>,
-
-    /// A target to provide to `rustc` when loading config values
-    ///
-    /// (requires --load-cfg-from-rustc)
-    #[arg(long = "target", requires = "rustc")]
-    rustc_target: Option<String>,
-
-    /// cargo profile to use when loading cfg values
-    ///
-    /// (requires --use-cargo-rustc)
-    #[arg(long = "profile", requires = "cargo_rustc")]
-    cargo_profile: Option<String>,
-
-    /// cargo package to use when loading cfg values
-    ///
-    /// (requires --use-cargo-rustc)
-    #[arg(long = "package", requires = "cargo_rustc")]
-    cargo_package: Option<String>,
-
-    /// passes --no-default-features to cargo
-    ///
-    /// (requires --use-cargo-rustc)
-    #[arg(long, requires = "cargo_rustc")]
-    no_default_features: bool,
-
-    /// passes --all_features to cargo
-    ///
-    /// (requires --use-cargo-rustc)
-    #[arg(long, requires = "cargo_rustc")]
-    all_features: bool,
-}
-
 fn main() {
     let cmd = Command::parse();
     match cmd {
@@ -192,20 +140,7 @@ fn main() {
                 .with_rs_file(rs_file);
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
             if load_rustc_cfg.load_cfg_from_rustc {
-                cfg.extend(cfg_from_rustc(RustcCfgArgs {
-                    rustc_flags: load_rustc_cfg.rustc_flags.as_deref(),
-                    target: load_rustc_cfg.rustc_target.as_deref(),
-                    use_cargo: load_rustc_cfg.use_cargo_rustc,
-                    profile: load_rustc_cfg.cargo_profile.as_deref(),
-                    features: rust_features
-                        .iter()
-                        .map(String::as_str)
-                        .collect::<Vec<_>>()
-                        .as_slice(),
-                    package: load_rustc_cfg.cargo_package.as_deref(),
-                    no_default_features: load_rustc_cfg.no_default_features,
-                    all_features: load_rustc_cfg.all_features,
-                }));
+                cfg.extend(cfg_from_rustc(load_rustc_cfg, &rust_features));
             }
             if !rust_cfg.is_empty() {
                 cfg.extend(rust_cfg.into_iter().map(CfgKey::into_tuple));
@@ -228,179 +163,4 @@ fn main() {
             zng.generate();
         }
     }
-}
-
-struct RustcCfgArgs<'a> {
-    rustc_flags: Option<&'a str>,
-    target: Option<&'a str>,
-    use_cargo: bool,
-    profile: Option<&'a str>,
-    features: &'a [&'a str],
-    package: Option<&'a str>,
-    no_default_features: bool,
-    all_features: bool,
-}
-
-fn cfg_from_rustc(args: RustcCfgArgs) -> HashMap<String, Vec<String>> {
-    let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
-    let mut rustflags = parse_rustflags_env();
-    if let Some(flags) = args.rustc_flags {
-        rustflags.extend(parse_rustflags(flags))
-    }
-
-    let mut cmd = if args.use_cargo {
-        let mut cmd = std::process::Command::new("cargo");
-        cmd.arg("rustc");
-        if let Some(package) = args.package {
-            cmd.args(["--package", package]);
-        }
-        if let Some(profile) = args.profile {
-            cmd.args(["--profile", profile]);
-        }
-        if !args.features.is_empty() && !args.all_features {
-            cmd.args(["--features", &args.features.join(",")]);
-        }
-        if args.all_features {
-            cmd.arg("--all-features");
-        }
-        if args.no_default_features {
-            cmd.arg("--no-default-features");
-        }
-        cmd
-    } else {
-        std::process::Command::new("rustc")
-    };
-
-    if let Some(target) = args.target {
-        cmd.args(["--target", target]);
-    }
-
-    if args.use_cargo {
-        cmd.arg("--");
-    }
-
-    cmd.args(rustflags);
-
-    cmd.args(["--print", "cfg"]);
-
-    let out = cmd.output().expect("failed to print cfg with rustc");
-
-    if !out.status.success() {
-        eprintln!("{}", String::from_utf8_lossy(&out.stderr));
-        std::process::exit(1);
-    }
-
-    let out = String::from_utf8(out.stdout).expect("failed to parse rustc output as utf8");
-
-    let lines = out.split('\n').collect::<Vec<_>>();
-    for line in lines {
-        if line.trim().is_empty() {
-            continue;
-        }
-        let (key, value) = line.trim().split_once('=').unwrap_or((line, ""));
-        let value = if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
-            &value[1..value.len() - 1]
-        } else {
-            value
-        };
-        let entry = cfg.entry(key.to_owned()).or_default();
-        entry.push(value.to_owned())
-    }
-
-    cfg
-}
-
-fn parse_rustflags_env() -> Vec<String> {
-    let flags_str = std::env::var("RUSTFLAGS").unwrap_or_default();
-    parse_rustflags(&flags_str)
-}
-
-fn parse_rustflags(flags_str: &str) -> Vec<String> {
-    let mut word: String = String::new();
-    let mut flags: Vec<String> = Vec::new();
-
-    #[derive(Copy, Clone)]
-    enum State {
-        Delem,
-        Unquoted,
-        Escape(&'static State),
-        Single,
-        Double,
-    }
-    use State::*;
-
-    let mut state = Delem;
-
-    let mut chars = flags_str.chars();
-
-    loop {
-        let Some(c) = chars.next() else {
-            match state {
-                Delem => break,
-                Unquoted | Single | Double => {
-                    flags.push(std::mem::take(&mut word));
-                    break;
-                }
-                Escape(_) => {
-                    word.push('\\');
-                    flags.push(std::mem::take(&mut word));
-                    break;
-                }
-            }
-        };
-        state = match state {
-            Delem => match c {
-                '\'' => Single,
-                '"' => Double,
-                '\\' => Escape(&Delem),
-                '\t' | ' ' | '\n' => Delem,
-                c => {
-                    word.push(c);
-                    Unquoted
-                }
-            },
-            Unquoted => match c {
-                '\'' => Single,
-                '"' => Double,
-                '\\' => Escape(&Unquoted),
-                '\t' | ' ' | '\n' => {
-                    flags.push(std::mem::take(&mut word));
-                    Delem
-                }
-                c => {
-                    word.push(c);
-                    Unquoted
-                }
-            },
-            Escape(next_state) => match c {
-                c @ '"' | c @ '\\' if matches!(next_state, Double) => {
-                    word.push(c);
-                    Double
-                }
-                '\n' => *next_state,
-                c => {
-                    word.push('\\');
-                    word.push(c);
-                    *next_state
-                }
-            },
-            Single => match c {
-                '\'' => Unquoted,
-                c => {
-                    word.push(c);
-                    Single
-                }
-            },
-            Double => match c {
-                '"' => Unquoted,
-                '\\' => Escape(&Double),
-                c => {
-                    word.push(c);
-                    Double
-                }
-            },
-        }
-    }
-
-    flags
 }

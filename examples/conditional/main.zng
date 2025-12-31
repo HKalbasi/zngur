@@ -1,4 +1,5 @@
 #convert_panic_to_exception
+#unstable(cfg_if)
 
 type str {
     wellknown_traits(?Sized, Debug);

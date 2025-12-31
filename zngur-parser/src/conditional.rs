@@ -568,10 +568,16 @@ pub fn conditional_item<
     'src,
     Condition<<Cond as Conditional<'src, Item, Cardinality>>::Scrutinee, Item, Cardinality>,
 > {
-    let if_parser = <Cond as Conditional<'src, Item, Cardinality>>::if_parser(item_parser.clone());
+    let if_parser = <Cond as Conditional<'src, Item, Cardinality>>::if_parser(item_parser.clone()).try_map_with(|match_, e| {
+        if !e.state().unstable_features.cfg_if {
+            Err(Rich::custom(e.span(), "`#if` statements are unstable. Enable them by using `#unstable(cfg_if)` at the top of the file."))
+        } else {
+            Ok(match_)
+        }
+    });
     let match_parser = <Cond as Conditional<'src, Item, Cardinality>>::match_parser(item_parser).try_map_with(|match_, e| {
         if !e.state().unstable_features.cfg_match {
-            Err(Rich::custom(e.span(), "`#match` statements are unstable. Enable them by using `#unstable(cgf_match)` at the top of the file."))
+            Err(Rich::custom(e.span(), "`#match` statements are unstable. Enable them by using `#unstable(cfg_match)` at the top of the file."))
         } else {
             Ok(match_)
         }
