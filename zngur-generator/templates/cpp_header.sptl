@@ -610,7 +610,7 @@ namespace rust {
           <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
           ~<%- name %>() {
             if (drop_flag) {
-              <%- drop_in_place %>(data.data());
+              <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
             }
             <%- free_heap %>
           }
@@ -623,7 +623,7 @@ namespace rust {
           <%- name %>& operator=(<%- name %>&& other) {
             if (this != &other) {
               if (drop_flag) {
-                <%- drop_in_place %>(data.data());
+                <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
               }
               this->drop_flag = other.drop_flag;
               <%- copy_data %>
@@ -646,7 +646,7 @@ namespace rust {
 
         <% if let Some(cpp_value) = &td.cpp_value { %>
             inline <%- cpp_value.1 %>& cpp() {
-                return (*<%- cpp_value.0 %>(data.data())).as_cpp< <%- cpp_value.1 %> >();
+                return (*<%- cpp_value.0 %>(::rust::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
             }
         <% } %>
 
@@ -1141,7 +1141,7 @@ namespace rust {
         struct ZngurPrettyPrinter< <%- td.ty %> > {
           static inline void print( <%- td.ty %> const& t) {
             ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
-            <%- pretty_print %>(t.data.data());
+            <%- pretty_print %>(::rust::__zngur_internal_data_ptr(t));
           }
         };
 
