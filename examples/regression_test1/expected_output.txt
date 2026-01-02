@@ -85,12 +85,6 @@ scope passed to dyn Fn -- finished
 End of call_dyn_fn_multi_args
 Test dyn Fn() with multiple arguments -- finished
 
-<<<<<<< HEAD
-Test zero-sized type -- started
-Method call on ZST
-[main.cpp:127] zst = ZeroSizedType
-Test zero-sized type -- finished
-=======
 Test Ref<Ref<T>> -- started
 [main.cpp:131] strvec = [
     "a str",
@@ -110,5 +104,9 @@ Test Ref<Ref<T>> -- started
     "a third str",
 ]
 Test Ref<Ref<T>> -- finished
->>>>>>> main
+
+Test zero-sized type -- started
+Method call on ZST
+[main.cpp:143] zst = ZeroSizedType
+Test zero-sized type -- finished
 
