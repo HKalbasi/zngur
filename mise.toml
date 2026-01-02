@@ -1,4 +1,5 @@
 [tools]
+cspell = "9.4.0"
 dprint = "0.50.2"
 emsdk = "4.0.14"
 wasi-sdk = "27"

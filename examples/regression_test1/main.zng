@@ -70,6 +70,22 @@ mod ::std::option {
         fn is_some(&self) -> bool;
         fn unwrap(self) -> &f32;
     }
+
+    type Option<&&str> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug, Copy);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &&str;
+    }
+
+    type Option<&mut &str> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &&str;
+    }
 }
 
 mod ::std::vec {
@@ -81,6 +97,16 @@ mod ::std::vec {
         fn get(&self, usize) -> ::std::option::Option<&f32> deref [f32];
         fn get_mut(&mut self, usize) -> ::std::option::Option<&mut f32> deref [f32];
         fn push(&mut self, f32);
+    }
+
+    type Vec<&str> {
+        #layout(size = 24, align = 8);
+        wellknown_traits(Debug);
+
+        fn new() -> Vec<&str>;
+        fn get(&self, usize) -> ::std::option::Option<&&str> deref [&str];
+        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut &str> deref [&str];
+        fn push(&mut self, &str);
     }
 }
 

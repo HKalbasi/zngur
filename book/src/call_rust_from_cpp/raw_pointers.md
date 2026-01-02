@@ -28,7 +28,7 @@ Members available only in `rust::RawMut<T>`:
 
 ## Safety
 
-Working with raw pointers is extremely unsafe. Here is a non-exhustive list of unexpected things that may happen:
+Working with raw pointers is extremely unsafe. Here is a non-exhaustive list of unexpected things that may happen:
 
 - You should derive raw pointers from Rust functions or references. Creating raw pointers out of thin air and casting
   integers to pointers is considered UB. See [strict provenance] apis for constructing raw pointers.

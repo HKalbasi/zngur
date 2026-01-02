@@ -1,7 +1,44 @@
-use std::path::PathBuf;
+use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
 use zngur::Zngur;
+
+use crate::cfg_extractor::{CfgFromRustc, cfg_from_rustc};
+
+mod cfg_extractor;
+
+#[derive(Clone)]
+struct CfgKey {
+    pub key: String,
+    pub values: Vec<String>,
+}
+
+impl CfgKey {
+    fn into_tuple(self) -> (String, Vec<String>) {
+        (self.key, self.values)
+    }
+}
+
+impl<'a> From<&'a str> for CfgKey {
+    fn from(s: &'a str) -> Self {
+        let (key, values_s) = s.split_once('=').unwrap_or((s, ""));
+        let values: Vec<String> = values_s
+            .split(',')
+            .map(|s| {
+                (if s.len() >= 2 && s.starts_with('"') && s.ends_with('"') {
+                    &s[1..s.len() - 1]
+                } else {
+                    s
+                })
+                .to_owned()
+            })
+            .collect();
+        CfgKey {
+            key: key.to_owned(),
+            values,
+        }
+    }
+}
 
 #[derive(Parser)]
 #[command(version)]
@@ -51,6 +88,30 @@ enum Command {
         /// Default is "rust"
         #[arg(long)]
         cpp_namespace: Option<String>,
+
+        /// A rust config value of the form key(=value1(,value2 ...)) to use when
+        /// generating the zngur spec.
+        /// i.e.  -C target_os=linux -C target_feature=sse,sse2 -C debug_assertions
+        ///
+        /// see https://doc.rust-lang.org/reference/conditional-compilation.html
+        /// for possible values
+        ///
+        /// combined with any values loaded from rustc (if enabled)
+        ///
+        /// Default is an empty configuration
+        #[arg(long = "cfg", short = 'C')]
+        rust_cfg: Vec<CfgKey>,
+
+        /// A feature name to enable when generating the zngur spec
+        ///
+        /// combined with any values loaded from rustc (if enabled)
+        ///
+        /// Default is no features
+        #[arg(long = "feature", short = 'F')]
+        rust_features: Vec<String>,
+
+        #[command(flatten)]
+        load_rustc_cfg: CfgFromRustc,
     },
 }
 
@@ -65,6 +126,9 @@ fn main() {
             depfile,
             mangling_base,
             cpp_namespace,
+            rust_cfg,
+            rust_features,
+            load_rustc_cfg,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -74,6 +138,19 @@ fn main() {
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
                 .with_rs_file(rs_file);
+            let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
+            if load_rustc_cfg.load_cfg_from_rustc {
+                cfg.extend(cfg_from_rustc(load_rustc_cfg, &rust_features));
+            }
+            if !rust_cfg.is_empty() {
+                cfg.extend(rust_cfg.into_iter().map(CfgKey::into_tuple));
+            }
+            if !rust_features.is_empty() {
+                cfg.insert("feature".to_owned(), rust_features);
+            }
+            if !cfg.is_empty() {
+                zng = zng.with_rust_in_memory_cfg(cfg);
+            }
             if let Some(depfile) = depfile {
                 zng = zng.with_depfile(depfile);
             }

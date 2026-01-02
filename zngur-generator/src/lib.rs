@@ -19,7 +19,7 @@ mod rust;
 mod template;
 
 pub use rust::RustFile;
-pub use zngur_parser::{ParseResult, ParsedZngFile};
+pub use zngur_parser::{ParseResult, ParsedZngFile, cfg};
 
 pub use zngur_def::*;
 
@@ -56,6 +56,29 @@ impl ZngurGenerator {
         if zng.convert_panic_to_exception.0 {
             cpp_file.panic_to_exception = Some(rust_file.enable_panic_to_exception());
         }
+        cpp_file
+            .rust_cfg_defines
+            .extend(zng.rust_cfg.iter().map(|(key, value)| {
+                format!(
+                    "ZNGUR_CFG_{}{}",
+                    key.to_uppercase(),
+                    value
+                        .as_ref()
+                        .and_then(|value| if value.trim().is_empty() {
+                            None
+                        } else {
+                            Some(format!(
+                                "_{}",
+                                value
+                                    .chars()
+                                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                                    .collect::<String>()
+                                    .to_uppercase()
+                            ))
+                        })
+                        .unwrap_or_default()
+                )
+            }));
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
