@@ -610,7 +610,7 @@ namespace rust {
           <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
           ~<%- name %>() {
             if (drop_flag) {
-              <%- drop_in_place %>(&data[0]);
+              <%- drop_in_place %>(data.data());
             }
             <%- free_heap %>
           }
@@ -623,7 +623,7 @@ namespace rust {
           <%- name %>& operator=(<%- name %>&& other) {
             if (this != &other) {
               if (drop_flag) {
-                <%- drop_in_place %>(&data[0]);
+                <%- drop_in_place %>(data.data());
               }
               this->drop_flag = other.drop_flag;
               <%- copy_data %>
@@ -646,7 +646,7 @@ namespace rust {
 
         <% if let Some(cpp_value) = &td.cpp_value { %>
             inline <%- cpp_value.1 %>& cpp() {
-                return (*<%- cpp_value.0 %>(&data[0])).as_cpp< <%- cpp_value.1 %> >();
+                return (*<%- cpp_value.0 %>(data.data())).as_cpp< <%- cpp_value.1 %> >();
             }
         <% } %>
 
@@ -724,7 +724,11 @@ namespace rust {
   <% } %>
 
   inline uint8_t* __zngur_internal< <%- td.ty %> >::data_ptr(<%- td.ty %> const & t) noexcept {
-      return const_cast<uint8_t*>(&t.data[0]);
+    <% if let CppLayoutPolicy::HeapAllocated {..} = td.layout { %>
+      return const_cast<uint8_t*>(t.data);
+    <% } else { %>
+      return const_cast<uint8_t*>(t.data.data());
+    <% } %>
   }
 
 
@@ -1137,7 +1141,7 @@ namespace rust {
         struct ZngurPrettyPrinter< <%- td.ty %> > {
           static inline void print( <%- td.ty %> const& t) {
             ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
-            <%- pretty_print %>(&t.data[0]);
+            <%- pretty_print %>(t.data.data());
           }
         };
 
