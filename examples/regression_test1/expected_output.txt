@@ -85,3 +85,8 @@ scope passed to dyn Fn -- finished
 End of call_dyn_fn_multi_args
 Test dyn Fn() with multiple arguments -- finished
 
+Test zero-sized type -- started
+Method call on ZST
+[main.cpp:127] zst = ZeroSizedType
+Test zero-sized type -- finished
+

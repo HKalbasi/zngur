@@ -120,10 +120,18 @@ void test_dyn_fn_with_multiple_arguments() {
   ));
 }
 
+void test_zero_sized_type() {
+  auto scope = rust::crate::Scoped::new_("Test zero-sized type"_rs);
+  auto zst = rust::crate::ZeroSizedType::new_();
+  zst.method();
+  zngur_dbg(zst);
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
   test_field_underlying_conversions();
   test_floats();
   test_dyn_fn_with_multiple_arguments();
+  test_zero_sized_type();
 }
