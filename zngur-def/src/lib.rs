@@ -159,7 +159,7 @@ impl Display for CppRef {
 #[derive(Debug)]
 pub struct ZngurType {
     pub ty: RustType,
-    pub layout: LayoutPolicy,
+    pub layout: Option<LayoutPolicy>,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
@@ -238,6 +238,9 @@ pub enum PrimitiveRustType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeVar(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RustPathAndGenerics {
     pub path: Vec<String>,
     pub generics: Vec<RustType>,
@@ -255,6 +258,7 @@ pub enum RustType {
     Impl(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
+    TypeVar(TypeVar),
 }
 
 impl RustType {
@@ -342,6 +346,7 @@ impl Display for RustType {
                 Ok(())
             }
             RustType::Slice(s) => write!(f, "[{s}]"),
+            RustType::TypeVar(TypeVar(v)) => write!(f, "{v}"),
         }
     }
 }
