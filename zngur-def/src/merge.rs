@@ -140,7 +140,7 @@ impl Merge for ZngurType {
         }
 
         // TODO: We need to improve the architecture around checking parsing, semantic, and other types of errors.
-        if self.cpp_ref.is_some() && into.layout != LayoutPolicy::ZERO_SIZED_TYPE {
+        if self.cpp_ref.is_some() && into.layout != Some(LayoutPolicy::ZERO_SIZED_TYPE) {
             return Err(MergeFailure::Conflict(
                 "cpp_ref implies a zero sized stack allocated type".to_string(),
             ));
