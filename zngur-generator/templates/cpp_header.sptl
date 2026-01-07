@@ -531,157 +531,150 @@ namespace rust {
   }
 
   <%- td.ty.path.open_namespace() %>
-
-    <% if td.ty.path.0 == ["rust", "Unit"] { %>
-      template<> struct Tuple<> { ::std::array< ::uint8_t, 1> data; };
-    <% } else { /* !unit */ %>
-      <%- td.ty.specialization_decl() %> {
-      <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
-        public:
-          <%- name %>() = delete;
-      <% } CppLayoutPolicy::StackAllocated { size, align } => { %>
-        private:
-          alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> data;
-      <% } CppLayoutPolicy::HeapAllocated { .. } => { %>
-        private:
-          ::uint8_t* data;
-      <% }
-      } %>
-
-      <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
-      <% } CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
-        friend ::rust::__zngur_internal< <%- td.ty %> >;
-        friend ::rust::ZngurPrettyPrinter< <%- td.ty %> >;
-
-      <% if td.ty.path.to_string() == "::rust::Bool" { %>
-        public:
-          operator bool() {
-            return data[0];
-          }
-          Bool(bool b) {
-            data[0] = b;
-          }
-      <% } %>
-
-      <% if !is_copy { %>
-        bool drop_flag;
-      <% } %>
-
-      <% let (alloc_heap, free_heap, copy_data) = match &td.layout {
-        CppLayoutPolicy::StackAllocated { .. } => (
-          "".to_owned(),
-          "".to_owned(),
-          "this->data = other.data;".to_owned(),
-        ),
-        CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } => (
-          format!("data = {}();", alloc_fn),
-          format!("{}(data);", free_fn),
-          format!("memcpy(this->data, other.data, {}());", size_fn),
-        ),
-        CppLayoutPolicy::OnlyByRef => unreachable!(),
-      }; %>
-
+    <%- td.ty.specialization_decl() %> {
+    <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
       public:
-        <% if is_copy { %>
-          <%- name %>() { <%- alloc_heap %> }
-          ~<%- name %>() { <%- free_heap %> }
-          <%- name %>(const <%- name %>& other) {
-            <%- alloc_heap %>
-            <%- copy_data %>
-          }
-          <%- name %>& operator=(const <%- name %>& other) {
-            <%- copy_data %>
-            return *this;
-          }
-          <%- name %>(<%- name %>&& other) {
-            <%- alloc_heap %>
-            <%- copy_data %>
-          }
-          <%- name %>& operator=(<%- name %>&& other) {
-            <%- copy_data %>
-            return *this;
-          }
-        <% } else { /* !is_copy */ %>
-          <% let drop_in_place = td.wellknown_traits.iter().find_map(|x| match x {
-            ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
-            _ => None,
-          }).unwrap(); %>
+        <%- name %>() = delete;
+    <% } CppLayoutPolicy::StackAllocated { size, align } => { %>
+      private:
+        alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> data;
+    <% } CppLayoutPolicy::HeapAllocated { .. } => { %>
+      private:
+        ::uint8_t* data;
+    <% }
+    } %>
 
-          <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
-          ~<%- name %>() {
+    <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
+    <% } CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
+      friend ::rust::__zngur_internal< <%- td.ty %> >;
+      friend ::rust::ZngurPrettyPrinter< <%- td.ty %> >;
+
+    <% if td.ty.path.to_string() == "::rust::Bool" { %>
+      public:
+        operator bool() {
+          return data[0];
+        }
+        Bool(bool b) {
+          data[0] = b;
+        }
+    <% } %>
+
+    <% if !is_copy { %>
+      bool drop_flag;
+    <% } %>
+
+    <% let (alloc_heap, free_heap, copy_data) = match &td.layout {
+      CppLayoutPolicy::StackAllocated { .. } => (
+        "".to_owned(),
+        "".to_owned(),
+        "this->data = other.data;".to_owned(),
+      ),
+      CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } => (
+        format!("data = {}();", alloc_fn),
+        format!("{}(data);", free_fn),
+        format!("memcpy(this->data, other.data, {}());", size_fn),
+      ),
+      CppLayoutPolicy::OnlyByRef => unreachable!(),
+    }; %>
+
+    public:
+      <% if is_copy { %>
+        <%- name %>() { <%- alloc_heap %> }
+        ~<%- name %>() { <%- free_heap %> }
+        <%- name %>(const <%- name %>& other) {
+          <%- alloc_heap %>
+          <%- copy_data %>
+        }
+        <%- name %>& operator=(const <%- name %>& other) {
+          <%- copy_data %>
+          return *this;
+        }
+        <%- name %>(<%- name %>&& other) {
+          <%- alloc_heap %>
+          <%- copy_data %>
+        }
+        <%- name %>& operator=(<%- name %>&& other) {
+          <%- copy_data %>
+          return *this;
+        }
+      <% } else { /* !is_copy */ %>
+        <% let drop_in_place = td.wellknown_traits.iter().find_map(|x| match x {
+          ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
+          _ => None,
+        }).unwrap(); %>
+
+        <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
+        ~<%- name %>() {
+          if (drop_flag) {
+            <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
+          }
+          <%- free_heap %>
+        }
+        <%- name %>(const <%- name %>& other) = delete;
+        <%- name %>& operator=(const <%- name %>& other) = delete;
+        <%- name %>(<%- name %>&& other) : drop_flag(false) {
+          <%- alloc_heap %>
+          *this = ::std::move(other);
+        }
+        <%- name %>& operator=(<%- name %>&& other) {
+          if (this != &other) {
             if (drop_flag) {
               <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
             }
-            <%- free_heap %>
+            this->drop_flag = other.drop_flag;
+            <%- copy_data %>
+            other.drop_flag = false;
           }
-          <%- name %>(const <%- name %>& other) = delete;
-          <%- name %>& operator=(const <%- name %>& other) = delete;
-          <%- name %>(<%- name %>&& other) : drop_flag(false) {
-            <%- alloc_heap %>
-            *this = ::std::move(other);
-          }
-          <%- name %>& operator=(<%- name %>&& other) {
-            if (this != &other) {
-              if (drop_flag) {
-                <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
-              }
-              this->drop_flag = other.drop_flag;
-              <%- copy_data %>
-              other.drop_flag = false;
-            }
-            return *this;
-          }
-        <% } %>
+          return *this;
+        }
+      <% } %>
 
-        <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-          static inline <%- name %> make_box(
-            ::std::function< <%- output.into_cpp() %> (<%- inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
-          );
-        <% } Some(RustTrait::Normal{..}) => { %>
-          template<typename T, typename... Args>
-          static inline <%- name %> make_box(Args&&... args);
-        <% } None => { %>
-        <% }
-        } %>
-
-        <% if let Some(cpp_value) = &td.cpp_value { %>
-            inline <%- cpp_value.1 %>& cpp() {
-                return (*<%- cpp_value.0 %>(::rust::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
-            }
-        <% } %>
-
+      <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
+        static inline <%- name %> make_box(
+          ::std::function< <%- output.into_cpp() %> (<%- inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
+        );
+      <% } Some(RustTrait::Normal{..}) => { %>
+        template<typename T, typename... Args>
+        static inline <%- name %> make_box(Args&&... args);
+      <% } None => { %>
       <% }
       } %>
 
-      <% for method in &td.methods { %>
-          static <%- method.sig.output %> <%- method.name %>(
-            <%- splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") %>
-          ) noexcept ;
-          <% if method.kind != ZngurMethodReceiver::Static { %>
-              <%- method.sig.output %> <%- method.name %>(
-                <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
-              )
-              <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept ;
-          <% } %>
+      <% if let Some(cpp_value) = &td.cpp_value { %>
+          inline <%- cpp_value.1 %>& cpp() {
+              return (*<%- cpp_value.0 %>(::rust::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
+          }
       <% } %>
 
-      <% for constructor in &td.constructors { %>
-        <%- td.ty.path.0.last().unwrap() %>(
-          <%- splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") %>
+    <% }
+    } %>
+
+    <% for method in &td.methods { %>
+        static <%- method.sig.output %> <%- method.name %>(
+          <%- splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") %>
         ) noexcept ;
-      <% } %>
-
-      <% for field in &td.fields { %>
-        [[no_unique_address]] ::rust::FieldOwned<
-          <%- field.ty.into_cpp() %>,
-          <%- field.offset %>
-        > <%- cpp_handle_field_name(&field.name) %>;
-      <% } %>
-
-    }; // <%- td.ty.specialization_decl() %>
-
-    // end !rust unit
+        <% if method.kind != ZngurMethodReceiver::Static { %>
+            <%- method.sig.output %> <%- method.name %>(
+              <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
+            )
+            <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept ;
+        <% } %>
     <% } %>
+
+    <% for constructor in &td.constructors { %>
+      <%- td.ty.path.0.last().unwrap() %>(
+        <%- splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") %>
+      ) noexcept ;
+    <% } %>
+
+    <% for field in &td.fields { %>
+      [[no_unique_address]] ::rust::FieldOwned<
+        <%- field.ty.into_cpp() %>,
+        <%- field.offset %>
+      > <%- cpp_handle_field_name(&field.name) %>;
+    <% } %>
+
+  }; // <%- td.ty.specialization_decl() %>
 
 <%- td.ty.path.close_namespace() %>
 
