@@ -39,6 +39,7 @@ impl CppPath {
 
     pub(crate) fn name(&self) -> &str {
         match self.0.split_last().unwrap().0.as_str() {
+            // Unit is a valid type alias for Tuple<> except when defining the constructors
             "Unit" => "Tuple",
             s => s,
         }
