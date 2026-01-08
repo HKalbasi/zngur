@@ -133,10 +133,12 @@ impl Merge for ZngurType {
             );
         }
 
-        if self.layout != into.layout {
+        if let (Some(layout1), Some(layout2)) = &(self.layout, into.layout) && layout1 != layout2 {
             return Err(MergeFailure::Conflict(
-                "Duplicate layout policy found".to_string(),
+                "Conflicitng layout policy found".to_string(),
             ));
+        } else {
+            into.layout = into.layout.or(self.layout);
         }
 
         // TODO: We need to improve the architecture around checking parsing, semantic, and other types of errors.

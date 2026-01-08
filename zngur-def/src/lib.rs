@@ -100,10 +100,10 @@ pub struct ZngurMethodDetails {
     pub deref: Option<(RustType, Mutability)>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppValue(pub String, pub String);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppRef(pub String);
 
 impl Display for CppRef {
