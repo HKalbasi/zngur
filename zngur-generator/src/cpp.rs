@@ -38,7 +38,11 @@ impl CppPath {
     }
 
     pub(crate) fn name(&self) -> &str {
-        self.0.split_last().unwrap().0
+        match self.0.split_last().unwrap().0.as_str() {
+            // Unit is a valid type alias for Tuple<> except when defining the constructors
+            "Unit" => "Tuple",
+            s => s,
+        }
     }
 
     fn need_header(&self) -> bool {
@@ -106,12 +110,14 @@ impl CppType {
     }
 
     pub(crate) fn specialization_decl(&self) -> String {
-        if self.generic_args.is_empty() {
-            format!("struct {}", self.path.name())
+        let name = self.path.name();
+        // Tuple<> is a little special because it is a template even though self.generic_args is empty
+        if self.generic_args.is_empty() && name != "Tuple" {
+            format!("struct {}", name)
         } else {
             format!(
                 "template<> struct {}< {} >",
-                self.path.name(),
+                name,
                 self.generic_args.iter().join(", ")
             )
         }
