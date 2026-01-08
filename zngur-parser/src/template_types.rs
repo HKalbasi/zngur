@@ -108,7 +108,7 @@ fn substitute_vars<'a>(
         vec.iter().map(|ty| substitute_type(ty, mapping)).collect()
     }
 
-    fn subsititue_generics<'a>(
+    fn substitute_generics<'a>(
         path_and_generics: &'a RustPathAndGenerics,
         mapping: &HashMap<&TypeVar, &RustType>,
     ) -> Result<RustPathAndGenerics, &'a TypeVar> {
@@ -134,7 +134,7 @@ fn substitute_vars<'a>(
     ) -> Result<RustTrait, &'a TypeVar> {
         let result = match rust_trait {
             RustTrait::Normal(path_and_generics) => {
-                RustTrait::Normal(subsititue_generics(path_and_generics, mapping)?)
+                RustTrait::Normal(substitute_generics(path_and_generics, mapping)?)
             }
             RustTrait::Fn {
                 name,
@@ -172,7 +172,7 @@ fn substitute_vars<'a>(
             }
             RustType::Tuple(tys) => RustType::Tuple(substitute_vec(tys, mapping)?),
             RustType::Adt(path_and_generics) => {
-                RustType::Adt(subsititue_generics(path_and_generics, mapping)?)
+                RustType::Adt(substitute_generics(path_and_generics, mapping)?)
             }
         };
         Ok(ty)
