@@ -541,8 +541,8 @@ type Main {
     assert!(file_names.contains(&"c.zng"));
 }
 
-fn assert_layout(wanted_size: usize, wanted_align: usize, layout: &LayoutPolicy) {
-    if !matches!(layout, LayoutPolicy::StackAllocated { size, align } if *size == wanted_size && *align == wanted_align)
+fn assert_layout(wanted_size: usize, wanted_align: usize, layout: &Option<LayoutPolicy>) {
+    if !matches!(layout, Some(LayoutPolicy::StackAllocated { size, align }) if *size == wanted_size && *align == wanted_align)
     {
         panic!(
             "no match: StackAllocated {{ size: {wanted_size}, align: {wanted_align} }} != {:?} ",

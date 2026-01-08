@@ -85,7 +85,14 @@ impl ZngurGenerator {
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
-            match ty_def.layout {
+            let Some(layout) = ty_def.layout else {
+                panic!(
+                    "No layout policy found for type {}. \
+                        Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
+                    ty_def.ty
+                )
+            };
+            match layout {
                 LayoutPolicy::StackAllocated { size, align } => {
                     rust_file.add_static_size_assert(&ty, size);
                     rust_file.add_static_align_assert(&ty, align);
