@@ -1,5 +1,5 @@
+use indexmap::IndexMap;
 use std::{
-    collections::HashMap,
     fmt::{Display, Write},
     iter,
 };
@@ -186,14 +186,14 @@ impl From<&str> for CppType {
             None => CppType {
                 path: CppPath::from(value),
                 generic_args: vec![],
-                pointer_mutability
+                pointer_mutability,
             },
             Some((path, generics)) => {
                 let generics = generics.strip_suffix('>').unwrap();
                 CppType {
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
-                    pointer_mutability
+                    pointer_mutability,
                 }
             }
         }
@@ -1120,7 +1120,7 @@ namespace rust {{
     fn emit_cpp_fn_defs(
         &self,
         state: &mut State,
-        traits: &HashMap<RustTrait, CppTraitDefinition>,
+        traits: &IndexMap<RustTrait, CppTraitDefinition>,
     ) -> std::fmt::Result {
         let is_unsized = self
             .wellknown_traits
@@ -1440,7 +1440,7 @@ auto data_as_impl = &args;
 #[derive(Default)]
 pub struct CppFile {
     pub type_defs: Vec<CppTypeDefinition>,
-    pub trait_defs: HashMap<RustTrait, CppTraitDefinition>,
+    pub trait_defs: IndexMap<RustTrait, CppTraitDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,

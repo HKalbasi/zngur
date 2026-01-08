@@ -1,4 +1,5 @@
-use std::{collections::HashMap, fmt::Display};
+use indexmap::IndexMap;
+use std::fmt::Display;
 
 use itertools::Itertools;
 
@@ -104,7 +105,7 @@ pub struct ZngurTrait {
 pub struct ZngurFile {
     pub types: Vec<ZngurType>,
     pub impls: Vec<ZngurType>,
-    pub traits: HashMap<RustTrait, ZngurTrait>,
+    pub traits: IndexMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,

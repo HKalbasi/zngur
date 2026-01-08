@@ -1,6 +1,4 @@
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::collections::hash_map::Entry;
+use indexmap::{IndexMap, IndexSet};
 
 use cpp::CppExportedFnDefinition;
 use cpp::CppExportedImplDefinition;
@@ -57,7 +55,7 @@ impl ZngurGenerator {
             rust_file.enable_panic_to_exception();
             cpp_file.panic_to_exception = true;
         }
-        let defined_types: HashSet<_> = zng.types.iter().map(|ty| &ty.ty).cloned().collect();
+        let defined_types: IndexSet<_> = zng.types.iter().map(|ty| &ty.ty).cloned().collect();
         for ty_def in zng.types {
             let mut ty_def = augment_type_with_impls(ty_def, &zng.impls, &defined_types);
 
@@ -186,7 +184,9 @@ impl ZngurGenerator {
                             output,
                         } = tr
                         {
-                            if let Entry::Vacant(e) = cpp_file.trait_defs.entry(tr.clone()) {
+                            if let indexmap::map::Entry::Vacant(e) =
+                                cpp_file.trait_defs.entry(tr.clone())
+                            {
                                 let rust_link_name =
                                     rust_file.add_builder_for_dyn_fn(name, inputs, output);
                                 e.insert(CppTraitDefinition::Fn {
@@ -291,12 +291,12 @@ fn real_inputs_of_method(method: &ZngurMethod, ty: &RustType) -> (Vec<RustType>,
 fn matches_generic<'a, 'b>(
     ty: &'a RustType,
     generic: &'b RustType,
-    mapping: &mut HashMap<&'b str, &'a RustType>,
+    mapping: &mut IndexMap<&'b str, &'a RustType>,
 ) -> bool {
     fn match_lists<'a, 'b>(
         v1: &'a [RustType],
         v2: &'b [RustType],
-        mapping: &mut HashMap<&'b str, &'a RustType>,
+        mapping: &mut IndexMap<&'b str, &'a RustType>,
     ) -> bool {
         v1.len() == v2.len() && match_iters(v1, v2, mapping)
     }
@@ -304,7 +304,7 @@ fn matches_generic<'a, 'b>(
     fn match_iters<'a, 'b>(
         i1: impl IntoIterator<Item = &'a RustType>,
         i2: impl IntoIterator<Item = &'b RustType>,
-        mapping: &mut HashMap<&'b str, &'a RustType>,
+        mapping: &mut IndexMap<&'b str, &'a RustType>,
     ) -> bool {
         i1.into_iter()
             .zip(i2)
@@ -350,7 +350,7 @@ enum SubstitutionError<'a> {
 
 fn map_substitute<'a>(
     i: impl IntoIterator<Item = &'a RustType>,
-    mapping: &HashMap<&str, &RustType>,
+    mapping: &IndexMap<&str, &RustType>,
     validate: &impl Fn(&RustType) -> bool,
 ) -> Result<Vec<RustType>, SubstitutionError<'a>> {
     i.into_iter()
@@ -360,7 +360,7 @@ fn map_substitute<'a>(
 
 fn substitute_vars<'a>(
     ty: &'a RustType,
-    mapping: &HashMap<&str, &RustType>,
+    mapping: &IndexMap<&str, &RustType>,
     validate: &impl Fn(&RustType) -> bool,
 ) -> Result<RustType, SubstitutionError<'a>> {
     fn ident(_: &RustType) -> bool {
@@ -401,7 +401,7 @@ fn substitute_vars<'a>(
 
 fn substitute_method_vars<'a>(
     m: &'a ZngurMethodDetails,
-    mapping: &HashMap<&str, &RustType>,
+    mapping: &IndexMap<&str, &RustType>,
     validate: &impl Fn(&RustType) -> bool,
 ) -> Result<ZngurMethodDetails, SubstitutionError<'a>> {
     Ok(ZngurMethodDetails {
@@ -424,9 +424,9 @@ fn substitute_method_vars<'a>(
 fn augment_type_with_impls(
     mut ty: ZngurType,
     impls: &[ZngurType],
-    defined_types: &HashSet<RustType>,
+    defined_types: &IndexSet<RustType>,
 ) -> ZngurType {
-    fn validate(defined_types: &HashSet<RustType>) -> impl Fn(&RustType) -> bool {
+    fn validate(defined_types: &IndexSet<RustType>) -> impl Fn(&RustType) -> bool {
         |ty| {
             let ty = match ty {
                 RustType::Raw(_, ty) | RustType::Ref(_, ty) => ty,
@@ -440,7 +440,7 @@ fn augment_type_with_impls(
     }
 
     for zng_impl in impls {
-        let mut mapping = HashMap::new();
+        let mut mapping = IndexMap::new();
         if !matches_generic(&ty.ty, &zng_impl.ty, &mut mapping) {
             continue;
         }
