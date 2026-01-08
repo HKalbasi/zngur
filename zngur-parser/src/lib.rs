@@ -35,6 +35,7 @@ mod tests;
 
 pub mod cfg;
 mod conditional;
+mod template_types;
 
 use crate::{
     cfg::{CfgConditional, RustCfgProvider},
