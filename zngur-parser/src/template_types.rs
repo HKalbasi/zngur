@@ -90,7 +90,7 @@ fn matches_template<'a, 'b>(
     }
 }
 
-// Unfortunately we won't catch all unbound var errors because an undefiend type might appear first
+#[derive(Debug)]
 enum SubstitutionError<'a> {
     UnboundVar(&'a TypeVar),
     UndefinedType,
@@ -118,11 +118,11 @@ fn substitute_vars<'a>(
             named_generics,
         } = path_and_generics;
         let result = RustPathAndGenerics {
-            path: path.to_owned(),
+            path: path.clone(),
             generics: substitute_vec(generics, mapping)?,
             named_generics: named_generics
                 .iter()
-                .map(|(name, ty)| substitute_type(ty, mapping).map(|ty| (name.to_owned(), ty)))
+                .map(|(name, ty)| substitute_type(ty, mapping).map(|ty| (name.clone(), ty)))
                 .collect::<Result<_, _>>()?,
         };
         Ok(result)
@@ -141,7 +141,7 @@ fn substitute_vars<'a>(
                 inputs,
                 output,
             } => RustTrait::Fn {
-                name: name.to_owned(),
+                name: name.clone(),
                 inputs: substitute_vec(inputs, mapping)?,
                 output: Box::new(substitute_type(output, mapping)?),
             },
@@ -155,20 +155,20 @@ fn substitute_vars<'a>(
     ) -> Result<RustType, &'a TypeVar> {
         let ty = match ty {
             RustType::TypeVar(v) => match mapping.get(v) {
-                Some(ty) => (*ty).to_owned(),
+                Some(ty) => (*ty).clone(),
                 None => return Err(v),
             },
-            p @ RustType::Primitive(_) => p.to_owned(),
+            p @ RustType::Primitive(_) => p.clone(),
             RustType::Ref(m, t) => RustType::Ref(*m, Box::new(substitute_type(t, mapping)?)),
             RustType::Raw(m, t) => RustType::Raw(*m, Box::new(substitute_type(t, mapping)?)),
             RustType::Boxed(t) => RustType::Boxed(Box::new(substitute_type(t, mapping)?)),
             RustType::Slice(t) => RustType::Slice(Box::new(substitute_type(t, mapping)?)),
             // TODO: Recurse
             RustType::Dyn(rust_trait, bounds) => {
-                RustType::Dyn(substitute_trait(rust_trait, mapping)?, bounds.to_owned())
+                RustType::Dyn(substitute_trait(rust_trait, mapping)?, bounds.clone())
             }
             RustType::Impl(rust_trait, bounds) => {
-                RustType::Impl(substitute_trait(rust_trait, mapping)?, bounds.to_owned())
+                RustType::Impl(substitute_trait(rust_trait, mapping)?, bounds.clone())
             }
             RustType::Tuple(tys) => RustType::Tuple(substitute_vec(tys, mapping)?),
             RustType::Adt(path_and_generics) => {
@@ -180,7 +180,18 @@ fn substitute_vars<'a>(
 
     match substitute_type(ty, mapping) {
         Ok(ty) => {
-            if defined_types.contains(&ty) {
+            let mut curr_ty = &ty;
+            let type_defined = loop {
+                match curr_ty {
+                    // Primitives and Unit are automatically defined
+                    RustType::Primitive(_) => break true,
+                    RustType::Tuple(t) if t.is_empty() => break true,
+                    // Ref and raw types are automatically defined
+                    RustType::Ref(_, inner) | RustType::Raw(_, inner) => curr_ty = inner,
+                    ty => break defined_types.contains(&ty),
+                }
+            };
+            if type_defined {
                 Ok(ty)
             } else {
                 Err(SubstitutionError::UndefinedType)
@@ -209,7 +220,7 @@ fn substitute_method_vars<'a>(
     } = m;
     Ok(ZngurMethodDetails {
         data: ZngurMethod {
-            name: name.to_owned(),
+            name: name.clone(),
             generics: generics
                 .iter()
                 .map(|ty| substitute_vars(ty, mapping, defined_types))
@@ -221,33 +232,21 @@ fn substitute_method_vars<'a>(
                 .collect::<Result<_, _>>()?,
             output: substitute_vars(output, mapping, defined_types)?,
         },
-        use_path: use_path.to_owned(),
-        deref: deref
-            .as_ref()
-            .map(|(ty, mutability)| {
-                Ok((substitute_vars(&ty, mapping, defined_types)?, *mutability))
-            })
-            .transpose()?,
+        use_path: use_path.clone(),
+        deref: match deref {
+            Some((ty, mutability)) => {
+                Some((substitute_vars(&ty, mapping, defined_types)?, *mutability))
+            }
+            None => None,
+        },
     })
 }
 
-fn template_to_type(
+pub fn try_match_template(
     ty: &RustType,
     template: &ZngurType,
     defined_types: &HashSet<RustType>,
-) -> Option<ZngurType> {
-    fn validate(defined_types: &HashSet<RustType>) -> impl Fn(&RustType) -> bool {
-        |ty| {
-            let ty = match ty {
-                RustType::Raw(_, ty) | RustType::Ref(_, ty) => ty,
-                ty => ty,
-            };
-            match ty {
-                RustType::Primitive(_) => true,
-                ty => defined_types.contains(ty),
-            }
-        }
-    }
+) -> Option<TemplateMatch> {
     let mut mapping = HashMap::new();
     if !matches_template(ty, &template.ty, &mut mapping) {
         return None;
@@ -262,54 +261,71 @@ fn template_to_type(
         cpp_ref,
         cpp_value,
     } = template;
-    Some(ZngurType {
-        ty: ty.to_owned(),
+    debug_assert_eq!(
+        substitute_vars(template_ty, &mapping, defined_types).unwrap(),
+        *ty
+    );
+    let new_ty = ZngurType {
+        ty: ty.clone(),
         layout: *layout,
-        wellknown_traits: wellknown_traits.to_owned(),
+        wellknown_traits: wellknown_traits.clone(),
         methods: methods
             .iter()
             .filter_map(
-                |method| match substitute_method_vars(method, &mapping, &validate(defined_types)) {
+                |method| match substitute_method_vars(method, &mapping, defined_types) {
                     Ok(m) => Some(m),
                     Err(SubstitutionError::UndefinedType) => None,
-                    Err(SubstitutionError::UnboundVar(var)) => panic!(
-                        "Failed to substitute type variable {} in method {} in template {:?} for type {}",
+                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                        "Unbound type variable {} in method {} in template {} for type {}",
                         var.0, method.data.name, template.ty, ty
                     ),
                 },
             )
             .collect(),
-        constructors: constructors.iter().filter_map(|constructor|
-            match constructor.inputs.iter().map(|(name, ty)| substitute_vars(ty, &mapping, &validate(defined_types)).map(|ty| (name.to_owned(), ty))).collect() {
-                Ok(inputs) => Some(ZngurConstructor {
-                    name: constructor.name.to_owned(),
-                    inputs
-                }),
-                Err(SubstitutionError::UndefinedType) => None,
-                Err(SubstitutionError::UnboundVar(var)) => panic!(
-                        "Failed to substitute type variable {} in contsructor {:?} in template {:?} for type {}",
+        constructors: constructors
+            .iter()
+            .filter_map(|constructor| {
+                match constructor
+                    .inputs
+                    .iter()
+                    .map(|(name, ty)| {
+                        substitute_vars(ty, &mapping, defined_types).map(|ty| (name.clone(), ty))
+                    })
+                    .collect()
+                {
+                    Ok(inputs) => Some(ZngurConstructor {
+                        name: constructor.name.clone(),
+                        inputs,
+                    }),
+                    Err(SubstitutionError::UndefinedType) => None,
+                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                        "Unbound type variable {} in constructor {:?} in template {} for type {}",
                         var.0, constructor.name, template.ty, ty
                     ),
-            }
-        ).collect(),
-        fields: fields.iter().filter_map(|field| {
-            match substitute_vars(&field.ty, &mapping, &validate(defined_types)) {
-                Ok(ty) => Some(ZngurField {
-                    name: field.name.to_owned(),
-                    ty,
-                    offset: field.offset
-                }),
-                Err(SubstitutionError::UndefinedType) => None,
-                Err(SubstitutionError::UnboundVar(var)) => panic!(
-                        "Failed to substitute type variable {} in field {} in template {:?} for type {}",
+                }
+            })
+            .collect(),
+        fields: fields
+            .iter()
+            .filter_map(
+                |field| match substitute_vars(&field.ty, &mapping, defined_types) {
+                    Ok(ty) => Some(ZngurField {
+                        name: field.name.clone(),
+                        ty,
+                        offset: field.offset,
+                    }),
+                    Err(SubstitutionError::UndefinedType) => None,
+                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                        "Unbound type variable {} in field {} in template {} for type {}",
                         var.0, field.name, template.ty, ty
                     ),
-            }
-        }
-        ).collect(),
-        cpp_value: cpp_value.to_owned(),
-        cpp_ref: cpp_ref.to_owned(),
-    })
+                },
+            )
+            .collect(),
+        cpp_value: cpp_value.clone(),
+        cpp_ref: cpp_ref.clone(),
+    };
+    Some(TemplateMatch(new_ty))
 }
 
 // Represents a ZngurType created from a template type

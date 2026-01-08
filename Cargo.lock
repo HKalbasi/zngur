@@ -577,6 +577,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-template-types"
+version = "0.7.0"
+
+[[package]]
 name = "example-tutorial"
 version = "0.10.0"
 
