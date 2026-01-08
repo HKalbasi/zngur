@@ -36,7 +36,7 @@ impl ZngurGenerator {
         // Unit type is a bit special, and almost everyone needs it, so we add it ourself.
         zng.types.push(ZngurType {
             ty: RustType::UNIT,
-            layout: LayoutPolicy::ZERO_SIZED_TYPE,
+            layout: Some(LayoutPolicy::ZERO_SIZED_TYPE),
             wellknown_traits: vec![ZngurWellknownTrait::Copy],
             methods: vec![],
             constructors: vec![],
@@ -82,7 +82,11 @@ impl ZngurGenerator {
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
-            match ty_def.layout {
+            let Some(layout) = ty_def.layout else {
+                panic!("No layout policy found for type {}. \
+                        Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.", ty_def.ty)
+            };
+            match layout {
                 LayoutPolicy::StackAllocated { size, align } => {
                     rust_file.add_static_size_assert(&ty, size);
                     rust_file.add_static_align_assert(&ty, align);
@@ -182,7 +186,7 @@ impl ZngurGenerator {
             }
             cpp_file.type_defs.push(CppTypeDefinition {
                 ty: ty.into_cpp(),
-                layout: rust_file.add_layout_policy_shim(&ty, ty_def.layout),
+                layout: rust_file.add_layout_policy_shim(&ty, layout),
                 constructors,
                 fields,
                 methods: cpp_methods,
