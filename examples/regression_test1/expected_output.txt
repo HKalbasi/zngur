@@ -107,5 +107,6 @@ Test Ref<Ref<T>> -- finished
 
 Test zero-sized type -- started
 Method call on ZST
-[main.cpp:127] zst = ZeroSizedType
+[main.cpp:143] zst = ZeroSizedType
 Test zero-sized type -- finished
+
