@@ -1264,7 +1264,12 @@ impl ZngurSpecBuilder {
                     }
                 }
             }
-            if !ty.wellknown_traits.iter().any(|wkt| matches!(wkt, ZngurWellknownTrait::Copy | ZngurWellknownTrait::Unsized)) {
+            if !ty.wellknown_traits.iter().any(|wkt| {
+                matches!(
+                    wkt,
+                    ZngurWellknownTrait::Copy | ZngurWellknownTrait::Unsized
+                )
+            }) {
                 ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
             }
         }

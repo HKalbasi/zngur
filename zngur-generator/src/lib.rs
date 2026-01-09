@@ -83,8 +83,11 @@ impl ZngurGenerator {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
             let Some(layout) = ty_def.layout else {
-                panic!("No layout policy found for type {}. \
-                        Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.", ty_def.ty)
+                panic!(
+                    "No layout policy found for type {}. \
+                        Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
+                    ty_def.ty
+                )
             };
             match layout {
                 LayoutPolicy::StackAllocated { size, align } => {
