@@ -323,12 +323,12 @@ fn import_has_conflict() {
     }
 "#,
         expect![[r#"
-            Error: Duplicate layout policy found
+            Error: Conflicting layout policy found
                ╭─[a.zng:2:12]
                │
              2 │       type A {
                │            ┬  
-               │            ╰── Duplicate layout policy found
+               │            ╰── Conflicting layout policy found
             ───╯
         "#]],
         &resolver,
