@@ -323,12 +323,12 @@ fn import_has_conflict() {
     }
 "#,
         expect![[r#"
-            Error: Duplicate layout policy found
+            Error: Conflicting layout policy found
                ╭─[a.zng:2:12]
                │
              2 │       type A {
                │            ┬  
-               │            ╰── Duplicate layout policy found
+               │            ╰── Conflicting layout policy found
             ───╯
         "#]],
         &resolver,
@@ -541,8 +541,8 @@ type Main {
     assert!(file_names.contains(&"c.zng"));
 }
 
-fn assert_layout(wanted_size: usize, wanted_align: usize, layout: &LayoutPolicy) {
-    if !matches!(layout, LayoutPolicy::StackAllocated { size, align } if *size == wanted_size && *align == wanted_align)
+fn assert_layout(wanted_size: usize, wanted_align: usize, layout: &Option<LayoutPolicy>) {
+    if !matches!(layout, Some(LayoutPolicy::StackAllocated { size, align }) if *size == wanted_size && *align == wanted_align)
     {
         panic!(
             "no match: StackAllocated {{ size: {wanted_size}, align: {wanted_align} }} != {:?} ",
