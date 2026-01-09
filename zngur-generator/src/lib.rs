@@ -1,5 +1,3 @@
-use std::collections::hash_map::Entry;
-
 use cpp::CppExportedFnDefinition;
 use cpp::CppExportedImplDefinition;
 use cpp::CppFile;
@@ -11,6 +9,7 @@ use cpp::CppTraitDefinition;
 use cpp::CppType;
 use cpp::CppTypeDefinition;
 use cpp::cpp_handle_keyword;
+use indexmap::map::Entry;
 use itertools::Itertools;
 use rust::IntoCpp;
 

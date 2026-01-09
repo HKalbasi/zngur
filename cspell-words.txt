@@ -30,6 +30,7 @@ funcs
 fvec
 hkalbasi
 impls
+indexmap
 inplace
 itertools
 libexample

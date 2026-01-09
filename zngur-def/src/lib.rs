@@ -1,5 +1,6 @@
-use std::{collections::HashMap, fmt::Display};
+use std::fmt::Display;
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 
 mod merge;
@@ -142,7 +143,7 @@ pub struct Import(pub std::path::PathBuf);
 pub struct ZngurSpec {
     pub imports: Vec<Import>,
     pub types: Vec<ZngurType>,
-    pub traits: HashMap<RustTrait, ZngurTrait>,
+    pub traits: IndexMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,

@@ -1,9 +1,8 @@
-use std::collections::HashMap;
-
 use crate::cpp::{
     CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy,
     CppTraitDefinition, CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
 };
+use indexmap::IndexMap;
 use sailfish::Template;
 use zngur_def::*;
 use zngur_def::{Mutability, ZngurMethodReceiver, ZngurWellknownTraitData};
@@ -50,7 +49,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) additional_includes: &'a String,
     pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
     pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
-    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) rust_cfg_defines: &'a Vec<String>,
@@ -99,7 +98,7 @@ impl<'a> CppHeaderTemplate<'a> {
 #[template(path = "cpp_source.sptl", escape = false)]
 pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) header_file_name: &'a String,
-    pub(crate) trait_defs: &'a HashMap<RustTrait, CppTraitDefinition>,
+    pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
 }
