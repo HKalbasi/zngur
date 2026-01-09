@@ -1,4 +1,4 @@
-[main.cpp:11] vec_a = [
+[main.cpp:12] vec_a = [
     TypeA(
         1,
     ),
@@ -9,13 +9,13 @@
         3,
     ),
 ]
-[main.cpp:18] vec_b.get(i).unwrap() = TypeB(
+[main.cpp:19] vec_b.get(i).unwrap() = TypeB(
     1,
 )
-[main.cpp:18] vec_b.get(i).unwrap() = TypeB(
+[main.cpp:19] vec_b.get(i).unwrap() = TypeB(
     2,
 )
-[main.cpp:18] vec_b.get(i).unwrap() = TypeB(
+[main.cpp:19] vec_b.get(i).unwrap() = TypeB(
     3,
 )
 Hello
