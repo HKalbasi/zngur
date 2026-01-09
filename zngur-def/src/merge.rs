@@ -133,7 +133,9 @@ impl Merge for ZngurType {
             );
         }
 
-        if let (Some(layout1), Some(layout2)) = &(self.layout, into.layout) && layout1 != layout2 {
+        if let (Some(layout1), Some(layout2)) = &(self.layout, into.layout)
+            && layout1 != layout2
+        {
             return Err(MergeFailure::Conflict(
                 "Conflicting layout policy found".to_string(),
             ));
