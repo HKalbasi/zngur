@@ -45,11 +45,12 @@ you can use this mode for types that have stable size and align, such as:
 
 ## `#layout_conservative(size = X, align = Y)`
 
-{{#include ../unimplemented_begin.md}}1{{#include ../unimplemented_end.md}}
-
 Using this mode you can declare a size and align greater than the real ones.
 This will waste some amount of space,
 but reduces the probability of breakage when upgrading the compiler.
+
+Note that using [fields](./fields.md) with `#layout_conservative` usually means marking their offset as `auto`
+and you are acknowledging that you do not know the real size and layout of the type.
 
 ## `#heap_allocate`
 
