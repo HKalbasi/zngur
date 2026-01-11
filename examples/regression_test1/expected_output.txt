@@ -111,7 +111,7 @@ Method call on ZST
 Test zero-sized type -- finished
 
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
-[main.cpp:151] a = TypeA {
+[main.cpp:158] a = TypeA {
     foo: 10,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -128,12 +128,12 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:152] ::rust::Ref(a.foo) = 10
-[main.cpp:153] ::rust::Ref(a.bar.fizz.buzz_2) = 30
-[main.cpp:154] ::rust::RefMut(a.baz.fizz.buzz_3) = 70
-[main.cpp:157] ::rust::Ref(a_fa_fizz.buzz_1) = 20
-[main.cpp:159] ::rust::Ref(a_fb_fizz.buzz_2) = 60
-[main.cpp:170] b = TypeB {
+[main.cpp:159] ::rust::Ref(a.foo) = 10
+[main.cpp:160] ::rust::Ref(a.bar.fizz.buzz_2) = 30
+[main.cpp:161] ::rust::RefMut(a.baz.fizz.buzz_3) = 70
+[main.cpp:164] ::rust::Ref(a_fa_fizz.buzz_1) = 20
+[main.cpp:166] ::rust::Ref(a_fb_fizz.buzz_2) = 60
+[main.cpp:177] b = TypeB {
     foo: 100,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -150,20 +150,11 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:171] ::rust::Ref<int32_t>(b.foo) = 100
-[main.cpp:172] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
-[main.cpp:173] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
-[main.cpp:176] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
-[main.cpp:178] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
-[main.cpp:183] fa = FieldTypeA {
-    fizz: FieldTypeC {
-        buzz_1: 21,
-        buzz_2: 31,
-        buzz_3: 41,
-    },
-}
-[main.cpp:184] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
-[main.cpp:185] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
+[main.cpp:178] ::rust::Ref<int32_t>(b.foo) = 100
+[main.cpp:179] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
+[main.cpp:180] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
+[main.cpp:183] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
+[main.cpp:185] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
 [main.cpp:190] fa = FieldTypeA {
     fizz: FieldTypeC {
         buzz_1: 21,
@@ -171,7 +162,69 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         buzz_3: 41,
     },
 }
-[main.cpp:191] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
-[main.cpp:192] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
+[main.cpp:191] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
+[main.cpp:192] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
+[main.cpp:197] fa = FieldTypeA {
+    fizz: FieldTypeC {
+        buzz_1: 21,
+        buzz_2: 31,
+        buzz_3: 41,
+    },
+}
+[main.cpp:198] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
+[main.cpp:199] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- finished
+
+Test #layout_conservative -- started
+[main.cpp:208] c_layout = ConservativeLayoutType {
+    field1: 3.14159,
+    field2: 42,
+    field3: "A string at some unknown offset",
+}
+Rust( size = 32 , align = 8 )
+c++( size = 48 , align = 8 )
+[main.cpp:220] layouts = [
+    ConservativeLayoutType {
+        field1: 3.14159,
+        field2: 42,
+        field3: "A string at some unknown offset",
+    },
+    ConservativeLayoutType {
+        field1: 2.71828,
+        field2: 1000,
+        field3: "Another test string",
+    },
+]
+[main.cpp:221] layouts.get(0) = Some(
+    ConservativeLayoutType {
+        field1: 3.14159,
+        field2: 42,
+        field3: "A string at some unknown offset",
+    },
+)
+[main.cpp:222] layouts.get(1) = Some(
+    ConservativeLayoutType {
+        field1: 2.71828,
+        field2: 1000,
+        field3: "Another test string",
+    },
+)
+[main.cpp:223] layouts.get(1).unwrap() = ConservativeLayoutType {
+    field1: 2.71828,
+    field2: 1000,
+    field3: "Another test string",
+}
+[main.cpp:225] layouts = [
+    ConservativeLayoutType {
+        field1: 3.14159,
+        field2: 42,
+        field3: "A string at some unknown offset",
+    },
+    ConservativeLayoutType {
+        field1: 2.71828,
+        field2: 10,
+        field3: "Another test string",
+    },
+]
+Test #layout_conservative -- finished
 

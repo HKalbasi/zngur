@@ -84,7 +84,23 @@ mod ::std::option {
         wellknown_traits(Debug);
 
         fn is_some(&self) -> bool;
-        fn unwrap(self) -> &&str;
+        fn unwrap(self) -> &mut &str;
+    }
+
+    type Option<&crate::ConservativeLayoutType> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug, Copy);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &crate::ConservativeLayoutType;
+    }
+
+    type Option<&mut crate::ConservativeLayoutType> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Debug);
+
+        fn is_some(&self) -> bool;
+        fn unwrap(self) -> &mut crate::ConservativeLayoutType;
     }
 }
 
@@ -107,6 +123,16 @@ mod ::std::vec {
         fn get(&self, usize) -> ::std::option::Option<&&str> deref [&str];
         fn get_mut(&mut self, usize) -> ::std::option::Option<&mut &str> deref [&str];
         fn push(&mut self, &str);
+    }
+
+    type Vec<crate::ConservativeLayoutType> {
+        #layout(size = 24, align = 8);
+        wellknown_traits(Debug);
+
+        fn new() -> Vec<crate::ConservativeLayoutType>;
+        fn get(&self, usize) -> ::std::option::Option<&crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
+        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
+        fn push(&mut self, crate::ConservativeLayoutType);
     }
 }
 
@@ -175,4 +201,18 @@ type crate::TypeB {
     field foo (offset = 0, type = i32 );
     field bar (offset = 4, type = crate::FieldTypeA );
     field baz (offset = 16, type = crate::FieldTypeB );
+}
+
+type crate::ConservativeLayoutType {
+    // bigger than the real size of 32
+    #layout_conservative(size = 48, align = 8 );
+    wellknown_traits(Debug);
+    constructor { field1: f32, field2: i32, field3: ::std::string::String };
+
+    field field1 (offset = auto, type = f32 );
+    field field2 (offset = auto, type = i32 );
+    field field3 (offset = auto, type = ::std::string::String );
+
+    fn mem_size(&self) -> usize;
+    fn mem_align(&self) -> usize;
 }
