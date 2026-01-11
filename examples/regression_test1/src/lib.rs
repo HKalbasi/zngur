@@ -47,6 +47,25 @@ struct TypeB {
     pub baz: FieldTypeB,
 }
 
+#[allow(unused)]
+#[derive(Debug)]
+/// auto field offset + layout_conservative
+struct ConservativeLayoutType {
+    pub field1: f32,
+    pub field2: i32,
+    pub field3: String,
+}
+
+#[allow(unused)]
+impl ConservativeLayoutType {
+    pub fn mem_size(&self) -> usize {
+        std::mem::size_of::<Self>()
+    }
+    pub fn mem_align(&self) -> usize {
+        std::mem::align_of::<Self>()
+    }
+}
+
 struct Scoped(&'static str);
 
 impl Scoped {
