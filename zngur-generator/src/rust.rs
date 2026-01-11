@@ -301,6 +301,20 @@ impl RustFile {
         );
     }
 
+    pub fn add_static_size_upper_bound_assert(&mut self, ty: &RustType, size: usize) {
+        wln!(
+            self,
+            r#"const _: () = assert!({size} >= ::std::mem::size_of::<{ty}>());"#
+        );
+    }
+
+    pub fn add_static_align_upper_bound_assert(&mut self, ty: &RustType, align: usize) {
+        wln!(
+            self,
+            r#"const _: () = assert!({align} >= ::std::mem::align_of::<{ty}>());"#
+        );
+    }
+
     pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &ZngurTrait) -> CppTraitDefinition {
         assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
@@ -578,20 +592,43 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         }
     }
 
-    pub(crate) fn add_field_assertions(&mut self, field: &ZngurField, owner: &RustType) {
+    pub(crate) fn add_field_assertions(
+        &mut self,
+        field: &ZngurField,
+        owner: &RustType,
+    ) -> Option<String> {
         let ZngurField { name, ty, offset } = field;
         wln!(
             self,
             r#"
-            const _: [(); {offset}] = [(); ::std::mem::offset_of!({owner}, {name})];
-            const _: () = {{
-                #[allow(dead_code)]
-                fn check_field(value: {owner}) -> {ty} {{
-                    value.{name}
-                }}
-            }};
+const _: () = {{
+    #[allow(dead_code)]
+    fn check_field(value: {owner}) -> {ty} {{
+        value.{name}
+    }}
+}};
             "#
         );
+        if let Some(offset) = offset {
+            wln!(
+                self,
+                r#"
+const _: [(); {offset}] = [(); ::std::mem::offset_of!({owner}, {name})];
+                "#
+            );
+            None
+        } else {
+            let mn = self.mangle_name(&format!("{}_field_{}_offset", &owner, &name));
+            wln!(
+                self,
+                r#"
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub static {mn}: usize = ::std::mem::offset_of!({owner}, {name});
+                "#
+            );
+            Some(mn)
+        }
     }
 
     pub fn add_extern_cpp_impl(
@@ -885,6 +922,9 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
     ) -> CppLayoutPolicy {
         match layout {
             LayoutPolicy::StackAllocated { size, align } => {
+                CppLayoutPolicy::StackAllocated { size, align }
+            }
+            LayoutPolicy::Conservative { size, align } => {
                 CppLayoutPolicy::StackAllocated { size, align }
             }
             LayoutPolicy::HeapAllocated => {

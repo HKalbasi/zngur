@@ -87,6 +87,10 @@ impl ZngurGenerator {
                     rust_file.add_static_size_assert(&ty, size);
                     rust_file.add_static_align_assert(&ty, align);
                 }
+                LayoutPolicy::Conservative { size, align } => {
+                    rust_file.add_static_size_upper_bound_assert(&ty, size);
+                    rust_file.add_static_align_upper_bound_assert(&ty, align);
+                }
                 LayoutPolicy::HeapAllocated => (),
                 LayoutPolicy::OnlyByRef => (),
             }
@@ -134,7 +138,17 @@ impl ZngurGenerator {
                 }
             }
             for field in ty_def.fields {
-                rust_file.add_field_assertions(&field, &ty_def.ty);
+                let extern_mn = rust_file.add_field_assertions(&field, &ty_def.ty);
+                let field = ZngurFieldData {
+                    name: field.name,
+                    ty: field.ty,
+                    offset: match field.offset {
+                        Some(offset) => ZngurFieldDataOffset::Offset(offset),
+                        None => ZngurFieldDataOffset::Auto(
+                            extern_mn.expect("auto offset did not provide extern name"),
+                        ),
+                    },
+                };
                 fields.push(field);
             }
             if let RustType::Tuple(fields) = &ty_def.ty {

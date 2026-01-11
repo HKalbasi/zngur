@@ -5,7 +5,7 @@ use std::{
 };
 
 use itertools::Itertools;
-use zngur_def::{CppRef, CppValue, RustTrait, ZngurField, ZngurMethodReceiver};
+use zngur_def::{CppRef, CppValue, RustTrait, ZngurFieldData, ZngurMethodReceiver};
 
 use crate::{
     ZngurWellknownTraitData,
@@ -306,7 +306,7 @@ pub struct CppTypeDefinition {
     pub layout: CppLayoutPolicy,
     pub methods: Vec<CppMethod>,
     pub constructors: Vec<CppFnSig>,
-    pub fields: Vec<ZngurField>,
+    pub fields: Vec<ZngurFieldData>,
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,

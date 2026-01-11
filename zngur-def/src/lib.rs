@@ -58,7 +58,20 @@ pub struct ZngurConstructor {
 pub struct ZngurField {
     pub name: String,
     pub ty: RustType,
-    pub offset: usize,
+    pub offset: Option<usize>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ZngurFieldData {
+    pub name: String,
+    pub ty: RustType,
+    pub offset: ZngurFieldDataOffset,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum ZngurFieldDataOffset {
+    Offset(usize),
+    Auto(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -85,6 +98,7 @@ pub enum ZngurWellknownTraitData {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum LayoutPolicy {
     StackAllocated { size: usize, align: usize },
+    Conservative { size: usize, align: usize },
     HeapAllocated,
     OnlyByRef,
 }

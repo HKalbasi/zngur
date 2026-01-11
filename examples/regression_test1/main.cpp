@@ -136,6 +136,90 @@ void test_refref() {
   zngur_dbg(strvec);
 }
 
+void test_nested_heap_refs_and_auto_field_offset() {
+  auto scope = rust::crate::Scoped::new_("Test nested Ref<T> where T is #heap_allocated and auto field offsets"_rs);
+
+  auto a = ::rust::crate::TypeA { 
+    10,
+    ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 20, 30, 40 }
+    },
+    ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 50, 60, 70 }
+    },
+  };
+  zngur_dbg(a);
+  zngur_dbg(::rust::Ref(a.foo));
+  zngur_dbg(::rust::Ref(a.bar.fizz.buzz_2));
+  zngur_dbg(::rust::RefMut(a.baz.fizz.buzz_3));
+
+  auto a_fa_fizz = ::rust::Ref(a.bar.fizz);
+  zngur_dbg(::rust::Ref(a_fa_fizz.buzz_1));
+  auto a_fb_fizz = ::rust::Ref(a.baz.fizz);
+  zngur_dbg(::rust::Ref(a_fb_fizz.buzz_2));
+
+  auto b = ::rust::crate::TypeB { 
+    100,
+    ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 200, 300, 400 }
+    },
+    ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 500, 600, 700 }
+    },
+  };
+  zngur_dbg(b);
+  zngur_dbg(::rust::Ref<int32_t>(b.foo));
+  zngur_dbg(::rust::Ref<int32_t>(b.bar.fizz.buzz_2));
+  zngur_dbg(::rust::RefMut<int32_t>(b.baz.fizz.buzz_3));
+
+  auto b_fa_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(b.bar.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(b_fa_fizz.buzz_1));
+  auto b_fb_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(b.baz.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(b_fb_fizz.buzz_2));
+
+  auto fa = ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 21, 31, 41 }
+  };
+  zngur_dbg(fa);
+  zngur_dbg(::rust::Ref<int32_t>(fa.fizz.buzz_1));
+  zngur_dbg(::rust::Ref<int32_t>(fa.fizz.buzz_3));
+
+  auto fb = ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 51, 61, 71 }
+  };
+  zngur_dbg(fa);
+  zngur_dbg(::rust::Ref<int32_t>(fb.fizz.buzz_2));
+  zngur_dbg(::rust::Ref<int32_t>(fb.fizz.buzz_3));
+
+}
+
+void test_conservative_layout() {
+  auto scope = rust::crate::Scoped::new_("Test #layout_conservative"_rs);
+
+  auto c_layout = ::rust::crate::ConservativeLayoutType {
+      3.14159, 42, "A string at some unknown offset"_rs.to_owned() 
+  };
+  zngur_dbg(c_layout);
+
+  std::cout << "Rust( size = " << c_layout.mem_size() << " , align = " << c_layout.mem_align() << " )\n";
+  std::cout << "c++( size = " << sizeof(c_layout.__zngur_data) << " , align = " << alignof(decltype(c_layout)) << " )\n";
+
+  rust::std::vec::Vec<::rust::crate::ConservativeLayoutType> layouts = rust::std::vec::Vec<::rust::crate::ConservativeLayoutType>::new_();
+  layouts.push(std::move(c_layout));
+  layouts.push(
+    ::rust::crate::ConservativeLayoutType {
+        2.71828, 1000, "Another test string"_rs.to_owned() 
+    }
+  );
+  zngur_dbg(layouts);
+  zngur_dbg(layouts.get(0));
+  zngur_dbg(layouts.get(1));
+  zngur_dbg(layouts.get(1).unwrap());
+  *::rust::RefMut(layouts.get_mut(1).unwrap().field2) = 10;
+  zngur_dbg(layouts);
+
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
@@ -143,4 +227,6 @@ int main() {
   test_floats();
   test_dyn_fn_with_multiple_arguments();
   test_refref();
+  test_nested_heap_refs_and_auto_field_offset();
+  test_conservative_layout();
 }

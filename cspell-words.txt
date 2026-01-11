@@ -8,7 +8,10 @@ blobstore
 cerr
 chumsky
 cloneable
+Conds
+constexpr
 cout
+cplusplus
 CPTE
 Crubit
 csignal
