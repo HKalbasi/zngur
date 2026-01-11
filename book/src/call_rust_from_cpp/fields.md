@@ -37,3 +37,9 @@ mt.f1.push_str("!"_rs);
 ```
 
 See `examples/regression_test1` for a runnable demonstration.
+
+## `offset = auto`
+
+If you do not know the internal layout of your type, i.e. when using `#heap_allocated` or `#layout_conservative`,
+you can set the offset to `auto`. This will emit a unique symbol from the rust side with the real offset which will be obtained by c++ at link time via a `extern const size_t`.
+This does have some small performance penalty when using deeply nested fields as the real offset must then be computed at run time for every conversion to a `Ref<T>`.
