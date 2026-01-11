@@ -304,6 +304,20 @@ impl RustFile {
         );
     }
 
+    pub fn add_static_size_upper_bound_assert(&mut self, ty: &RustType, size: usize) {
+        wln!(
+            self,
+            r#"const _: () = assert!({size} >= ::std::mem::size_of::<{ty}>());"#
+        );
+    }
+
+    pub fn add_static_align_upper_bound_assert(&mut self, ty: &RustType, align: usize) {
+        wln!(
+            self,
+            r#"const _: () = assert!({align} >= ::std::mem::align_of::<{ty}>());"#
+        );
+    }
+
     pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &ZngurTrait) -> CppTraitDefinition {
         assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
@@ -911,6 +925,9 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
     ) -> CppLayoutPolicy {
         match layout {
             LayoutPolicy::StackAllocated { size, align } => {
+                CppLayoutPolicy::StackAllocated { size, align }
+            }
+            LayoutPolicy::Conservative { size, align } => {
                 CppLayoutPolicy::StackAllocated { size, align }
             }
             LayoutPolicy::HeapAllocated => {
