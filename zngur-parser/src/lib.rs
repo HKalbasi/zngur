@@ -292,6 +292,7 @@ enum ParsedConstructorArgs<'a> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedLayoutPolicy<'a> {
     StackAllocated(Vec<(Spanned<&'a str>, usize)>),
+    Conservative(Vec<(Spanned<&'a str>, usize)>),
     HeapAllocated,
     OnlyByRef,
 }
@@ -414,32 +415,44 @@ impl ProcessedItem<'_> {
                     let item = item.inner;
                     match item {
                         ParsedTypeItem::Layout(span, p) => {
+                            let mut check_size_align = |props: Vec<(Spanned<&str>, usize)>| {
+                                let mut size = None;
+                                let mut align = None;
+                                for (key, value) in props {
+                                    match key.inner {
+                                        "size" => size = Some(value),
+                                        "align" => align = Some(value),
+                                        _ => ctx.add_error_str("Unknown property", key.span),
+                                    }
+                                }
+                                let Some(size) = size else {
+                                    ctx.add_error_str(
+                                        "Size is not declared for this type",
+                                        ty.span,
+                                    );
+                                    return None;
+                                };
+                                let Some(align) = align else {
+                                    ctx.add_error_str(
+                                        "Align is not declared for this type",
+                                        ty.span,
+                                    );
+                                    return None;
+                                };
+                                Some((size, align))
+                            };
                             layout = Some(match p {
                                 ParsedLayoutPolicy::StackAllocated(p) => {
-                                    let mut size = None;
-                                    let mut align = None;
-                                    for (key, value) in p {
-                                        match key.inner {
-                                            "size" => size = Some(value),
-                                            "align" => align = Some(value),
-                                            _ => ctx.add_error_str("Unknown property", key.span),
-                                        }
-                                    }
-                                    let Some(size) = size else {
-                                        ctx.add_error_str(
-                                            "Size is not declared for this type",
-                                            ty.span,
-                                        );
-                                        continue;
-                                    };
-                                    let Some(align) = align else {
-                                        ctx.add_error_str(
-                                            "Align is not declared for this type",
-                                            ty.span,
-                                        );
+                                    let Some((size, align)) = check_size_align(p) else {
                                         continue;
                                     };
                                     LayoutPolicy::StackAllocated { size, align }
+                                }
+                                ParsedLayoutPolicy::Conservative(p) => {
+                                    let Some((size, align)) = check_size_align(p) else {
+                                        continue;
+                                    };
+                                    LayoutPolicy::Conservative { size, align }
                                 }
                                 ParsedLayoutPolicy::HeapAllocated => LayoutPolicy::HeapAllocated,
                                 ParsedLayoutPolicy::OnlyByRef => LayoutPolicy::OnlyByRef,
@@ -1590,11 +1603,20 @@ fn inner_type_item<'a>()
     let layout = just([Token::Sharp, Token::Ident("layout")])
         .ignore_then(
             property_item
+                .clone()
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
         )
         .map(ParsedLayoutPolicy::StackAllocated)
+        .or(just([Token::Sharp, Token::Ident("layout_conservative")])
+            .ignore_then(
+                property_item
+                    .separated_by(just(Token::Comma))
+                    .collect::<Vec<_>>()
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+            )
+            .map(ParsedLayoutPolicy::Conservative))
         .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
         .or(just([Token::Sharp, Token::Ident("heap_allocated")])
             .to(ParsedLayoutPolicy::HeapAllocated))

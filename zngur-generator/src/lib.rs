@@ -86,6 +86,10 @@ impl ZngurGenerator {
                     rust_file.add_static_size_assert(&ty, size);
                     rust_file.add_static_align_assert(&ty, align);
                 }
+                LayoutPolicy::Conservative { size, align } => {
+                    rust_file.add_static_size_upper_bound_assert(&ty, size);
+                    rust_file.add_static_align_upper_bound_assert(&ty, align);
+                }
                 LayoutPolicy::HeapAllocated => (),
                 LayoutPolicy::OnlyByRef => (),
             }
