@@ -217,6 +217,22 @@ namespace rust {
     inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
   };
 
+#if __cplusplus >= 201703L
+  // deduction guides
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldOwned<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldRef<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldRefMut<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldOwned<T, Offset, Offsets...> &f) -> RefMut<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldRef<T, Offset, Offsets...> &f) -> RefMut<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldRefMut<T, Offset, Offsets...> &f) -> RefMut<T>;
+#endif
+
   template<typename T>
   struct zngur_is_unsized : std::false_type {};
   struct zngur_fat_pointer {
@@ -1496,6 +1512,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
 
 
 <% } /* for td in self.type_defs */ %>
+
 
 <% for td in self.type_defs { %>
 

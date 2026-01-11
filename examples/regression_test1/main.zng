@@ -130,3 +130,49 @@ type crate::ZeroSizedType {
 mod crate {
     fn call_dyn_fn_multi_args(Box<dyn Fn(i32, crate::Scoped, &str)>);
 }
+
+type crate::FieldTypeA {
+    #layout(size = 12, align = 4);
+    wellknown_traits(Debug, Copy);
+    constructor { fizz: crate::FieldTypeC };
+
+    field fizz (offset = 0, type = crate::FieldTypeC );
+}
+
+type crate::FieldTypeB {
+    #heap_allocated;
+    wellknown_traits(Debug, Copy);
+    constructor { fizz: crate::FieldTypeC };
+
+    field fizz (offset = 0, type = crate::FieldTypeC );
+}
+
+type crate::FieldTypeC {
+    #layout(size = 12, align = 4);
+    wellknown_traits(Debug, Copy);
+    constructor { buzz_1: i32, buzz_2: i32, buzz_3: i32 };
+
+    field buzz_1 (offset = auto, type = i32 );
+    field buzz_2 (offset = auto, type = i32 );
+    field buzz_3 (offset = auto, type = i32 );
+}
+
+type crate::TypeA {
+    #layout(size = 28, align = 4);
+    wellknown_traits(Debug, Copy);
+    constructor { foo: i32, bar: crate::FieldTypeA, baz: crate::FieldTypeB };
+
+    field foo (offset = 0, type = i32 );
+    field bar (offset = 4, type = crate::FieldTypeA );
+    field baz (offset = 16, type = crate::FieldTypeB );
+}
+
+type crate::TypeB {
+    #heap_allocated;
+    wellknown_traits(Debug, Copy);
+    constructor { foo: i32, bar: crate::FieldTypeA, baz: crate::FieldTypeB };
+
+    field foo (offset = 0, type = i32 );
+    field bar (offset = 4, type = crate::FieldTypeA );
+    field baz (offset = 16, type = crate::FieldTypeB );
+}

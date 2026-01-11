@@ -8,6 +8,45 @@ struct Foo {
     field2: String,
 }
 
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+struct FieldTypeA {
+    pub fizz: FieldTypeC,
+}
+
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+// heap allocated
+struct FieldTypeB {
+    pub fizz: FieldTypeC,
+}
+
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+// auto field offset
+struct FieldTypeC {
+    pub buzz_1: i32,
+    pub buzz_2: i32,
+    pub buzz_3: i32,
+}
+
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+struct TypeA {
+    pub foo: i32,
+    pub bar: FieldTypeA,
+    pub baz: FieldTypeB,
+}
+
+#[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+// heap allocated
+struct TypeB {
+    pub foo: i32,
+    pub bar: FieldTypeA,
+    pub baz: FieldTypeB,
+}
+
 struct Scoped(&'static str);
 
 impl Scoped {

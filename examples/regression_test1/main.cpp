@@ -143,6 +143,62 @@ void test_zero_sized_type() {
   zngur_dbg(zst);
 }
 
+void test_nested_heap_refs_and_auto_field_offset() {
+  auto scope = rust::crate::Scoped::new_("Test nested Ref<T> where T is #heap_allocated and auto field offsets"_rs);
+
+  auto a = ::rust::crate::TypeA { 
+    10,
+    ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 20, 30, 40 }
+    },
+    ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 50, 60, 70 }
+    },
+  };
+  zngur_dbg(a);
+  zngur_dbg(::rust::Ref(a.foo));
+  zngur_dbg(::rust::Ref(a.bar.fizz.buzz_2));
+  zngur_dbg(::rust::RefMut(a.baz.fizz.buzz_3));
+
+  auto a_fa_fizz = ::rust::Ref(a.bar.fizz);
+  zngur_dbg(::rust::Ref(a_fa_fizz.buzz_1));
+  auto a_fb_fizz = ::rust::Ref(a.baz.fizz);
+  zngur_dbg(::rust::Ref(a_fb_fizz.buzz_2));
+
+  auto b = ::rust::crate::TypeB { 
+    100,
+    ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 200, 300, 400 }
+    },
+    ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 500, 600, 700 }
+    },
+  };
+  zngur_dbg(b);
+  zngur_dbg(::rust::Ref<int32_t>(b.foo));
+  zngur_dbg(::rust::Ref<int32_t>(b.bar.fizz.buzz_2));
+  zngur_dbg(::rust::RefMut<int32_t>(b.baz.fizz.buzz_3));
+
+  auto b_fa_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(b.bar.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(b_fa_fizz.buzz_1));
+  auto b_fb_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(b.baz.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(b_fb_fizz.buzz_2));
+
+  auto fa = ::rust::crate::FieldTypeA {
+      ::rust::crate::FieldTypeC { 21, 31, 41 }
+  };
+  zngur_dbg(fa);
+  zngur_dbg(::rust::Ref<int32_t>(fa.fizz.buzz_1));
+  zngur_dbg(::rust::Ref<int32_t>(fa.fizz.buzz_3));
+
+  auto fb = ::rust::crate::FieldTypeB {
+      ::rust::crate::FieldTypeC { 51, 61, 71 }
+  };
+  zngur_dbg(fa);
+  zngur_dbg(::rust::Ref<int32_t>(fb.fizz.buzz_2));
+  zngur_dbg(::rust::Ref<int32_t>(fb.fizz.buzz_3));
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
@@ -151,4 +207,5 @@ int main() {
   test_dyn_fn_with_multiple_arguments();
   test_refref();
   test_zero_sized_type();
+  test_nested_heap_refs_and_auto_field_offset();
 }
