@@ -110,3 +110,68 @@ Method call on ZST
 [main.cpp:143] zst = ZeroSizedType
 Test zero-sized type -- finished
 
+Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
+[main.cpp:151] a = TypeA {
+    foo: 10,
+    bar: FieldTypeA {
+        fizz: FieldTypeC {
+            buzz_1: 20,
+            buzz_2: 30,
+            buzz_3: 40,
+        },
+    },
+    baz: FieldTypeB {
+        fizz: FieldTypeC {
+            buzz_1: 50,
+            buzz_2: 60,
+            buzz_3: 70,
+        },
+    },
+}
+[main.cpp:152] ::rust::Ref(a.foo) = 10
+[main.cpp:153] ::rust::Ref(a.bar.fizz.buzz_2) = 30
+[main.cpp:154] ::rust::RefMut(a.baz.fizz.buzz_3) = 70
+[main.cpp:157] ::rust::Ref(a_fa_fizz.buzz_1) = 20
+[main.cpp:159] ::rust::Ref(a_fb_fizz.buzz_2) = 60
+[main.cpp:170] b = TypeB {
+    foo: 100,
+    bar: FieldTypeA {
+        fizz: FieldTypeC {
+            buzz_1: 200,
+            buzz_2: 300,
+            buzz_3: 400,
+        },
+    },
+    baz: FieldTypeB {
+        fizz: FieldTypeC {
+            buzz_1: 500,
+            buzz_2: 600,
+            buzz_3: 700,
+        },
+    },
+}
+[main.cpp:171] ::rust::Ref<int32_t>(b.foo) = 100
+[main.cpp:172] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
+[main.cpp:173] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
+[main.cpp:176] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
+[main.cpp:178] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
+[main.cpp:183] fa = FieldTypeA {
+    fizz: FieldTypeC {
+        buzz_1: 21,
+        buzz_2: 31,
+        buzz_3: 41,
+    },
+}
+[main.cpp:184] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
+[main.cpp:185] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
+[main.cpp:190] fa = FieldTypeA {
+    fizz: FieldTypeC {
+        buzz_1: 21,
+        buzz_2: 31,
+        buzz_3: 41,
+    },
+}
+[main.cpp:191] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
+[main.cpp:192] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
+Test nested Ref<T> where T is #heap_allocated and auto field offsets -- finished
+
