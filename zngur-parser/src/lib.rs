@@ -307,7 +307,7 @@ enum ParsedTypeItem<'a> {
     Field {
         name: String,
         ty: ParsedRustType<'a>,
-        offset: usize,
+        offset: Option<usize>,
     },
     Method {
         data: ParsedMethod<'a>,
@@ -1650,7 +1650,8 @@ fn inner_type_item<'a>()
             just(Token::Ident("offset"))
                 .then(just(Token::Eq))
                 .ignore_then(select! {
-                    Token::Number(c) => c,
+                    Token::Number(c) => Some(c),
+                    Token::Ident("auto") => None,
                 })
                 .then(
                     just(Token::Comma)
