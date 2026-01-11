@@ -415,7 +415,10 @@ namespace rust {
     }
 
     <%- nested_ref_kind %>< T >& operator*() {
-      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(data);
+      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
+    }
+    <%- nested_ref_kind %>< T > const& operator*() const {
+      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
     }
 
   private:
@@ -684,7 +687,11 @@ namespace rust {
     }
 
     <%- ty %>& operator*() {
-        return *reinterpret_cast< <%- ty %>*>(data);
+        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    }
+
+    <%- ty %> const& operator*() const {
+        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
     }
   private:
     size_t __zngur_data;
