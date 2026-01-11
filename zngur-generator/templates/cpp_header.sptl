@@ -1504,7 +1504,8 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
 
   <% for c in &td.constructors { %>
     <% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap(); %>
-    inline <%- fn_name %>(<%- splat!(&c.inputs, |n, ty|, "{ty} i{n}") %>) noexcept {
+    <% /* do default construction first to ensure allocation */ %>
+    inline <%- fn_name %>(<%- splat!(&c.inputs, |n, ty|, "{ty} i{n}") %>) noexcept : <%- fn_name %>() { 
       ::rust::__zngur_internal_assume_init(*this);
       <%- c.rust_link_name %>(
         <% for n in 0..c.inputs.len() { %>
