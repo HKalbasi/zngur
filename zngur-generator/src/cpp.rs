@@ -712,6 +712,7 @@ inline size_t __zngur_internal_size_of< {ref_kind} < {ty} > >() {{
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Copy);
         let is_copy_constructible_by_clone = self.is_copy_constructible_by_clone;
+        let is_heap_allocated = matches!(&self.layout, CppLayoutPolicy::HeapAllocated {..});
         writeln!(
             state,
             r#"
@@ -919,13 +920,14 @@ private:
                                 _ => None,
                             })
                             .unwrap();
+                        let data_ptr = if is_heap_allocated { "data" } else { "data.data()" };
                         writeln!(
                             state,
                             r#"
     {ty}() : drop_flag(false) {{ {alloc_heap} }}
     ~{ty}() {{
         if (drop_flag) {{
-            {drop_in_place}(data.data());
+            {drop_in_place}({data_ptr});
         }}
         {free_heap}
     }}
@@ -939,7 +941,7 @@ private:
         if (this != &other)
         {{
             if (drop_flag) {{
-                {drop_in_place}(data.data());
+                {drop_in_place}({data_ptr});
             }}
             this->drop_flag = other.drop_flag;
             {copy_data}
@@ -981,11 +983,12 @@ private:
                 }
             }
             if let Some((rust_link_name, cpp_ty)) = &self.cpp_value {
+                let data_ptr = if is_heap_allocated { "data" } else { "data.data()" };
                 writeln!(
                     state,
                     r#"
                     inline {cpp_ty}& cpp() {{
-                        return (*{rust_link_name}(data.data())).as_cpp< {cpp_ty} >();
+                        return (*{rust_link_name}({data_ptr})).as_cpp< {cpp_ty} >();
                     }}"#
                 )?;
             }
@@ -1103,12 +1106,13 @@ namespace rust {{
 "#,
                 )?;
             }
+            let data_ptr = if is_heap_allocated { "t.data" } else { "t.data.data()" };
             writeln!(
                 state,
                 r#"
     template<>
     inline uint8_t* __zngur_internal_data_ptr< {ty} >({ty} const & t) {{
-        return const_cast<uint8_t*>(t.data.data());
+        return const_cast<uint8_t*>({data_ptr});
     }}
 }}
 "#,
@@ -1125,6 +1129,7 @@ namespace rust {{
         let is_unsized = self
             .wellknown_traits
             .contains(&ZngurWellknownTraitData::Unsized);
+        let is_heap_allocated = matches!(&self.layout, CppLayoutPolicy::HeapAllocated {..});
         let cpp_type = &self.ty.to_string();
         let my_name = cpp_type.strip_prefix("::").unwrap();
         for c in &self.constructors {
@@ -1341,6 +1346,7 @@ auto data_as_impl = &args;
                     debug_print: _, // TODO: use it
                 } => {
                     if !is_unsized {
+                        let data_ptr = if is_heap_allocated { "t.data" } else { "t.data.data()" };
                         writeln!(
                             state,
                             r#"
@@ -1348,7 +1354,7 @@ auto data_as_impl = &args;
                 template<>
                 inline void zngur_pretty_print< {ty} >({ty} const& t) {{
                     ::rust::__zngur_internal_check_init< {ty} >(t);
-                    {pretty_print}(t.data.data());
+                    {pretty_print}({data_ptr});
                 }}
 
                 template<>
