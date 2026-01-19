@@ -362,7 +362,7 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
         };
-        state.text += template.render().unwrap().as_str();
+        state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())
     }
 
@@ -373,7 +373,7 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
         };
-        state.text += template.render().unwrap().as_str();
+        state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
 
         *is_really_needed = !self.trait_defs.is_empty()
             || !self.exported_fn_defs.is_empty()
@@ -413,4 +413,232 @@ pub fn cpp_handle_field_name(name: &str) -> String {
         return format!("f{name}");
     }
     cpp_handle_keyword(name).to_owned()
+}
+
+trait CountCharMatchesExt {
+    fn count_start_matches(&self, pred: impl Fn(char) -> bool) -> usize;
+    fn count_matches(&self, pred: impl Fn(char) -> bool) -> usize;
+}
+
+impl CountCharMatchesExt for str {
+    fn count_start_matches(&self, pred: impl Fn(char) -> bool) -> usize {
+        let mut count = 0;
+        for c in self.chars() {
+            if pred(c) {
+                count += 1;
+            } else {
+                break;
+            }
+        }
+        count
+    }
+    fn count_matches(&self, pred: impl Fn(char) -> bool) -> usize {
+        let mut count = 0;
+        for c in self.chars() {
+            if pred(c) {
+                count += 1;
+            }
+        }
+        count
+    }
+}
+
+/// Normalize newlines and indents in cpp source code
+///
+/// A relatively naive algorithm intended only to correct excessive indentation and condense
+/// unneeded newlines that result from the sailfish template rendering.
+pub fn normalize_whitespace(cpp: &str) -> String {
+    enum LineType {
+        PreProc,
+        NamespaceOpen,
+        ExternOpen,
+        BlockOpen,
+        BlockClose,
+        Statment,
+        Unknown,
+        Empty,
+    }
+    struct FormatState {
+        indent: usize,
+        last_indent: usize,
+        last_line: LineType,
+    }
+
+    let mut state = FormatState {
+        indent: 0,
+        last_indent: 0,
+        last_line: LineType::Empty,
+    };
+    let lines = cpp.lines();
+    // builds vec of &str then `join`s them to reduce memory footprint and copies
+    let mut out: Vec<&str> = Vec::new();
+
+    fn count_open_pairs(line: &str, pairs: &[[char; 2]]) -> isize {
+        let mut count: isize = 0;
+        for [open, close] in pairs {
+            count += line.count_matches(|c| c == *open) as isize;
+            count -= line.count_matches(|c| c == *close) as isize;
+        }
+        count
+    }
+
+    fn trim_end_c_comments(line: &str) -> &str {
+        let mut j: usize = 0;
+        let mut prev = false;
+        for (index, c) in line.char_indices() {
+            let is_slash = c == '/';
+            if is_slash && prev {
+                // consecutive `//` means rest of line is a comment
+                break;
+            }
+            prev = is_slash;
+            j = index;
+        }
+        if j + 1 >= line.len() {
+            j = line.len()
+        }
+        // SAFETY: `line.char_indices` returns valid indices
+        unsafe { line.get_unchecked(0..j) }
+    }
+
+    fn line_type(line: &str) -> LineType {
+        if line.trim().is_empty() {
+            LineType::Empty
+        } else if line.trim_start().starts_with('#') {
+            LineType::PreProc
+        } else if line.trim_start().starts_with("namespace") && line.ends_with('{') {
+            LineType::NamespaceOpen
+        } else if line.trim_start().starts_with("extern") && line.ends_with('{') {
+            LineType::ExternOpen
+        } else if line.ends_with('{') && count_open_pairs(line, &[['{', '}']]) > 0 {
+            LineType::BlockOpen
+        } else if (line.ends_with('}') || line.ends_with("};"))
+            && count_open_pairs(line, &[['{', '}']]) < 0
+        {
+            LineType::BlockClose
+        } else if line.ends_with(';') {
+            LineType::Statment
+        } else {
+            LineType::Unknown
+        }
+    }
+
+    let mut last_indent: usize = 0;
+    let mut last_line: &str = "";
+    let mut last_extra_indent: usize = 0;
+    let mut indents: Vec<usize> = Vec::new();
+    for line in lines {
+        let trimed = trim_end_c_comments(line).trim_end();
+        let ty = line_type(trimed);
+        let indent = line.count_start_matches(char::is_whitespace);
+        let mut emit_line = false;
+        // don't indent this line
+        let mut dont_indent = false;
+        // extra indent levels for this line
+        let mut extra_indent = 0;
+        // subtracted from indent
+        let mut special_indent = 0;
+        // when opening a indent level, don't indent this line
+        let mut use_last_indent = false;
+        match ty {
+            LineType::PreProc => {
+                dont_indent = true;
+                emit_line = true;
+            }
+            LineType::NamespaceOpen => {
+                indents.clear();
+                state.indent = 0;
+                state.last_indent = 0;
+                emit_line = true;
+            }
+            LineType::ExternOpen => {
+                indents.clear();
+                indents.push(4);
+                state.indent = 4;
+                state.last_indent = 0;
+                emit_line = true;
+                use_last_indent = true;
+            }
+            LineType::BlockOpen => {
+                emit_line = true;
+                indents.push(4);
+                state.indent += 4;
+                use_last_indent = true;
+            }
+            LineType::BlockClose => {
+                emit_line = true;
+                if let Some(n) = indents.pop() {
+                    state.indent = state.indent.saturating_sub(n);
+                }
+            }
+            LineType::Statment | LineType::Unknown => {
+                let open_pairs =
+                    count_open_pairs(last_line, &[['[', ']'], ['{', '}'], ['<', '>'], ['(', ')']]);
+                if trimed.ends_with("public:") || trimed.ends_with("private:") {
+                    special_indent = 2;
+                } else if indent == last_indent {
+                    extra_indent = last_extra_indent;
+                } else if !matches!(
+                    state.last_line,
+                    LineType::BlockOpen | LineType::NamespaceOpen | LineType::ExternOpen
+                ) && indent > last_indent
+                    && open_pairs > 0
+                {
+                    extra_indent += 4;
+                } else if extra_indent > 0
+                    && !matches!(
+                        state.last_line,
+                        LineType::BlockOpen | LineType::NamespaceOpen | LineType::ExternOpen
+                    )
+                    && open_pairs < 0
+                {
+                    extra_indent = extra_indent.saturating_sub(4);
+                }
+                emit_line = true;
+            }
+            LineType::Empty => match &state.last_line {
+                // preseve empty line if previous line held meaning
+                LineType::Statment | LineType::Unknown | LineType::BlockClose => {
+                    dont_indent = false;
+                    if !last_line.ends_with([',', '[', '<', '(']) {
+                        emit_line = true
+                    }
+                }
+                // eliminate all other empty lines
+                _ => {}
+            },
+        }
+
+        state.last_line = ty;
+        last_line = trimed;
+        last_indent = indent;
+        last_extra_indent = extra_indent;
+        if emit_line {
+            // emit indent
+            // extra_indent is for *this* line and forward
+            // special_indent is for *this* line only
+            if !dont_indent
+                && (((use_last_indent && state.last_indent > 0)
+                    || (!use_last_indent && state.indent > 0))
+                    || extra_indent > 0
+                    || special_indent > 0)
+            {
+                out.extend(
+                    iter::once(" ").cycle().take(
+                        (if use_last_indent {
+                            state.last_indent
+                        } else {
+                            state.indent
+                        } + extra_indent)
+                            .saturating_sub(special_indent),
+                    ),
+                );
+            }
+            // emit line without it's source indent
+            out.push(line.trim());
+            out.push("\n");
+        }
+        state.last_indent = state.indent;
+    }
+    out.join("")
 }
