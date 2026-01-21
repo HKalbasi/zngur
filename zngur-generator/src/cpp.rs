@@ -1,9 +1,9 @@
 use std::{
-    collections::HashMap,
     fmt::{Display, Write},
     iter,
 };
 
+use indexmap::IndexMap;
 use itertools::Itertools;
 use zngur_def::{CppRef, CppValue, RustTrait, ZngurField, ZngurMethodReceiver};
 
@@ -347,7 +347,7 @@ pub struct PanicToExceptionSymbols {
 pub struct CppFile {
     pub header_file_name: String,
     pub type_defs: Vec<CppTypeDefinition>,
-    pub trait_defs: HashMap<RustTrait, CppTraitDefinition>,
+    pub trait_defs: IndexMap<RustTrait, CppTraitDefinition>,
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,

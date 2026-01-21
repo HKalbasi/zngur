@@ -88,33 +88,31 @@ impl<T: Merge> Merge for Option<T> {
     }
 }
 
-impl<K, V, I: IntoIterator<Item = (K, V)>> Merge<std::collections::HashMap<K, V>> for I
+impl<K, V, I: IntoIterator<Item = (K, V)>> Merge<indexmap::IndexMap<K, V>> for I
 where
     K: Eq + std::hash::Hash,
     V: Merge,
 {
-    /// Merges a sequence of key-value pairs into a hash map.
+    /// Merges a sequence of key-value pairs into a map.
     ///
     /// If a key is present in both `self` and `into`, the corresponding values are merged.
     /// Otherwise, the entry from `self` is inserted into `into`.
     ///
-    /// This implementation implies `std::collections::HashMap<K,V>` is `Merge` for all `V: Merge`,
-    /// because HashMap is `IntoIterator`. We use `IntoIterator` to allow literal sequences of
+    /// This implementation implies `indexmap::IndexMap<K,V>` is `Merge` for all `V: Merge`,
+    /// because IndexMap is `IntoIterator`. We use `IntoIterator` to allow literal sequences of
     /// key-value pairs to be merged into a map.
-    fn merge(self, into: &mut std::collections::HashMap<K, V>) -> MergeResult {
+    fn merge(self, into: &mut indexmap::IndexMap<K, V>) -> MergeResult {
         for (key, value) in self {
             match into.entry(key) {
-                std::collections::hash_map::Entry::Vacant(e) => {
+                indexmap::map::Entry::Vacant(e) => {
                     e.insert(value);
                 }
-                std::collections::hash_map::Entry::Occupied(mut e) => {
-                    match value.merge(e.get_mut()) {
-                        Ok(()) => {}
-                        Err(message) => {
-                            return Err(message);
-                        }
+                indexmap::map::Entry::Occupied(mut e) => match value.merge(e.get_mut()) {
+                    Ok(()) => {}
+                    Err(message) => {
+                        return Err(message);
                     }
-                }
+                },
             }
         }
         Ok(())
