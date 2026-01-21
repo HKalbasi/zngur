@@ -29,3 +29,16 @@ fn call_dyn_fn_multi_args(func: Box<dyn Fn(i32, crate::Scoped, &str)>) {
     func(2, scope, "hello");
     println!("End of call_dyn_fn_multi_args");
 }
+
+#[derive(Debug)]
+struct ZeroSizedType;
+
+impl ZeroSizedType {
+    fn new() -> Self {
+        Self
+    }
+
+    fn method(&self) {
+        println!("Method call on ZST");
+    }
+}
