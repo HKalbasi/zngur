@@ -680,7 +680,7 @@ unsafe extern "C" {{ fn {mangled_name}("#
         w!(
             self,
             r#"
-pub(crate) fn {rust_name}("#
+pub fn {rust_name}("#
         );
         for (n, ty) in inputs.iter().enumerate() {
             w!(self, "i{n}: {ty}, ");
