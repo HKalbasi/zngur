@@ -67,7 +67,7 @@ impl IntoCpp for RustType {
                     PrimitiveRustType::Float(64) => Some(CppType::from("double_t")),
                     PrimitiveRustType::Float(_) => unreachable!(),
                     PrimitiveRustType::Usize => Some(CppType::from("size_t")),
-                    PrimitiveRustType::Bool | PrimitiveRustType::Str => None,
+                    PrimitiveRustType::Bool | PrimitiveRustType::Str | PrimitiveRustType::Char => None,
                     PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
                         Some(CppType::from("rust::ZngurCppOpaqueOwnedObject"))
                     }
@@ -90,6 +90,7 @@ impl IntoCpp for RustType {
             RustType::Primitive(s) => match s {
                 PrimitiveRustType::Bool => CppType::from("rust::Bool"),
                 PrimitiveRustType::Str => CppType::from("rust::Str"),
+                PrimitiveRustType::Char => CppType::from("rust::Char"),
                 _ => unreachable!(),
             },
             RustType::Boxed(t) => CppType {

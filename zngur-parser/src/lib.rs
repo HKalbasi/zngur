@@ -1364,6 +1364,7 @@ fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngPars
     let scalar = select! {
         Token::Ident("bool") => PrimitiveRustType::Bool,
         Token::Ident("str") => PrimitiveRustType::Str,
+        Token::Ident("char") => PrimitiveRustType::Char,
         Token::Ident("ZngurCppOpaqueOwnedObject") => PrimitiveRustType::ZngurCppOpaqueOwnedObject,
         Token::Ident("usize") => PrimitiveRustType::Usize,
         Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
