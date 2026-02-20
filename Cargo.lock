@@ -404,6 +404,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-char"
+version = "0.7.0"
+
+[[package]]
 name = "example-conditional"
 version = "0.7.0"
 
