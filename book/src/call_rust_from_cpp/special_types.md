@@ -15,7 +15,7 @@ For the rest, Zngur tries to support them using C++ feature called User-defined 
 
 | Syntax         | Rust Equivalent | Output Type                       | Status          | Enabled With        |
 | -------------- | --------------- | --------------------------------- | --------------- | ------------------- |
-| `'a'_rs`       | `'a'`           | `rust::Char`                      | Not Implemented | `char`              |
+| `'a'_rs`       | `'a'`           | `rust::Char`                      | Implemented     | `char`              |
 | `"hello"_rs`   | `"hello"`       | `rust::Ref<rust::Str>`            | Implemented     | `str`               |
 | `'a'_rs_b`     | `b'a'`          | `uint8_t`                         | Not Implemented | unconditionally     |
 | `"hello"_rs_b` | `b"hello"`      | `rust::Ref<rust::Slice<uint8_t>>` | Not Implemented | `[u8]`              |
