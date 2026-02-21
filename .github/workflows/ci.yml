@@ -45,8 +45,6 @@ jobs:
           rustup toolchain install stable
           rustup target add wasm32-wasip1
           rustup component add rustfmt
-      - name: Install osmium
-        run: sudo apt install libosmium2-dev
       - name: Install LLD for clang++
         if: matrix.cpp_compiler == 'clang++'
         run: sudo apt-get update && sudo apt-get install -y lld
