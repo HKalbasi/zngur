@@ -182,6 +182,7 @@ pub enum PrimitiveRustType {
     Float(u32),
     Usize,
     Bool,
+    Char,
     Str,
     ZngurCppOpaqueOwnedObject,
 }
@@ -266,6 +267,7 @@ impl Display for RustType {
                 PrimitiveRustType::Float(s) => write!(f, "f{s}"),
                 PrimitiveRustType::Usize => write!(f, "usize"),
                 PrimitiveRustType::Bool => write!(f, "bool"),
+                PrimitiveRustType::Char => write!(f, "char"),
                 PrimitiveRustType::Str => write!(f, "str"),
                 PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
                     write!(f, "ZngurCppOpaqueOwnedObject")

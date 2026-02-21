@@ -559,6 +559,16 @@ namespace rust {
         }
     <% } %>
 
+    <% if td.ty.path.to_string() == "::rust::Char" { %>
+      public:
+        operator char32_t() const {
+          return *reinterpret_cast<const char32_t*>(data.data());
+        }
+        Char(char32_t c) {
+          *reinterpret_cast<char32_t*>(data.data()) = c;
+        }
+    <% } %>
+
     <% if !is_copy { %>
       bool drop_flag;
     <% } %>
@@ -934,6 +944,15 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
     o.data[0] = reinterpret_cast<size_t>(input);
     o.data[1] = len;
     return o;
+  }
+<% } %>
+
+<% if td.ty.path.to_string() == "::rust::Char" { %>
+  inline ::rust::Char operator""_rs(char32_t c) {
+    if (c > 0x10FFFFu || (c >= 0xD800u && c <= 0xDFFFu)) {
+      return ::rust::Char(0xFFFDu);
+    }
+    return ::rust::Char(c);
   }
 <% } %>
 

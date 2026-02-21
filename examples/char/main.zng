@@ -1,0 +1,17 @@
+type char {
+  #layout(size = 4, align = 4);
+  wellknown_traits(Copy);
+}
+
+type bool {
+  #layout(size = 1, align = 1);
+  wellknown_traits(Copy);
+}
+
+type crate::CharPrinter {
+  #layout(size = 0, align = 1);
+  fn print(char);
+  fn is_alphabetic(char) -> bool;
+  fn to_uppercase(char) -> char;
+}
+
