@@ -2,7 +2,7 @@
 name = "zngur-parser"
 description = "Parser of the zng file"
 readme = "../README.md"
-version = "0.7.0"
+version = "0.8.0"
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
@@ -13,7 +13,7 @@ license.workspace = true
 ariadne = "0.3.0"
 chumsky = { version = "=1.0.0-alpha.8", features = [] }
 itertools = "0.11"
-zngur-def = { version = "=0.7.0", path = "../zngur-def" }
+zngur-def = { version = "=0.8.0", path = "../zngur-def" }
 
 [dev-dependencies]
 expect-test = "1.4.1"
