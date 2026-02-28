@@ -1,0 +1,72 @@
+#unstable(template_types)
+
+type<T> [T] {
+    wellknown_traits(?Sized);
+    fn get(&self, usize) -> ::std::option::Option<&T>;
+    fn len(&self) -> usize;
+}
+
+mod ::std {
+
+    type<T> option::Option<T> {
+        constructor Some(T);
+        constructor None;
+        fn unwrap(self) -> T;
+    }
+
+    type<T> option::Option<&T> {
+        #layout(size = 8, align = 8);
+        wellknown_traits(Copy);
+    }
+
+    type<T> vec::Vec<T> {
+        #layout(size = 24, align = 8);
+        fn new() -> vec::Vec<T>;
+        fn push(&mut self, T);
+        fn len(&self) -> usize;
+
+        fn get(&self, usize) -> option::Option<&T> deref [T];
+    }
+
+    type<T> boxed::Box<T> {
+        // Most Box<T> have the same layout, but not Box<dyn T>
+        #layout(size = 8, align = 8);
+        fn as_ref(&self) -> &T;
+    }
+}
+
+mod crate {
+
+    type TypeA {
+        #layout(size = 4, align = 4);
+        wellknown_traits(Debug);
+        constructor (i32);
+    }
+
+    type ::std::vec::Vec<TypeA> {
+        wellknown_traits(Debug);
+    }
+
+    type TypeB {
+        #layout(size = 4, align = 4);
+        wellknown_traits(Debug);
+        constructor (i32);
+    }
+
+    // All relevant definitions are provided by the templates
+    type ::std::vec::Vec<TypeB> {}
+    type [TypeB] {}
+    type ::std::option::Option<&TypeB> {}
+
+    type ::std::boxed::Box<dyn MyTrait> {
+        // Can override layout from templates
+        #layout(size = 16, align = 8);
+    }
+
+    type dyn MyTrait {
+        wellknown_traits(?Sized);
+        fn say_hello(&self);
+    }
+
+    fn get_box() -> ::std::boxed::Box<dyn MyTrait>;
+}

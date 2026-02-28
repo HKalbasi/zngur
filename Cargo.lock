@@ -463,6 +463,10 @@ name = "example-simple-import"
 version = "0.8.0"
 
 [[package]]
+name = "example-template-types"
+version = "0.7.0"
+
+[[package]]
 name = "example-tutorial"
 version = "0.8.0"
 

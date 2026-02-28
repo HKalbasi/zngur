@@ -142,6 +142,9 @@ impl IntoCpp for RustType {
                 }
             }
             RustType::Impl(_, _) => panic!("impl Trait is invalid in C++"),
+            RustType::TypeVar(_) => {
+                unreachable!("should not attempt to generate definition for unbound TypeVar")
+            }
         }
     }
 }

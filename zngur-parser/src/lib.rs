@@ -1,15 +1,19 @@
-use std::{collections::HashMap, fmt::Display, path::Component};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Display,
+    path::Component,
+};
 
 #[cfg(not(test))]
 use std::process::exit;
 
 use ariadne::{Color, Label, Report, ReportKind, sources};
-use chumsky::prelude::*;
+use chumsky::{input::MapExtra, prelude::*};
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
-    MergeFailure, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
+    AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, LayoutPolicy, Merge,
+    MergeFailure, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType, TypeVar,
     ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod,
     ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
@@ -30,10 +34,12 @@ mod tests;
 
 pub mod cfg;
 mod conditional;
+mod template_types;
 
 use crate::{
     cfg::{CfgConditional, RustCfgProvider},
     conditional::{Condition, ConditionalItem, NItems, conditional_item},
+    template_types::try_match_template,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -57,6 +63,7 @@ type ParserInput<'a> = chumsky::input::MappedInput<
 pub struct UnstableFeatures {
     pub cfg_match: bool,
     pub cfg_if: bool,
+    pub template_types: bool,
 }
 
 #[derive(Default)]
@@ -103,6 +110,7 @@ struct ParsedPath<'a> {
 struct Scope<'a> {
     aliases: Vec<ParsedAlias<'a>>,
     base: Vec<String>,
+    type_vars: HashSet<ParsedTypeVar<'a>>,
 }
 
 impl<'a> Scope<'a> {
@@ -110,7 +118,8 @@ impl<'a> Scope<'a> {
     fn new_root(aliases: Vec<ParsedAlias<'a>>) -> Scope<'a> {
         Scope {
             aliases,
-            base: Vec::new(),
+            base: Default::default(),
+            type_vars: Default::default(),
         }
     }
 
@@ -145,6 +154,37 @@ impl<'a> Scope<'a> {
         Scope {
             aliases: mod_aliases,
             base,
+            type_vars: self.type_vars.clone(),
+        }
+    }
+
+    fn with_type_vars(&self, type_vars: HashSet<ParsedTypeVar<'a>>) -> Scope<'_> {
+        Scope {
+            aliases: self.aliases.clone(),
+            base: self.base.clone(),
+            type_vars,
+        }
+    }
+
+    fn as_type_var(&self, ty: &ParsedRustPathAndGenerics<'a>) -> Option<TypeVar> {
+        if let ParsedRustPathAndGenerics {
+            path:
+                ParsedPath {
+                    start: ParsedPathStart::Relative,
+                    segments,
+                    span: _,
+                },
+            generics,
+            named_generics,
+        } = ty
+            && generics.is_empty()
+            && named_generics.is_empty()
+            && let &[single_elem] = segments.as_slice()
+            && self.type_vars.contains(&ParsedTypeVar(single_elem))
+        {
+            Some(TypeVar(single_elem.to_owned()))
+        } else {
+            None
         }
     }
 }
@@ -238,6 +278,7 @@ enum ParsedItem<'a> {
     Type {
         ty: Spanned<ParsedRustType<'a>>,
         items: Vec<Spanned<ParsedTypeItem<'a>>>,
+        type_vars: Option<HashSet<ParsedTypeVar<'a>>>,
     },
     Trait {
         tr: Spanned<ParsedRustTrait<'a>>,
@@ -262,6 +303,7 @@ enum ProcessedItem<'a> {
     Type {
         ty: Spanned<ParsedRustType<'a>>,
         items: Vec<Spanned<ParsedTypeItem<'a>>>,
+        type_vars: Option<HashSet<ParsedTypeVar<'a>>>,
     },
     Trait {
         tr: Spanned<ParsedRustTrait<'a>>,
@@ -325,6 +367,9 @@ enum ParsedTypeItem<'a> {
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, NItems>),
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ParsedTypeVar<'a>(&'a str);
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ParsedMethod<'a> {
     name: &'a str,
@@ -365,7 +410,12 @@ where
 }
 
 impl ProcessedItem<'_> {
-    fn add_to_zngur_spec(self, r: &mut ZngurSpec, scope: &Scope<'_>, ctx: &mut ParseContext) {
+    fn add_to_zngur_spec(
+        self,
+        r: &mut ZngurSpecBuilder,
+        scope: &Scope<'_>,
+        ctx: &mut ParseContext,
+    ) {
         match self {
             ProcessedItem::Mod {
                 path,
@@ -391,7 +441,11 @@ impl ProcessedItem<'_> {
                     ),
                 }
             }
-            ProcessedItem::Type { ty, items } => {
+            ProcessedItem::Type {
+                ty,
+                items,
+                type_vars,
+            } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
                     // We add unit type implicitly.
                     ctx.add_error_str(
@@ -399,6 +453,11 @@ impl ProcessedItem<'_> {
                         ty.span,
                     );
                 }
+
+                let (is_template, scope) = match type_vars {
+                    Some(type_vars) => (true, &scope.with_type_vars(type_vars)),
+                    None => (false, scope),
+                };
 
                 let mut methods = vec![];
                 let mut constructors = vec![];
@@ -544,17 +603,10 @@ impl ProcessedItem<'_> {
                     .iter()
                     .find(|x| x.inner == ZngurWellknownTrait::Unsized)
                     .cloned();
-                let is_copy = wellknown_traits
-                    .iter()
-                    .find(|x| x.inner == ZngurWellknownTrait::Copy)
-                    .cloned();
-                let mut wt = wellknown_traits
+                let wt = wellknown_traits
                     .into_iter()
                     .map(|x| x.inner)
                     .collect::<Vec<_>>();
-                if is_copy.is_none() && is_unsized.is_none() {
-                    wt.push(ZngurWellknownTrait::Drop);
-                }
                 if let Some(is_unsized) = is_unsized {
                     if let Some(span) = layout_span {
                         ctx.add_report(
@@ -584,29 +636,25 @@ impl ProcessedItem<'_> {
                     }
                     layout = Some(LayoutPolicy::OnlyByRef);
                 }
-                if let Some(layout) = layout {
-                    checked_merge(
-                        ZngurType {
-                            ty: ty.inner.to_zngur(scope),
-                            layout,
-                            methods,
-                            wellknown_traits: wt,
-                            constructors,
-                            fields,
-                            cpp_value,
-                            cpp_ref,
-                        },
-                        r,
-                        ty.span,
-                        ctx,
-                    );
-                } else {
-                    ctx.add_error_str(
-                        "No layout policy found for this type. \
-Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
-                        ty.span,
-                    );
+                let zngur_type = ZngurType {
+                    ty: ty.inner.to_zngur(scope),
+                    layout,
+                    methods,
+                    wellknown_traits: wt,
+                    constructors,
+                    fields,
+                    cpp_value,
+                    cpp_ref,
                 };
+                if is_template {
+                    r.templates.push(TemplateDef {
+                        ty: zngur_type,
+                        filename: ctx.filename().to_owned(),
+                        span: ty.span,
+                    });
+                } else {
+                    checked_merge(zngur_type, &mut r.spec, ty.span, ctx);
+                }
             }
             ProcessedItem::Trait { tr, methods } => {
                 checked_merge(
@@ -614,7 +662,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         tr: tr.inner.to_zngur(scope),
                         methods: methods.into_iter().map(|m| m.to_zngur(scope)).collect(),
                     },
-                    r,
+                    &mut r.spec,
                     tr.span,
                     ctx,
                 );
@@ -631,7 +679,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         inputs: method.inputs,
                         output: method.output,
                     },
-                    r,
+                    &mut r.spec,
                     f.span,
                     ctx,
                 );
@@ -648,7 +696,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                                     inputs: method.inputs,
                                     output: method.output,
                                 },
-                                r,
+                                &mut r.spec,
                                 span,
                                 ctx,
                             );
@@ -663,7 +711,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                                         .map(|x| x.to_zngur(scope))
                                         .collect(),
                                 },
-                                r,
+                                &mut r.spec,
                                 ty.span,
                                 ctx,
                             );
@@ -672,7 +720,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                 }
             }
             ProcessedItem::CppAdditionalInclude(s) => {
-                match AdditionalIncludes(s.to_owned()).merge(r) {
+                match AdditionalIncludes(s.to_owned()).merge(&mut r.spec) {
                     Ok(()) => {}
                     Err(_) => {
                         unreachable!() // For now, additional includes can't have conflicts.
@@ -687,7 +735,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                     );
                     return;
                 }
-                match ConvertPanicToException(true).merge(r) {
+                match ConvertPanicToException(true).merge(&mut r.spec) {
                     Ok(()) => {}
                     Err(_) => {
                         unreachable!() // For now, CPtE also can't have conflicts.
@@ -730,7 +778,10 @@ impl ParsedRustType<'_> {
             ParsedRustType::Tuple(v) => {
                 RustType::Tuple(v.into_iter().map(|s| s.to_zngur(scope)).collect())
             }
-            ParsedRustType::Adt(s) => RustType::Adt(s.to_zngur(scope)),
+            ParsedRustType::Adt(s) => match scope.as_type_var(&s) {
+                Some(v) => RustType::TypeVar(v),
+                None => RustType::Adt(s.to_zngur(scope)),
+            },
         }
     }
 }
@@ -960,7 +1011,11 @@ impl ImportResolver for DefaultImportResolver {
 }
 
 impl<'a> ParsedZngFile<'a> {
-    fn parse_into(zngur: &mut ZngurSpec, ctx: &mut ParseContext, resolver: &impl ImportResolver) {
+    fn parse_into(
+        zngur: &mut ZngurSpecBuilder,
+        ctx: &mut ParseContext,
+        resolver: &impl ImportResolver,
+    ) {
         let (tokens, errs) = lexer().parse(ctx.text).into_output_errors();
         let Some(tokens) = tokens else {
             ctx.add_errors(errs.into_iter().map(|e| e.map_token(|c| c.to_string())));
@@ -1020,11 +1075,12 @@ impl<'a> ParsedZngFile<'a> {
 
     /// Parse a .zng file and return both the spec and list of all processed files.
     pub fn parse(path: std::path::PathBuf, cfg: Box<dyn RustCfgProvider>) -> ParseResult {
-        let mut zngur = ZngurSpec::default();
-        zngur.rust_cfg.extend(cfg.get_cfg_pairs());
+        let mut zngur = ZngurSpecBuilder::default();
+        zngur.spec.rust_cfg.extend(cfg.get_cfg_pairs());
         let text = std::fs::read_to_string(&path).unwrap();
         let mut ctx = ParseContext::new(path.clone(), &text, cfg.clone_box());
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
+        let spec = zngur.to_zngur(&mut ctx);
         if ctx.has_errors() {
             // add report of cfg values used
             ctx.add_report(
@@ -1048,23 +1104,15 @@ impl<'a> ParsedZngFile<'a> {
             ctx.emit_ariadne_errors();
         }
         ParseResult {
-            spec: zngur,
+            spec,
             processed_files: ctx.processed_files,
         }
     }
 
     /// Parse a .zng file from a string. Mainly useful for testing.
+    #[cfg(test)]
     pub fn parse_str(text: &str, cfg: impl RustCfgProvider + 'static) -> ParseResult {
-        let mut zngur = ZngurSpec::default();
-        let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text, Box::new(cfg));
-        Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
-        if ctx.has_errors() {
-            ctx.emit_ariadne_errors();
-        }
-        ParseResult {
-            spec: zngur,
-            processed_files: ctx.processed_files,
-        }
+        Self::parse_str_with_resolver(text, cfg, &DefaultImportResolver)
     }
 
     #[cfg(test)]
@@ -1073,14 +1121,15 @@ impl<'a> ParsedZngFile<'a> {
         cfg: impl RustCfgProvider + 'static,
         resolver: &impl ImportResolver,
     ) -> ParseResult {
-        let mut zngur = ZngurSpec::default();
+        let mut zngur = ZngurSpecBuilder::default();
         let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text, Box::new(cfg));
         Self::parse_into(&mut zngur, &mut ctx, resolver);
+        let spec = zngur.to_zngur(&mut ctx);
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
         }
         ParseResult {
-            spec: zngur,
+            spec,
             processed_files: ctx.processed_files,
         }
     }
@@ -1120,7 +1169,15 @@ fn process_parsed_item<'a>(
                 aliases,
             })
         }
-        ParsedItem::Type { ty, items } => Ret::Processed(ProcessedItem::Type { ty, items }),
+        ParsedItem::Type {
+            ty,
+            items,
+            type_vars,
+        } => Ret::Processed(ProcessedItem::Type {
+            ty,
+            items,
+            type_vars,
+        }),
         ParsedItem::Trait { tr, methods } => Ret::Processed(ProcessedItem::Trait { tr, methods }),
         ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
         ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
@@ -1161,12 +1218,75 @@ impl<'a> ProcessedZngFile<'a> {
         ProcessedZngFile { aliases, items }
     }
 
-    fn into_zngur_spec(self, zngur: &mut ZngurSpec, ctx: &mut ParseContext) {
+    fn into_zngur_spec(self, zngur: &mut ZngurSpecBuilder, ctx: &mut ParseContext) {
         let root_scope = Scope::new_root(self.aliases);
 
         for item in self.items {
             item.add_to_zngur_spec(zngur, &root_scope, ctx);
         }
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+struct Import(pub std::path::PathBuf);
+
+struct TemplateDef {
+    ty: ZngurType,
+    filename: String,
+    span: Span,
+}
+
+#[derive(Default)]
+struct ZngurSpecBuilder {
+    spec: ZngurSpec,
+    templates: Vec<TemplateDef>,
+    imports: Vec<Import>,
+}
+
+impl ZngurSpecBuilder {
+    fn to_zngur(self, ctx: &mut ParseContext) -> ZngurSpec {
+        let ZngurSpecBuilder {
+            mut spec,
+            templates,
+            imports: _,
+        } = self;
+        let defined_types = spec.types.iter().map(|ty| ty.ty.clone()).collect();
+        for ty in &mut spec.types {
+            for template in &templates {
+                if let Some(template_match) =
+                    try_match_template(&ty.ty, &template.ty, &defined_types)
+                {
+                    if let Err(e) = template_match.merge(ty) {
+                        let MergeFailure::Conflict(e) = e;
+                        ctx.add_report(
+                            Report::build(ReportKind::Error, &template.filename, 0)
+                                .with_message(format!(
+                                    "Failed to apply template {} to type {}: {}",
+                                    template.ty.ty, ty.ty, e
+                                ))
+                                .with_label(
+                                    Label::new((
+                                        template.filename.clone(),
+                                        template.span.start..template.span.end,
+                                    ))
+                                    .with_message("Template defined here")
+                                    .with_color(Color::Blue),
+                                )
+                                .finish(),
+                        );
+                    }
+                }
+            }
+            if !ty.wellknown_traits.iter().any(|wkt| {
+                matches!(
+                    wkt,
+                    ZngurWellknownTrait::Copy | ZngurWellknownTrait::Unsized
+                )
+            }) {
+                ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
+            }
+        }
+        spec
     }
 }
 
@@ -1740,14 +1860,35 @@ fn inner_type_item<'a>()
 
 fn type_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::KwType)
-        .ignore_then(spanned(rust_type()))
+        .ignore_then(
+            (select! { Token::Ident(c) => c })
+                .map(ParsedTypeVar)
+                .separated_by(just(Token::Comma))
+                .at_least(1)
+                .allow_trailing()
+                .collect()
+                .delimited_by(just(Token::AngleOpen), just(Token::AngleClose))
+                .try_map_with(|vars, e: &mut MapExtra<_, ZngParserExtra>| {
+                    if !e.state().unstable_features.template_types {
+                        Err(Rich::custom(e.span(), "Template types are unstable. Enable them by using `#unstable(template_types)` at the top of the file."))
+                    } else {
+                        Ok(vars)
+                    }
+                })
+                .or_not(),
+        )
+        .then(spanned(rust_type()))
         .then(
             spanned(inner_type_item())
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
         )
-        .map(|(ty, items)| ParsedItem::Type { ty, items })
+        .map(|((type_vars, ty), items)| ParsedItem::Type {
+            ty,
+            items,
+            type_vars,
+        })
         .boxed()
 }
 
@@ -1836,6 +1977,11 @@ fn unstable_feature<'a>()
                     let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
                     ctx.unstable_features.cfg_if = true;
                     Ok(ParsedItem::UnstableFeature("cfg_if"))
+                }
+                "template_types" => {
+                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                    ctx.unstable_features.template_types = true;
+                    Ok(ParsedItem::UnstableFeature("template_types"))
                 }
                 _ => Err(Rich::custom(
                     e.span(),

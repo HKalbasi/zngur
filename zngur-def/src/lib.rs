@@ -115,10 +115,10 @@ pub struct ZngurMethodDetails {
     pub deref: Option<(RustType, Mutability)>,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppValue(pub String, pub String);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppRef(pub String);
 
 impl Display for CppRef {
@@ -130,7 +130,7 @@ impl Display for CppRef {
 #[derive(Debug)]
 pub struct ZngurType {
     pub ty: RustType,
-    pub layout: LayoutPolicy,
+    pub layout: Option<LayoutPolicy>,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
     pub methods: Vec<ZngurMethodDetails>,
     pub constructors: Vec<ZngurConstructor>,
@@ -151,11 +151,8 @@ pub struct AdditionalIncludes(pub String);
 #[derive(Debug, Default)]
 pub struct ConvertPanicToException(pub bool);
 
-#[derive(Clone, Debug, Default)]
-pub struct Import(pub std::path::PathBuf);
 #[derive(Debug, Default)]
 pub struct ZngurSpec {
-    pub imports: Vec<Import>,
     pub types: Vec<ZngurType>,
     pub traits: IndexMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
@@ -202,6 +199,9 @@ pub enum PrimitiveRustType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct TypeVar(pub String);
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct RustPathAndGenerics {
     pub path: Vec<String>,
     pub generics: Vec<RustType>,
@@ -219,6 +219,7 @@ pub enum RustType {
     Impl(RustTrait, Vec<String>),
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
+    TypeVar(TypeVar),
 }
 
 impl RustType {
@@ -309,6 +310,7 @@ impl Display for RustType {
                 Ok(())
             }
             RustType::Slice(s) => write!(f, "[{s}]"),
+            RustType::TypeVar(TypeVar(v)) => write!(f, "{v}"),
         }
     }
 }
