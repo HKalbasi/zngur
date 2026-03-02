@@ -18,6 +18,7 @@ csignal
 cstddef
 cstdint
 cstring
+CXXFLAGS
 decltype
 delem
 deinit
@@ -26,6 +27,7 @@ digset
 discontiguous
 emsdk
 endl
+fastlink
 flto
 foldl
 foldr
@@ -37,16 +39,21 @@ indexmap
 inplace
 itertools
 libexample
+LIBPATH
 libyourcrate
 lwasi
 mdformat
 memcpy
 moveit
+msvc
 newtype
 noexcept
+nmake
+ntdll
 pmut
 primitve
 println
+ptrdiff
 refmut
 relpath
 repr
@@ -55,6 +62,7 @@ rlib
 rustc
 RUSTC
 RUSTFLAGS
+RUSTLIB
 Rustup
 rustup
 rustyline
@@ -73,7 +81,9 @@ unimportability
 Uninit
 uninit
 usize
+userenv
 WASI
+WINLIBS
 wasi
 WASIFLAGS
 wasip

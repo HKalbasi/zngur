@@ -1,0 +1,42 @@
+CXX = cl.exe
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 
+WINLIBS = ntdll.lib Userenv.lib Ws2_32.lib
+
+EXAMPLE_NAME = conditional
+
+GENERATED_A = include/float/generated.h ./src/generated_float.rs
+GENERATED_B = include/int/generated.h ./src/generated_int.rs
+
+RUSTLIB_PATH_A = ../../target/release/
+RUSTLIB_PATH_B = ../../target/debug/
+
+RUSTLIB = example_$(EXAMPLE_NAME).lib
+
+all : a.exe b.exe
+
+a.exe : main.cpp  src/lib.rs $(GENERATED_A) $(RUSTLIB_PATH_A)/$(RUSTLIB)
+	$(CXX) $(CXXFLAGS) /c main.cpp /I include/float /Fo: "a"
+	$(CXX) $(CXXFLAGS) a.obj /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH_A)
+
+b.exe : main.cpp  src/lib.rs $(GENERATED_B) $(RUSTLIB_PATH_B)/$(RUSTLIB)
+	$(CXX) $(CXXFLAGS) /c main.cpp /I include/int /Fo: "b"
+	$(CXX) $(CXXFLAGS) b.obj /Fe:b.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH_B)
+
+$(RUSTLIB_PATH_A)/$(RUSTLIB) :
+	cargo build --release -F "float-values"
+
+$(RUSTLIB_PATH_B)/$(RUSTLIB) :
+	cargo build
+
+$(GENERATED_A) : main.zng
+	IF NOT EXIST "include" mkdir include
+	IF NOT EXIST "include\float" mkdir "include\float"
+	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/float/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_float.rs -F "float-values" --load-cfg-from-rustc --use-cargo-rustc --profile=release --package example-conditional
+
+$(GENERATED_B) : main.zng
+	IF NOT EXIST "include" mkdir include
+	IF NOT EXIST "include\int" mkdir "include\int"
+	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/int/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_int.rs --load-cfg-from-rustc
+
+clean :
+	- del /f /q include\float\generated.h include\int\generated.h generated.cpp src\generated_float.rs src\generated_int.rs a.exe b.exe a.obj b.obj actual_output.txt 2>nul

@@ -1,0 +1,23 @@
+CXX = cl.exe
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 
+WINLIBS = ntdll.lib User32.lib
+
+EXAMPLE_NAME = rustyline
+
+GENERATED = generated.h src/generated.rs
+
+RUSTLIB_PATH = ../../target/release/
+
+RUSTLIB = example_$(EXAMPLE_NAME).lib
+
+a.exe : main.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
+	$(CXX) $(CXXFLAGS) main.cpp /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH)
+
+$(RUSTLIB_PATH)/$(RUSTLIB) :
+	cargo build --release
+
+$(GENERATED) : main.zng
+	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng
+
+clean :
+	- del /f /q generated.h generated.cpp src\generated.rs a.exe main.obj actual_output.txt 2>nul

@@ -7,7 +7,6 @@ mod generated_float;
 #[cfg(not(feature = "float-values"))]
 mod generated_int;
 
-#[cfg_attr(not(debug_assertions), derive(Debug))]
 struct KeyValuePair {
     pub key: String,
     #[cfg(feature = "float-values")]
@@ -27,10 +26,39 @@ impl KeyValuePair {
 
 #[cfg(debug_assertions)]
 impl std::fmt::Debug for KeyValuePair {
+    #[cfg(feature = "float-values")]
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "KeyValuePair {{ key: {:?}, value: {:?}, }}(with debug_assertions)",
+            "KeyValuePair[f64] {{ key: {:?}, value: {:?}, }}(with debug_assertions)",
+            &self.key, &self.value
+        )
+    }
+    #[cfg(not(feature = "float-values"))]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "KeyValuePair[i32] {{ key: {:?}, value: {:?}, }}(with debug_assertions)",
+            &self.key, &self.value
+        )
+    }
+}
+
+#[cfg(not(debug_assertions))]
+impl std::fmt::Debug for KeyValuePair {
+    #[cfg(feature = "float-values")]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "KeyValuePair[f64] {{ key: {:?}, value: {:?}, }}",
+            &self.key, &self.value
+        )
+    }
+    #[cfg(not(feature = "float-values"))]
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "KeyValuePair[i32] {{ key: {:?}, value: {:?}, }}",
             &self.key, &self.value
         )
     }

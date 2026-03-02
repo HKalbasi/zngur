@@ -1,3 +1,4 @@
+#[cfg(not(target_os = "windows"))]
 use std::env;
 
 use zngur::Zngur;
@@ -7,6 +8,7 @@ fn main() {
     build::rerun_if_changed("blobstore.cpp");
     build::rerun_if_env_changed("CXX");
 
+    #[cfg(not(target_os = "windows"))]
     let cxx = env::var("CXX").unwrap_or("c++".to_owned());
 
     let crate_dir = build::cargo_manifest_dir();
@@ -18,7 +20,11 @@ fn main() {
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).compiler(&cxx).std("c++17");
+    let my_build = my_build.cpp(true).std("c++17");
+
+    #[cfg(not(target_os = "windows"))]
+    my_build.compiler(&cxx);
+
     let my_build = || my_build.clone();
 
     my_build().file("generated.cpp").compile("zngur_generated");

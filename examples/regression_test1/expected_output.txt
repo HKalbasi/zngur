@@ -128,11 +128,11 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:159] ::rust::Ref(a.foo) = 10
-[main.cpp:160] ::rust::Ref(a.bar.fizz.buzz_2) = 30
-[main.cpp:161] ::rust::RefMut(a.baz.fizz.buzz_3) = 70
-[main.cpp:164] ::rust::Ref(a_fa_fizz.buzz_1) = 20
-[main.cpp:166] ::rust::Ref(a_fb_fizz.buzz_2) = 60
+[main.cpp:159] ::rust::Ref<int32_t>(a.foo) = 10
+[main.cpp:160] ::rust::Ref<int32_t>(a.bar.fizz.buzz_2) = 30
+[main.cpp:161] ::rust::RefMut<int32_t>(a.baz.fizz.buzz_3) = 70
+[main.cpp:164] ::rust::Ref<int32_t>(a_fa_fizz.buzz_1) = 20
+[main.cpp:166] ::rust::Ref<int32_t>(a_fb_fizz.buzz_2) = 60
 [main.cpp:177] b = TypeB {
     foo: 100,
     bar: FieldTypeA {

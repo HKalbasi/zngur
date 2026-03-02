@@ -4,10 +4,13 @@ fn main() {
     build::rerun_if_changed("main.zng");
     build::rerun_if_changed("impls.cpp");
 
+    #[cfg(not(target_os = "windows"))]
     let cxx = std::env::var("CXX").unwrap_or("c++".to_owned());
 
+    #[cfg(not(target_os = "windows"))]
     let lto_enabled = cxx.ends_with("clang++") && cfg!(target_os = "linux");
 
+    #[cfg(not(target_os = "windows"))]
     if lto_enabled {
         build::rustc_env("RUSTC_FLAGS", "-C linker-plugin-lto -C linker=clang");
         build::rustc_link_arg("-fuse-ld=lld");
@@ -23,13 +26,14 @@ fn main() {
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build
-        .cpp(true)
-        .compiler(cxx)
-        .include(&crate_dir)
-        .include(&out_dir)
-        .std("c++17");
+    let my_build = my_build.cpp(true).std("c++17");
 
+    #[cfg(not(target_os = "windows"))]
+    my_build.compiler(cxx);
+
+    my_build.include(&crate_dir).include(&out_dir);
+
+    #[cfg(not(target_os = "windows"))]
     if lto_enabled {
         my_build.flag("-flto");
     }
