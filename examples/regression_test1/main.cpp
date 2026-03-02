@@ -156,14 +156,14 @@ void test_nested_heap_refs_and_auto_field_offset() {
     },
   };
   zngur_dbg(a);
-  zngur_dbg(::rust::Ref(a.foo));
-  zngur_dbg(::rust::Ref(a.bar.fizz.buzz_2));
-  zngur_dbg(::rust::RefMut(a.baz.fizz.buzz_3));
+  zngur_dbg(::rust::Ref<int32_t>(a.foo));
+  zngur_dbg(::rust::Ref<int32_t>(a.bar.fizz.buzz_2));
+  zngur_dbg(::rust::RefMut<int32_t>(a.baz.fizz.buzz_3));
 
-  auto a_fa_fizz = ::rust::Ref(a.bar.fizz);
-  zngur_dbg(::rust::Ref(a_fa_fizz.buzz_1));
-  auto a_fb_fizz = ::rust::Ref(a.baz.fizz);
-  zngur_dbg(::rust::Ref(a_fb_fizz.buzz_2));
+  auto a_fa_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(a.bar.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(a_fa_fizz.buzz_1));
+  auto a_fb_fizz = ::rust::Ref<::rust::crate::FieldTypeC>(a.baz.fizz);
+  zngur_dbg(::rust::Ref<int32_t>(a_fb_fizz.buzz_2));
 
   auto b = ::rust::crate::TypeB { 
     100,
@@ -221,7 +221,7 @@ void test_conservative_layout() {
   zngur_dbg(layouts.get(0));
   zngur_dbg(layouts.get(1));
   zngur_dbg(layouts.get(1).unwrap());
-  *::rust::RefMut(layouts.get_mut(1).unwrap().field2) = 10;
+  *::rust::RefMut<int32_t>(layouts.get_mut(1).unwrap().field2) = 10;
   zngur_dbg(layouts);
 
 }

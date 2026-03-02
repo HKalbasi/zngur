@@ -17,6 +17,7 @@
         "generated.rs",
         "/cspell-words.txt",
         "*.svg",
-        "examples/**/Makefile"
+        "examples/**/Makefile",
+        "examples/**/NMakefile"
     ]
 }

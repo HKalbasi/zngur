@@ -19,4 +19,4 @@ generated2.h ./src/generated2.rs: main.zng
 .PHONY: ../../target/release/libexample_multiple_zngur_files.a generated1.h generated2.h clean
 
 clean:
-	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
+	rm -f generated1.h src/generated1.rs generated2.h src/generated2.rs a.out actual_output.txt

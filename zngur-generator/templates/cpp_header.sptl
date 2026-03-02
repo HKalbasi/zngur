@@ -234,18 +234,14 @@ namespace rust {
 #endif
 
   template<typename T>
-  struct zngur_is_unsized : std::false_type {};
+  struct zngur_is_unsized : ::std::false_type {};
   struct zngur_fat_pointer {
     uint8_t* __zngur_data;
     size_t metadata;
   };
   template<typename T>
   struct Raw {
-      using DataType = typename std::conditional<
-          zngur_is_unsized<T>::value,
-          zngur_fat_pointer,
-          uint8_t*
-      >::type;
+      using DataType = typename ::std::conditional< zngur_is_unsized<T>::value, zngur_fat_pointer, uint8_t* >::type;
       DataType __zngur_data;
       Raw() {}
       Raw(Ref<T> value) {
@@ -256,7 +252,7 @@ namespace rust {
       }
       Raw(DataType data) : __zngur_data(data) {
       }
-      Raw<T> offset(ssize_t n) {
+      Raw<T> offset(ptrdiff_t n) {
           return Raw(__zngur_data + n * __zngur_internal_size_of<T>());
       }
       Ref<T> read_ref() {
@@ -268,11 +264,7 @@ namespace rust {
   };
   template<typename T>
   struct RawMut {
-      using DataType = typename std::conditional<
-          zngur_is_unsized<T>::value,
-          zngur_fat_pointer,
-          uint8_t*
-      >::type;
+      using DataType = typename ::std::conditional< zngur_is_unsized<T>::value, zngur_fat_pointer, uint8_t* >::type;
       DataType __zngur_data;
       RawMut() {}
       RawMut(RefMut<T> value) {
@@ -280,7 +272,7 @@ namespace rust {
       }
       RawMut(DataType data) : __zngur_data(data) {
       }
-      RawMut<T> offset(ssize_t n) {
+      RawMut<T> offset(ptrdiff_t n) {
           return RawMut(__zngur_data + n * __zngur_internal_size_of<T>());
       }
       T read() {
@@ -363,7 +355,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, Offset, Offsets... >& f) {
@@ -382,7 +374,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
@@ -395,7 +387,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
@@ -409,7 +401,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
@@ -422,7 +414,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
@@ -532,7 +524,7 @@ namespace rust {
     template <
         typename Offset,
         typename... Offsets,
-        typename std::enable_if<
+        typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
     Ref(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
