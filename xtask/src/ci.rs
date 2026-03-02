@@ -108,9 +108,15 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 cmd!(sh, "nmake /f NMakefile")
                     .run()
                     .with_context(|| format!("Building example `{example}` failed"))?;
-                cmd!(sh, "cmd /c '.\\a.exe > actual_output.txt 2>&1'")
-                    .run()
-                    .with_context(|| format!("Running example `{example}` failed"))?;
+                if sh.path_exists("a.bat") {
+                    cmd!(sh, "cmd /c '.\\a.bat > actual_output.txt 2>&1'")
+                        .run()
+                        .with_context(|| format!("Running example `{example}` failed"))?;
+                } else {
+                    cmd!(sh, "cmd /c '.\\a.exe > actual_output.txt 2>&1'")
+                        .run()
+                        .with_context(|| format!("Running example `{example}` failed"))?;
+                }
                 if sh.path_exists("b.exe") {
                     cmd!(sh, "cmd /c '.\\b.exe >> actual_output.txt 2>&1'")
                         .run()

@@ -58,6 +58,9 @@ jobs:
   build-win:
     runs-on: windows-2022
     steps:
+      - name: Turn off autocrlf
+        run: |
+          git config --global core.autocrlf false
       - uses: actions/checkout@v3
       - name: Enter VS Developer shell
         uses: ilammy/msvc-dev-cmd@v1
@@ -68,6 +71,7 @@ jobs:
       - name: Install Rust stable
         run: |
           rustup toolchain install stable
+          rustup target add wasm32-wasip1
           rustup component add rustfmt
       - name: Run `cargo xtask ci`
         run: cargo xtask ci
