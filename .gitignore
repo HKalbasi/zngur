@@ -3,6 +3,7 @@ a.out
 a.out.dSYM
 *.exe
 *.obj
+*.bat
 .vscode
 compile_commands.json
 zngur-autozng/doc.json

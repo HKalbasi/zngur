@@ -1,6 +1,18 @@
 [tools]
 cspell = "9.4.0"
 dprint = "0.50.2"
-emsdk = "4.0.14"
-wasi-sdk = "27"
 wasmtime = "36.0.2"
+
+[tools."github:WebAssembly/wasi-sdk"]
+version = "30"
+version_prefix = "wasi-sdk-"
+# don't export clang binaries
+filter_bins = ""
+
+[tools."http:emsdk"]
+version = "5.0.2"
+url = "https://github.com/emscripten-core/emsdk/archive/refs/tags/{{version}}.tar.gz"
+
+[env]
+WASI_SDK_PATH = { value = '{{ tools["github:WebAssembly/wasi-sdk"].path }}', tools = true }
+EMSDK_PATH = { value = '{{ [tools["http:emsdk"].path] | concat(with= ["emsdk-", tools["http:emsdk"].version] | join ) | join_path }}', tools = true }

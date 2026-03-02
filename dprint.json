@@ -7,7 +7,8 @@
     "ignoreDirective": "dprint-ignore",
     "ignoreFileDirective": "dprint-ignore-file",
     "ignoreStartDirective": "dprint-ignore-start",
-    "ignoreEndDirective": "dprint-ignore-end"
+    "ignoreEndDirective": "dprint-ignore-end",
+    "newLineKind": "lf"
   },
   "includes": ["book/src/**/*.md", "*.md"],
   "excludes": [],
