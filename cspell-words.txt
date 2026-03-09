@@ -33,6 +33,7 @@ foldl
 foldr
 funcs
 fvec
+GNUC
 hkalbasi
 ilog
 impls

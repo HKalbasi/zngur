@@ -1,5 +1,5 @@
 a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/libexample_char.a
-	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/release/ -l example_char
+	${CXX} -std=c++11 -Werror -I. main.cpp -g -L ../../target/release/ -l example_char
 
 ../../target/release/libexample_char.a:
 	cargo build --release
