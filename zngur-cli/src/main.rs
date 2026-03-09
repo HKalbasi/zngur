@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use zngur::Zngur;
+use zngur::{Zngur, ZngurHdr};
 
 use crate::cfg_extractor::{CfgFromRustc, cfg_from_rustc};
 
@@ -113,6 +113,18 @@ enum Command {
         #[command(flatten)]
         load_rustc_cfg: CfgFromRustc,
     },
+    #[command(alias = "h")]
+    /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
+    MakeZngHeader {
+        /// Path to the generated header file
+        path: PathBuf,
+
+        /// If set, it will generate the "panic to exceptions" mechanism in the generated header.
+        ///
+        /// Note that each `zng` module will need to use `#convert_panic_to_exception` in order to fully enable it.
+        #[arg(long = "panic-to-exception")]
+        convert_panic_to_exception: bool,
+    },
 }
 
 fn main() {
@@ -161,6 +173,15 @@ fn main() {
                 zng = zng.with_cpp_namespace(&cpp_namespace);
             }
             zng.generate();
+        }
+        Command::MakeZngHeader {
+            path,
+            convert_panic_to_exception,
+        } => {
+            ZngurHdr::new()
+                .with_panic_to_exception_as(convert_panic_to_exception)
+                .with_zng_header(path)
+                .generate();
         }
     }
 }

@@ -18,9 +18,12 @@ mod rust;
 mod template;
 
 pub use rust::RustFile;
+use sailfish::Template;
 pub use zngur_parser::{ParseResult, ParsedZngFile, cfg};
 
 pub use zngur_def::*;
+
+use crate::template::ZngHeaderTemplate;
 
 pub struct ZngurGenerator(pub ZngurSpec);
 
@@ -47,14 +50,13 @@ impl ZngurGenerator {
         cpp_file.header_file_name = zng.cpp_include_header_name.clone();
         cpp_file.additional_includes = zng.additional_includes.0;
         let mut rust_file = RustFile::new(&zng.mangling_base);
+        rust_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file.trait_defs = zng
             .traits
             .iter()
             .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(value)))
             .collect();
-        if zng.convert_panic_to_exception.0 {
-            cpp_file.panic_to_exception = Some(rust_file.enable_panic_to_exception());
-        }
+        cpp_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file
             .rust_cfg_defines
             .extend(zng.rust_cfg.iter().map(|(key, value)| {
@@ -294,6 +296,20 @@ impl ZngurGenerator {
         }
         let (h, cpp) = cpp_file.render();
         (rust_file.text, h, cpp)
+    }
+}
+
+pub struct ZngHeaderGenerator {
+    pub panic_to_exception: bool,
+}
+
+impl ZngHeaderGenerator {
+    /// Renders the zngur.h header
+    pub fn render(&self) -> String {
+        let zng_h = ZngHeaderTemplate {
+            panic_to_exception: self.panic_to_exception,
+        };
+        zng_h.render().unwrap()
     }
 }
 
