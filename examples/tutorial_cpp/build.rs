@@ -1,7 +1,7 @@
 #[cfg(not(target_os = "windows"))]
 use std::env;
 
-use zngur::Zngur;
+use zngur::{Zngur, ZngurHdr};
 
 fn main() {
     build::rerun_if_changed("main.zng");
@@ -33,8 +33,13 @@ fn main() {
         .with_rs_file(out_dir.join("generated.rs"))
         .generate();
 
+    ZngurHdr::new()
+        .with_panic_to_exception()
+        .with_zng_header("zngur.h")
+        .generate();
+
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).std("c++20");
+    let my_build = my_build.cpp(true).std("c++20").include(".");
 
     #[cfg(not(target_os = "windows"))]
     my_build.compiler(&cxx);

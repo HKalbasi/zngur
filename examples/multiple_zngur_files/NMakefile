@@ -1,5 +1,5 @@
 CXX = cl.exe
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++14 #c++14 is as low as MSVC goes 
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 /I. # upgraded from c++14
 WINLIBS = ntdll.lib
 
 EXAMPLE_NAME = multiple_zngur_files
@@ -12,7 +12,7 @@ RUSTLIB_PATH = ../../target/release/
 
 RUSTLIB = example_$(EXAMPLE_NAME).lib
 
-a.exe : main.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
+a.exe : main.cpp src/lib.rs $(GENERATED) zngur.h $(RUSTLIB_PATH)/$(RUSTLIB)
 	$(CXX) $(CXXFLAGS) main.cpp /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH)
 
 $(RUSTLIB_PATH)/$(RUSTLIB) :
@@ -30,5 +30,9 @@ $(GENERATED2) : main.zng
 		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated2.rs \
 		--cpp-namespace=m2
 
+zngur.h :
+	cd ..\..\zngur-cli && cargo run -- make-zng-header --panic-to-exception ..\examples\$(EXAMPLE_NAME)\zngur.h
+
+
 clean :
-	- del /f /q generated1.h src\generated1.rs generated2.h src\generated2.rs a.exe main.obj actual_output.txt 2>nul
+	- del /f /q generated1.h src\generated1.rs generated2.h src\generated2.rs zngur.h a.exe main.obj actual_output.txt 2>nul

@@ -1,4 +1,4 @@
-use zngur::Zngur;
+use zngur::{Zngur, ZngurHdr};
 
 fn main() {
     build::rerun_if_changed("main.zng");
@@ -23,6 +23,11 @@ fn main() {
         .with_cpp_file(out_dir.join("generated.cpp"))
         .with_h_file(out_dir.join("generated.h"))
         .with_rs_file(out_dir.join("generated.rs"))
+        .generate();
+
+    ZngurHdr::new()
+        .with_panic_to_exception()
+        .with_zng_header("zngur.h")
         .generate();
 
     let my_build = &mut cc::Build::new();

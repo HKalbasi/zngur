@@ -1,10 +1,11 @@
 # can not eval mise after the fact in nmake, must preeval
-WASIFLAGS = -std=c++14 \
+WASIFLAGS = -std=c++17 \
            --target=wasm32-wasi \
            --sysroot=$(WASI_SDK_PATH)/share/wasi-sysroot \
            -D_WASI_EMULATED_SIGNAL \
            -lwasi-emulated-signal \
-           -fno-exceptions
+           -fno-exceptions \
+           -I.
 
 CXX = $(WASI_SDK_PATH)\bin\clang++
 
@@ -20,7 +21,7 @@ a.bat: main.wasm
 	echo @echo off > $@
 	echo wasmtime run --allow-precompiled "%0\..\main.wasm" "$$@" >> $@
 
-main.wasm: main.cpp generated.h generated.cpp \
+main.wasm: main.cpp generated.h generated.cpp zngur.h \
            ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
@@ -34,7 +35,11 @@ main.wasm: main.cpp generated.h generated.cpp \
 generated.h ./src/generated.rs generated.cpp: main32.zng
 	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g main32.zng
 
+zngur.h:
+	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml make-zng-header --panic-to-exception zngur.h
+
+
 clean:
 	cargo clean
-	- del /f generated.h .\src\generated.rs generated.cpp generated.o 2>nul
+	- del /f generated.h .\src\generated.rs generated.cpp generated.o zngur.h 2>nul
   - del /f main.wasm example_tutorial_wasm32.wasm a.bat 2>nul
