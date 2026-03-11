@@ -1,6 +1,6 @@
 use crate::cpp::{
     CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy,
-    CppTraitDefinition, CppTypeDefinition, PanicToExceptionSymbols, cpp_handle_field_name,
+    CppTraitDefinition, CppTypeDefinition, cpp_handle_field_name,
 };
 use indexmap::IndexMap;
 use sailfish::Template;
@@ -45,7 +45,7 @@ macro_rules! splat {
 #[derive(Template)]
 #[template(path = "cpp_header.sptl", escape = false)]
 pub(crate) struct CppHeaderTemplate<'a> {
-    pub(crate) panic_to_exception: &'a Option<PanicToExceptionSymbols>,
+    pub(crate) panic_to_exception: bool,
     pub(crate) additional_includes: &'a String,
     pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
     pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
@@ -55,7 +55,29 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) rust_cfg_defines: &'a Vec<String>,
 }
 
+#[derive(Template)]
+#[template(path = "zng_header.sptl", escape = false)]
+pub(crate) struct ZngHeaderTemplate {
+    pub(crate) panic_to_exception: bool,
+}
+
 impl<'a> CppHeaderTemplate<'a> {
+    fn panic_handler(&self) -> String {
+        if self.panic_to_exception {
+            format!(
+                r#"
+            if (__zngur_read_and_reset_rust_panic()) {{
+                throw ::rust::Panic{{}};
+            }}
+            "#
+            )
+        } else {
+            "".to_owned()
+        }
+    }
+}
+
+impl ZngHeaderTemplate {
     // TODO: Docs - what do these represent? When will we change this list?
     fn builtin_types(&self) -> Vec<String> {
         let builtins = [8, 16, 32, 64]
@@ -75,22 +97,6 @@ impl<'a> CppHeaderTemplate<'a> {
                 "::size_t".to_owned(),
             ])
             .collect()
-    }
-
-    fn panic_handler(&self) -> String {
-        if let Some(symbols) = &self.panic_to_exception {
-            format!(
-                r#"
-            if ({}()) {{
-                {}();
-                throw ::rust::Panic{{}};
-            }}
-            "#,
-                symbols.detect_panic, symbols.take_panic,
-            )
-        } else {
-            "".to_owned()
-        }
     }
 }
 

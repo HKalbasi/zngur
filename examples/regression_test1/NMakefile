@@ -1,5 +1,5 @@
 CXX = cl.exe
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 /I.
 WINLIBS = ntdll.lib
 
 EXAMPLE_NAME = regression_test1
@@ -10,7 +10,7 @@ RUSTLIB_PATH = ../../target/release/
 
 RUSTLIB = example_$(EXAMPLE_NAME).lib
 
-a.exe : main.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
+a.exe : main.cpp src/lib.rs $(GENERATED) zngur.h $(RUSTLIB_PATH)/$(RUSTLIB)
 	$(CXX) $(CXXFLAGS) main.cpp /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH)
 
 $(RUSTLIB_PATH)/$(RUSTLIB) :
@@ -19,5 +19,8 @@ $(RUSTLIB_PATH)/$(RUSTLIB) :
 $(GENERATED) : main.zng
 	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng
 
+zngur.h :
+	cd ..\..\zngur-cli && cargo run -- make-zng-header --panic-to-exception ..\examples\$(EXAMPLE_NAME)\zngur.h
+
 clean :
-	- del /f /q generated.h generated.cpp src\generated.rs a.exe main.obj actual_output.txt 2>nul
+	- del /f /q generated.h generated.cpp zngur.h src\generated.rs a.exe main.obj actual_output.txt 2>nul

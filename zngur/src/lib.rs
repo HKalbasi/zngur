@@ -8,7 +8,7 @@ use std::{
 };
 
 use zngur_generator::{
-    ParsedZngFile, ZngurGenerator,
+    ParsedZngFile, ZngHeaderGenerator, ZngurGenerator,
     cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
 };
 
@@ -188,5 +188,52 @@ impl Zngur {
                 .write_all(depfile_content.as_bytes())
                 .unwrap();
         }
+    }
+}
+
+#[derive(Debug)]
+pub struct ZngurHdr {
+    panic_to_exception: bool,
+    zng_header_file: Option<PathBuf>,
+}
+
+impl ZngurHdr {
+    pub const fn new() -> Self {
+        Self {
+            panic_to_exception: false,
+            zng_header_file: None,
+        }
+    }
+
+    pub fn with_panic_to_exception(self) -> Self {
+        self.with_panic_to_exception_as(true)
+    }
+
+    pub fn without_panic_to_exception(self) -> Self {
+        self.with_panic_to_exception_as(false)
+    }
+
+    pub fn with_panic_to_exception_as(mut self, panic_to_exception: bool) -> Self {
+        self.panic_to_exception = panic_to_exception;
+        self
+    }
+
+    pub fn with_zng_header(mut self, zng_header: impl Into<PathBuf>) -> Self {
+        let previous = self.zng_header_file.replace(zng_header.into());
+        assert!(previous.is_none(), "zng-header specified more than once");
+        self
+    }
+
+    pub fn generate(self) {
+        let generator = ZngHeaderGenerator {
+            panic_to_exception: self.panic_to_exception,
+        };
+
+        let out_h = self
+            .zng_header_file
+            .expect("Missing zng header output file");
+        let rendered = generator.render();
+        std::fs::write(&out_h, rendered)
+            .unwrap_or_else(|_| panic!("Couldn't write contents to {}", out_h.display()));
     }
 }

@@ -18,6 +18,6 @@
         "/cspell-words.txt",
         "*.svg",
         "examples/**/Makefile",
-        "examples/**/NMakefile"
+        "examples/**/NMakefile",
     ]
 }

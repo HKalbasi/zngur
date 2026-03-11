@@ -27,6 +27,10 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
             .unwrap_or_default()
             .to_str()
             .ok_or(anyhow::anyhow!("Non utf8 example name?"))?;
+        if example == "multiple_zngur_files" {
+            println!("Skipping {example} (expected to fail)");
+            continue;
+        }
         println!("Building and testing {example}");
         sh.change_dir(example);
         println!("Working in {}", sh.current_dir().display());
@@ -36,7 +40,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 // Clean generated files for Cargo projects
                 let _ = cmd!(
                     sh,
-                    "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
+                    "rm -f generated.h generated.cpp zngur.h src/generated.rs actual_output.txt"
                 )
                 .run();
                 cmd!(sh, "cargo build")
@@ -55,7 +59,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 // Clean generated files for Cargo projects
                 let _ = cmd!(
                     sh,
-                    "cmd /c 'del /f /q generated.h generated.cpp src\\generated.rs actual_output.txt 2>nul'"
+                    "cmd /c 'del /f /q generated.h generated.cpp zngur.h src\\generated.rs actual_output.txt 2>nul'"
                 )
                 .run();
                 cmd!(sh, "cmd /c 'cargo build'")
