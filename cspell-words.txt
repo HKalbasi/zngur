@@ -34,6 +34,7 @@ foldr
 funcs
 fvec
 hkalbasi
+ilog
 impls
 indexmap
 inplace
