@@ -190,6 +190,204 @@ mod zngur_types {
 pub use zngur_types::ZngurCppOpaqueOwnedObject;
 #[allow(unused_imports)]
 pub use zngur_types::ZngurCppOpaqueBorrowedObject;
+
+macro_rules! __zngur_str_as_array {
+    ($s:expr) => {{
+        const VAL: &str = $s;
+        // SAFETY: `VAL` has at least size `N` because it's const len is right there.
+        const ARR: [u8; VAL.len()] = unsafe { *(VAL.as_bytes() as *const [u8]).cast() };
+        ARR
+    }};
+}
+
+pub const fn __zngur_usize_num_digits(val: usize) -> usize {
+    // docs currently say 64bit only but that's a bug
+    if val == 0 { 1 } else { val.ilog10() as usize + 1 }
+}
+
+pub const fn __zngur_usize_digit(val: usize, digit: usize) -> u8 {
+    let mut temp = val;
+    let mut i = 0;
+    while i < digit {
+        temp /= 10;
+        i += 1;
+    }
+    if temp == 0 && val > 0 {
+        ::core::panic!("no such digit!")
+    } else {
+        (temp % 10) as u8
+    }
+}
+
+pub const fn __zngur_digit_to_ascii(digit: u8) -> u8 {
+    ::core::assert!(digit <= 9);
+    digit + b'0'
+}
+
+pub const fn __zngur_usize_to_digit_array<const N: usize>(val: usize) -> [u8; N] {
+    let mut arr: [u8; N] = [0; N];
+    let mut i = 0;
+    while i < N {
+        arr[N - 1 - i] = __zngur_digit_to_ascii(__zngur_usize_digit(val, i));
+        i += 1;
+    }
+    arr
+}
+
+macro_rules! __zngur_usize_to_str {
+    ($x:expr) => {{
+        const VAL: usize = $x;
+        const ARR: [u8; __zngur_usize_num_digits(VAL)] = __zngur_usize_to_digit_array(VAL);
+        // SAFETY: `ARR` is an ascii byte array which is utf8 compliant
+        const STR: &str = unsafe { str::from_utf8_unchecked(&ARR) };
+        STR
+    }};
+}
+
+pub const fn __zngur_const_str_array_concat<const T: usize, const N: usize, const M: usize>(
+    x: [u8; N],
+    y: [u8; M],
+) -> [u8; T] {
+    ::core::assert!(N + M == T);
+    let mut arr: [u8; T] = [0; T];
+    let mut i = 0;
+    while i < N {
+        arr[i] = x[i];
+        i += 1;
+    }
+    while i - N < M {
+        arr[i] = y[i - N];
+        i += 1;
+    }
+    arr
+}
+
+macro_rules! __zngur_const_str_concat {
+
+    ( $x:expr, $y:expr $(,)? ) => {{
+        const X: &str = $x;
+        const Y: &str = $y;
+        const LEN: usize = X.len() + Y.len();
+        const ARR: [u8; LEN] = __zngur_const_str_array_concat::<LEN, {X.len()}, {Y.len()}>(
+            __zngur_str_as_array!(X),
+            __zngur_str_as_array!(Y),
+        );
+        // SAFETY: `ARR` is an concatenated utf8 byte array built from validated `const str&`
+        const STR: &str =  unsafe { str::from_utf8_unchecked(&ARR) };
+        STR
+    }};
+    ( $x:expr, $y:expr, $($rest:expr),+ $(,)? ) => {
+        __zngur_const_str_concat!($x, __zngur_const_str_concat!( $y, $($rest),+ ))
+    };
+
+}
+
+macro_rules! __zngur_assert_is_copy {
+    ($x:ty $(,)?) => {
+        const _: () = {
+            const fn static_assert_is_copy<T: Copy>() {}
+            static_assert_is_copy::<$x>();
+        };
+    };
+}
+
+macro_rules! __zngur_assert_size {
+    ($x:ty, $size:expr $(,)?) => {
+        const _: () = ::core::assert!(
+            $size == ::core::mem::size_of::<$x>(),
+            "{}",
+            __zngur_const_str_concat!(
+                "zngur declared size of ",
+                stringify!($x),
+                " is incorrect: expected ",
+                __zngur_usize_to_str!($size),
+                " , real size is ",
+                __zngur_usize_to_str!(::core::mem::size_of::<$x>()),
+            )
+        );
+    };
+}
+
+macro_rules! __zngur_assert_align {
+    ($x:ty, $align:expr $(,)?) => {
+        const _: () = ::core::assert!(
+            $align == ::core::mem::align_of::<$x>(),
+            "{}",
+            __zngur_const_str_concat!(
+                "zngur declared align of ",
+                stringify!($x),
+                " is incorrect: expected ",
+                __zngur_usize_to_str!($align),
+                " , real align is ",
+                __zngur_usize_to_str!(::core::mem::align_of::<$x>()),
+            )
+        );
+    };
+}
+
+macro_rules! __zngur_assert_size_conservative {
+    ($x:ty, $size:expr $(,)?) => {
+        const _: () = ::core::assert!(
+            $size >= ::core::mem::size_of::<$x>(),
+            "{}",
+            __zngur_const_str_concat!(
+                "zngur declared conservative size of ",
+                stringify!($x),
+                " is incorrect: expected size less than or equal to ",
+                __zngur_usize_to_str!($size),
+                " , real size is ",
+                __zngur_usize_to_str!(::core::mem::size_of::<$x>()),
+            )
+        );
+    };
+}
+
+macro_rules! __zngur_assert_align_conservative {
+    ($x:ty, $align:expr $(,)?) => {
+        const _: () = ::core::assert!(
+            $align >= ::core::mem::align_of::<$x>(),
+            "{}",
+            __zngur_const_str_concat!(
+                "zngur declared conservative align of ",
+                stringify!($x),
+                " is incorrect: expected align less than or equal to ",
+                __zngur_usize_to_str!($align),
+                " , real align is ",
+                __zngur_usize_to_str!(::core::mem::align_of::<$x>()),
+            )
+        );
+    };
+}
+
+macro_rules! __zngur_assert_has_field {
+    ($x:ty, $y:ty, $($field:tt)+ $(,)?) => {
+        const _: () = {
+            #[allow(dead_code)]
+            fn check_field(value: $x) -> $y {
+                value.$($field)+
+            }
+        };
+    };
+}
+
+macro_rules! __zngur_assert_field_offset {
+    ($x:ty, $offset:expr, $($field:tt)+ $(,)?) => {
+        const _: () = ::core::assert!(
+            $offset == ::core::mem::offset_of!($x, $($field)+),
+            "{}",
+            __zngur_const_str_concat!(
+                "zngur declared offset of field ",
+                stringify!($($field)+),
+                " in ",
+                stringify!($x),
+                " is incorrect: expected offset of ",
+                __zngur_usize_to_str!($offset),
+                " , real offset is ",
+                __zngur_usize_to_str!(::core::mem::offset_of!($x, $($field)+)),
+            )
+        );
+    };
+}
 "#
             .to_owned(),
             panic_to_exception: false,
@@ -281,40 +479,25 @@ impl RustFile {
     }
 
     pub fn add_static_is_copy_assert(&mut self, ty: &RustType) {
-        wln!(
-            self,
-            r#"const _: () = {{
-                const fn static_assert_is_copy<T: Copy>() {{}}
-                static_assert_is_copy::<{ty}>();
-            }};"#
-        );
+        wln!(self, r#"__zngur_assert_is_copy!({ty});"#);
     }
 
     pub fn add_static_size_assert(&mut self, ty: &RustType, size: usize) {
-        wln!(
-            self,
-            r#"const _: [(); {size}] = [(); ::std::mem::size_of::<{ty}>()];"#
-        );
+        wln!(self, r#"__zngur_assert_size!({ty}, {size});"#);
     }
 
     pub fn add_static_align_assert(&mut self, ty: &RustType, align: usize) {
-        wln!(
-            self,
-            r#"const _: [(); {align}] = [(); ::std::mem::align_of::<{ty}>()];"#
-        );
+        wln!(self, r#"__zngur_assert_align!({ty}, {align});"#);
     }
 
     pub fn add_static_size_upper_bound_assert(&mut self, ty: &RustType, size: usize) {
-        wln!(
-            self,
-            r#"const _: () = assert!({size} >= ::std::mem::size_of::<{ty}>());"#
-        );
+        wln!(self, r#"__zngur_assert_size_conservative!({ty}, {size});"#);
     }
 
     pub fn add_static_align_upper_bound_assert(&mut self, ty: &RustType, align: usize) {
         wln!(
             self,
-            r#"const _: () = assert!({align} >= ::std::mem::align_of::<{ty}>());"#
+            r#"__zngur_assert_align_conservative!({ty}, {align});"#
         );
     }
 
@@ -601,23 +784,11 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
         owner: &RustType,
     ) -> Option<String> {
         let ZngurField { name, ty, offset } = field;
-        wln!(
-            self,
-            r#"
-const _: () = {{
-    #[allow(dead_code)]
-    fn check_field(value: {owner}) -> {ty} {{
-        value.{name}
-    }}
-}};
-            "#
-        );
+        wln!(self, r#"__zngur_assert_has_field!({owner}, {ty}, {name});"#);
         if let Some(offset) = offset {
             wln!(
                 self,
-                r#"
-const _: [(); {offset}] = [(); ::std::mem::offset_of!({owner}, {name})];
-                "#
+                r#"__zngur_assert_field_offset!({owner}, {offset}, {name});"#
             );
             None
         } else {
