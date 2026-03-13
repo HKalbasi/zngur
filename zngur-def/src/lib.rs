@@ -154,10 +154,14 @@ pub struct ConvertPanicToException(pub bool);
 #[derive(Clone, Debug, Default)]
 pub struct Import(pub std::path::PathBuf);
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ModuleAlias(pub String);
+
 #[derive(Debug, Clone)]
 pub struct ModuleImport {
-    pub alias: String,
+    pub alias: ModuleAlias,
     pub path: std::path::PathBuf,
+    pub cpp_namespace: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -173,7 +177,7 @@ pub struct ZngurSpec {
     pub convert_panic_to_exception: ConvertPanicToException,
     pub cpp_include_header_name: String,
     pub mangling_base: String,
-    pub cpp_namespace: String,
+    pub cpp_namespace: Option<String>,
     pub rust_cfg: Vec<(String, Option<String>)>,
 }
 
@@ -214,6 +218,7 @@ pub struct RustPathAndGenerics {
     pub path: Vec<String>,
     pub generics: Vec<RustType>,
     pub named_generics: Vec<(String, RustType)>,
+    pub module_alias: Option<ModuleAlias>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -239,6 +244,7 @@ impl Display for RustPathAndGenerics {
             path,
             generics,
             named_generics,
+            module_alias: _,
         } = self;
         for p in path {
             if p != "crate" {

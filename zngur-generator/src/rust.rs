@@ -10,33 +10,47 @@ use crate::{
 
 use zngur_def::*;
 
+pub struct GeneratorContext<'a> {
+    pub module_namespaces: &'a std::collections::HashMap<ModuleAlias, String>,
+    pub default_namespace: &'a str,
+}
+
 pub trait IntoCpp {
-    fn into_cpp(&self) -> CppType;
+    fn into_cpp(&self, ctx: &GeneratorContext) -> CppType;
 }
 
 impl IntoCpp for RustPathAndGenerics {
-    fn into_cpp(&self) -> CppType {
+    fn into_cpp(&self, ctx: &GeneratorContext) -> CppType {
         let RustPathAndGenerics {
             path,
             generics,
             named_generics,
+            module_alias,
         } = self;
+        let ns = if let Some(alias) = module_alias {
+            ctx.module_namespaces
+                .get(alias)
+                .map(|x| x.as_str())
+                .unwrap_or("rust")
+        } else {
+            ctx.default_namespace
+        };
         let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {
-            path: CppPath::from_rust_path(path),
+            path: CppPath::from_rust_path(path, ns),
             generic_args: generics
                 .iter()
                 .chain(named_generics)
-                .map(|x| x.into_cpp())
+                .map(|x| x.into_cpp(ctx))
                 .collect(),
         }
     }
 }
 
 impl IntoCpp for RustTrait {
-    fn into_cpp(&self) -> CppType {
+    fn into_cpp(&self, ctx: &GeneratorContext) -> CppType {
         match self {
-            RustTrait::Normal(pg) => pg.into_cpp(),
+            RustTrait::Normal(pg) => pg.into_cpp(ctx),
             RustTrait::Fn {
                 name,
                 inputs,
@@ -46,7 +60,7 @@ impl IntoCpp for RustTrait {
                 generic_args: inputs
                     .iter()
                     .chain(Some(&**output))
-                    .map(|x| x.into_cpp())
+                    .map(|x| x.into_cpp(ctx))
                     .collect(),
             },
         }
@@ -54,7 +68,7 @@ impl IntoCpp for RustTrait {
 }
 
 impl IntoCpp for RustType {
-    fn into_cpp(&self) -> CppType {
+    fn into_cpp(&self, ctx: &GeneratorContext) -> CppType {
         fn for_builtin(this: &RustType) -> Option<CppType> {
             match this {
                 RustType::Primitive(s) => match s {
@@ -94,38 +108,38 @@ impl IntoCpp for RustType {
             },
             RustType::Boxed(t) => CppType {
                 path: CppPath::from("rust::Box"),
-                generic_args: vec![t.into_cpp()],
+                generic_args: vec![t.into_cpp(ctx)],
             },
             RustType::Ref(m, t) => CppType {
                 path: match m {
                     Mutability::Mut => CppPath::from("rust::RefMut"),
                     Mutability::Not => CppPath::from("rust::Ref"),
                 },
-                generic_args: vec![t.into_cpp()],
+                generic_args: vec![t.into_cpp(ctx)],
             },
             RustType::Slice(s) => CppType {
                 path: CppPath::from("rust::Slice"),
-                generic_args: vec![s.into_cpp()],
+                generic_args: vec![s.into_cpp(ctx)],
             },
             RustType::Raw(m, t) => CppType {
                 path: match m {
                     Mutability::Mut => CppPath::from("rust::RawMut"),
                     Mutability::Not => CppPath::from("rust::Raw"),
                 },
-                generic_args: vec![t.into_cpp()],
+                generic_args: vec![t.into_cpp(ctx)],
             },
-            RustType::Adt(pg) => pg.into_cpp(),
+            RustType::Adt(pg) => pg.into_cpp(ctx),
             RustType::Tuple(v) => {
                 if v.is_empty() {
                     return CppType::from("rust::Unit");
                 }
                 CppType {
                     path: CppPath::from("rust::Tuple"),
-                    generic_args: v.into_iter().map(|x| x.into_cpp()).collect(),
+                    generic_args: v.into_iter().map(|x| x.into_cpp(ctx)).collect(),
                 }
             }
             RustType::Dyn(tr, marker_bounds) => {
-                let tr_as_cpp_type = tr.into_cpp();
+                let tr_as_cpp_type = tr.into_cpp(ctx);
                 CppType {
                     path: CppPath::from("rust::Dyn"),
                     generic_args: [tr_as_cpp_type]
@@ -498,7 +512,11 @@ impl RustFile {
         );
     }
 
-    pub(crate) fn add_builder_for_dyn_trait(&mut self, tr: &ZngurTrait) -> CppTraitDefinition {
+    pub(crate) fn add_builder_for_dyn_trait(
+        &mut self,
+        tr: &ZngurTrait,
+        ctx: &GeneratorContext,
+    ) -> CppTraitDefinition {
         assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
         wln!(self, r#"unsafe extern "C" {{"#);
@@ -526,7 +544,7 @@ impl RustFile {
         let link_name = self.add_builder_for_dyn_trait_owned(tr, &method_mangled_name);
         let link_name_ref = self.add_builder_for_dyn_trait_borrowed(tr, &method_mangled_name);
         CppTraitDefinition::Normal {
-            as_ty: tr.tr.into_cpp(),
+            as_ty: tr.tr.into_cpp(ctx),
             methods: tr
                 .methods
                 .clone()
@@ -535,8 +553,8 @@ impl RustFile {
                 .map(|(x, rust_link_name)| CppTraitMethod {
                     name: x.name,
                     rust_link_name,
-                    inputs: x.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                    output: x.output.into_cpp(),
+                    inputs: x.inputs.into_iter().map(|x| x.into_cpp(ctx)).collect(),
+                    output: x.output.into_cpp(ctx),
                 })
                 .collect(),
             link_name,
@@ -920,6 +938,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         output: &RustType,
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
+        ctx: &GeneratorContext,
     ) -> CppFnSig {
         let mut mangled_name = self.mangle_name(rust_name) + "_" + &hash_of_sig(&inputs);
         if deref.is_some() {
@@ -976,8 +995,8 @@ pub extern "C" fn {mangled_name}("#
         wln!(self, " }} }}");
         CppFnSig {
             rust_link_name: mangled_name,
-            inputs: inputs.iter().map(|ty| ty.into_cpp()).collect(),
-            output: modified_output.into_cpp(),
+            inputs: inputs.iter().map(|ty| ty.into_cpp(ctx)).collect(),
+            output: modified_output.into_cpp(ctx),
         }
     }
 

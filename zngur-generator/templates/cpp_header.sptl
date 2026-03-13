@@ -153,7 +153,7 @@ namespace rust {
     union {
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::<%- field_kind %><
-        <%- field.ty.into_cpp() %>,
+        <%- field.ty.into_cpp(self.ctx) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -213,7 +213,7 @@ namespace rust {
           alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> __zngur_data;
         <% for (index, field) in td.fields.iter().enumerate() { %>
           ::rust::FieldOwned<
-            <%- field.ty.into_cpp() %>,
+            <%- field.ty.into_cpp(self.ctx) %>,
           <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
             ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
           <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -227,7 +227,7 @@ namespace rust {
         ::uint8_t* __zngur_data;
       <% for (index, field) in td.fields.iter().enumerate() { %>
         ::rust::FieldOwned<
-          <%- field.ty.into_cpp() %>,
+          <%- field.ty.into_cpp(self.ctx) %>,
         <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
           ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
         <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -334,7 +334,7 @@ namespace rust {
 
       <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
         static inline <%- name %> make_box(
-          ::std::function< <%- output.into_cpp() %> (<%- inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
+          ::std::function< <%- output.into_cpp(self.ctx) %> (<%- inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ") %>) > f
         );
       <% } Some(RustTrait::Normal{..}) => { %>
         template<typename T, typename... Args>
@@ -451,7 +451,7 @@ namespace rust {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::FieldRefMut<
-        <%- field.ty.into_cpp() %>,
+        <%- field.ty.into_cpp(self.ctx) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -536,10 +536,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.ctx), inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
       <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-        <% let tr = tr.into_cpp(); %>
+        <% let tr = tr.into_cpp(self.ctx); %>
         inline RefMut(<%- tr %>& arg);
       <% } None => { %>
       <% }
@@ -603,7 +603,7 @@ namespace rust {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::FieldRef<
-        <%- field.ty.into_cpp() %>,
+        <%- field.ty.into_cpp(self.ctx) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -716,10 +716,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.ctx), inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
     <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-      <% let tr = tr.into_cpp(); %>
+      <% let tr = tr.into_cpp(self.ctx); %>
       inline Ref(<%- tr %>& arg);
     <% } None => { %>
     <% }

@@ -76,18 +76,9 @@ enum Command {
         /// A unique string which is included in zngur symbols to prevent duplicate
         /// symbols in linker
         ///
-        /// Default is the value of cpp_namespace, so you don't need to set this manually
-        /// if you change cpp_namespace as well
-        #[arg(long)]
-        mangling_base: Option<String>,
-
-        /// The C++ namespace which zngur puts its things in it. You can change it
-        /// to prevent violation of ODR when you have multiple independent zngur
-        /// libraries
-        ///
         /// Default is "rust"
         #[arg(long)]
-        cpp_namespace: Option<String>,
+        mangling_base: Option<String>,
 
         /// A rust config value of the form key(=value1(,value2 ...)) to use when
         /// generating the zngur spec.
@@ -144,7 +135,6 @@ fn main() {
             rs_file,
             depfile,
             mangling_base,
-            cpp_namespace,
             rust_cfg,
             rust_features,
             load_rustc_cfg,
@@ -178,9 +168,6 @@ fn main() {
             }
             if let Some(mangling_base) = mangling_base {
                 zng = zng.with_mangling_base(&mangling_base);
-            }
-            if let Some(cpp_namespace) = cpp_namespace {
-                zng = zng.with_cpp_namespace(&cpp_namespace);
             }
             zng.generate();
         }

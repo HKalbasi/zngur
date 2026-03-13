@@ -9,10 +9,10 @@ use itertools::{Either, Itertools};
 
 use zngur_def::{
     AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
-    MergeFailure, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
-    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod,
-    ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
-    ModuleImport,
+    MergeFailure, ModuleAlias, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics,
+    RustTrait, RustType, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField,
+    ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait,
+    ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -253,6 +253,7 @@ enum ParsedItem<'a> {
         path: std::path::PathBuf,
         span: Span,
     },
+    CppNamespace(String),
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, NItems>),
 }
 
@@ -281,6 +282,7 @@ enum ProcessedItem<'a> {
         path: std::path::PathBuf,
         span: Span,
     },
+    CppNamespace(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -402,8 +404,16 @@ impl ProcessedItem<'_> {
                     ),
                 }
             }
-            ProcessedItem::ModuleImport { alias, path, span: _ } => {
-                r.imported_modules.push(ModuleImport { alias: alias.to_owned(), path: path.clone() });
+            ProcessedItem::ModuleImport {
+                alias,
+                path,
+                span: _,
+            } => {
+                r.imported_modules.push(ModuleImport {
+                    alias: ModuleAlias(alias.to_owned()),
+                    path: path.clone(),
+                    cpp_namespace: None,
+                });
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
@@ -641,6 +651,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                             path: scope.simple_relative_path(&method.name),
                             generics: method.generics,
                             named_generics: vec![],
+                            module_alias: None,
                         },
                         inputs: method.inputs,
                         output: method.output,
@@ -707,6 +718,9 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         unreachable!() // For now, CPtE also can't have conflicts.
                     }
                 }
+            }
+            ProcessedItem::CppNamespace(s) => {
+                r.cpp_namespace = Some(s);
             }
         }
     }
@@ -781,6 +795,7 @@ struct ParsedRustPathAndGenerics<'a> {
     path: ParsedPath<'a>,
     generics: Vec<ParsedRustType<'a>>,
     named_generics: Vec<(&'a str, ParsedRustType<'a>)>,
+    module_alias: Option<&'a str>,
 }
 
 impl ParsedRustPathAndGenerics<'_> {
@@ -797,6 +812,9 @@ impl ParsedRustPathAndGenerics<'_> {
                 .into_iter()
                 .map(|(name, x)| (name.to_owned(), x.to_zngur(scope)))
                 .collect(),
+            module_alias: self
+                .module_alias
+                .map(|x| zngur_def::ModuleAlias(x.to_owned())),
         }
     }
 }
@@ -1029,6 +1047,21 @@ impl<'a> ParsedZngFile<'a> {
                     }
                 }
             }
+
+            for module_import in &mut zngur.imported_modules {
+                if let Ok(text) = resolver.resolve_import(dirname, &module_import.path) {
+                    if let Some(tokens) = lexer().parse(&text).into_output() {
+                        for window in tokens.as_slice().windows(3) {
+                            if let (Token::Sharp, Token::Ident("cpp_namespace"), Token::Ident(ns)) =
+                                (&window[0].0, &window[1].0, &window[2].0)
+                            {
+                                module_import.cpp_namespace = Some(ns.to_string());
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -1142,6 +1175,7 @@ fn process_parsed_item<'a>(
         ParsedItem::ModuleImport { alias, path, span } => {
             Ret::Processed(ProcessedItem::ModuleImport { alias, path, span })
         }
+        ParsedItem::CppNamespace(ns) => Ret::Processed(ProcessedItem::CppNamespace(ns)),
         ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
             match_
                 .eval(ctx)
@@ -1494,15 +1528,17 @@ fn rust_path_and_generics<'a>(
     rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
 ) -> impl Parser<'a, ParserInput<'a>, ParsedRustPathAndGenerics<'a>, ZngParserExtra<'a>> + Clone {
     let generics = rust_generics(rust_type.clone());
-    path()
+    path_with_alias()
         .then(generics.clone().repeated().at_most(1).collect::<Vec<_>>())
-        .map(|x| {
-            let generics = x.1.into_iter().next().unwrap_or_default();
+        .map(|(path_data, generics_list)| {
+            let (module_alias, path) = path_data;
+            let generics = generics_list.into_iter().next().unwrap_or_default();
             let (named_generics, generics) = generics.into_iter().partition_map(|x| x);
             ParsedRustPathAndGenerics {
-                path: x.0,
+                path,
                 generics,
                 named_generics,
+                module_alias,
             }
         })
 }
@@ -1594,6 +1630,7 @@ fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserE
                         },
                         generics: vec![],
                         named_generics: vec![("Output", output)],
+                        module_alias: None,
                     }),
                     vec![],
                 )
@@ -1792,14 +1829,16 @@ fn fn_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserEx
 fn additional_include_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::Sharp)
-        .ignore_then(
-            just(Token::Ident("cpp_additional_includes"))
-                .ignore_then(select! {
-                    Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
-                })
-                .or(just(Token::Ident("convert_panic_to_exception"))
-                    .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span()))),
-        )
+        .ignore_then(choice((
+            just(Token::Ident("cpp_additional_includes")).ignore_then(select! {
+                Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+            }),
+            just(Token::Ident("convert_panic_to_exception"))
+                .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span())),
+            just(Token::Ident("cpp_namespace")).ignore_then(select! {
+                Token::Ident(ns) => ParsedItem::CppNamespace(ns.to_owned()),
+            }),
+        )))
         .boxed()
 }
 
@@ -1905,7 +1944,8 @@ fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngPars
         .boxed()
 }
 
-fn module_import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
+fn module_import_item<'a>()
+-> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::KwUse)
         .ignore_then(select! { Token::Str(path) => path })
         .then_ignore(just(Token::KwAs))
@@ -1919,6 +1959,43 @@ fn module_import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, 
         .boxed()
 }
 
+fn path_with_alias<'a>()
+-> impl Parser<'a, ParserInput<'a>, (Option<&'a str>, ParsedPath<'a>), ZngParserExtra<'a>> + Clone {
+    let start = choice((
+        just(Token::ColonColon).to(ParsedPathStart::Absolute),
+        just(Token::KwCrate)
+            .then(just(Token::ColonColon))
+            .to(ParsedPathStart::Crate),
+        empty().to(ParsedPathStart::Relative),
+    ));
+
+    let alias_prefix = select! {
+        Token::Ident(c) => c,
+    }
+    .then_ignore(just(Token::Dot))
+    .or_not();
+
+    alias_prefix
+        .then(
+            start
+                .then(
+                    (select! {
+                        Token::Ident(c) => c,
+                    })
+                    .separated_by(just(Token::ColonColon))
+                    .at_least(1)
+                    .collect::<Vec<_>>(),
+                )
+                .or(just(Token::KwCrate).to((ParsedPathStart::Crate, vec![])))
+                .map_with(|(start, segments), extra| ParsedPath {
+                    start,
+                    segments,
+                    span: extra.span(),
+                }),
+        )
+        .boxed()
+}
+
 fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra<'a>> + Clone {
     let start = choice((
         just(Token::ColonColon).to(ParsedPathStart::Absolute),
@@ -1927,7 +2004,7 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
             .to(ParsedPathStart::Crate),
         empty().to(ParsedPathStart::Relative),
     ));
-    
+
     let alias_prefix = select! {
         Token::Ident(c) => c,
     }

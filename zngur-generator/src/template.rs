@@ -45,7 +45,7 @@ macro_rules! splat {
 
 #[derive(Template)]
 #[template(path = "cpp_header.sptl", escape = false)]
-pub(crate) struct CppHeaderTemplate<'a> {
+pub(crate) struct CppHeaderTemplate<'a, 'b> {
     pub(crate) panic_to_exception: bool,
     pub(crate) additional_includes: &'a String,
     pub(crate) fn_deps: &'a Vec<CppFnDefinition>,
@@ -55,6 +55,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) rust_cfg_defines: &'a Vec<String>,
     pub(crate) zng_header_in_place: bool,
+    pub(crate) ctx: &'a crate::rust::GeneratorContext<'b>,
 }
 
 #[derive(Template)]
@@ -63,7 +64,7 @@ pub(crate) struct ZngHeaderTemplate {
     pub(crate) panic_to_exception: bool,
 }
 
-impl<'a> CppHeaderTemplate<'a> {
+impl<'a, 'b> CppHeaderTemplate<'a, 'b> {
     fn panic_handler(&self) -> String {
         if self.panic_to_exception {
             format!(

@@ -141,26 +141,15 @@ impl Zngur {
             .to_string_lossy()
             .into_owned();
 
-        file.0.cpp_namespace = "rust".to_owned();
-
         if let Some(cpp_namespace) = self.cpp_namespace {
             file.0.mangling_base = cpp_namespace.clone();
-            file.0.cpp_namespace = cpp_namespace;
+            file.0.cpp_namespace = Some(cpp_namespace);
         }
 
         if let Some(mangling_base) = self.mangling_base {
             file.0.mangling_base = mangling_base;
         }
-
-        let cpp_namespace = file.0.cpp_namespace.clone();
-
-        let (rust, mut h, mut cpp) = file.render(self.zng_header_in_place);
-
-        // TODO: Don't hard code namespace as "::rust" and remove this replace
-        h = h
-            .replace("rust::", &format!("{cpp_namespace}::"))
-            .replace("namespace rust", &format!("namespace {cpp_namespace}"));
-        cpp = cpp.map(|cpp| cpp.replace("rust::", &format!("{cpp_namespace}::")));
+        let (rust, h, cpp) = file.render(self.zng_header_in_place);
 
         File::create(&rs_file_path)
             .unwrap()

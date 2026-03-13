@@ -1,3 +1,4 @@
+#cpp_namespace main_ns
 use "module.zng" as mod_alias;
 
 mod ::std {

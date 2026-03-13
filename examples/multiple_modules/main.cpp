@@ -1,7 +1,7 @@
 #include "main.zng.h"
 #include <iostream>
 
-using namespace rust::std::vec;
+using namespace main_ns::std::vec;
 
 int main() {
     auto v = Vec<int32_t>::new_();

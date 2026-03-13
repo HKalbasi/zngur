@@ -43,12 +43,28 @@ impl ZngurGenerator {
                 .additional_includes
                 .push_str(&format!("\n#include \"{}.h\"", module.path.display()));
         }
+        let mut module_namespaces = std::collections::HashMap::new();
+        for module in &zng.imported_modules {
+            if let Some(ns) = &module.cpp_namespace {
+                module_namespaces.insert(module.alias.clone(), ns.clone());
+            }
+        }
+        let default_ns = zng.cpp_namespace.as_deref().unwrap_or("rust");
+        let ctx = rust::GeneratorContext {
+            module_namespaces: &module_namespaces,
+            default_namespace: default_ns,
+        };
         let mut rust_file = RustFile::new(&zng.mangling_base);
         rust_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file.trait_defs = zng
             .traits
             .iter()
-            .map(|(key, value)| (key.clone(), rust_file.add_builder_for_dyn_trait(value)))
+            .map(|(key, value)| {
+                (
+                    key.clone(),
+                    rust_file.add_builder_for_dyn_trait(value, &ctx),
+                )
+            })
             .collect();
         cpp_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file
@@ -106,8 +122,12 @@ impl ZngurGenerator {
                             kind: ZngurMethodReceiver::Static,
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.constructor,
-                                inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
-                                output: ty.into_cpp(),
+                                inputs: constructor
+                                    .inputs
+                                    .iter()
+                                    .map(|x| x.1.into_cpp(&ctx))
+                                    .collect(),
+                                output: ty.into_cpp(&ctx),
                             },
                         });
                         cpp_methods.push(CppMethod {
@@ -115,7 +135,7 @@ impl ZngurGenerator {
                             kind: ZngurMethodReceiver::Ref(Mutability::Not),
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.match_check,
-                                inputs: vec![ty.into_cpp().into_ref()],
+                                inputs: vec![ty.into_cpp(&ctx).into_ref()],
                                 output: CppType::from("uint8_t"),
                             },
                         });
@@ -126,8 +146,12 @@ impl ZngurGenerator {
                             .constructor;
                         constructors.push(CppFnSig {
                             rust_link_name,
-                            inputs: constructor.inputs.iter().map(|x| x.1.into_cpp()).collect(),
-                            output: ty.into_cpp(),
+                            inputs: constructor
+                                .inputs
+                                .iter()
+                                .map(|x| x.1.into_cpp(&ctx))
+                                .collect(),
+                            output: ty.into_cpp(&ctx),
                         });
                     }
                 }
@@ -151,8 +175,8 @@ impl ZngurGenerator {
                     let rust_link_name = rust_file.add_tuple_constructor(&fields);
                     constructors.push(CppFnSig {
                         rust_link_name,
-                        inputs: fields.iter().map(|x| x.into_cpp()).collect(),
-                        output: ty.into_cpp(),
+                        inputs: fields.iter().map(|x| x.into_cpp(&ctx)).collect(),
+                        output: ty.into_cpp(&ctx),
                     });
                 }
             }
@@ -182,6 +206,7 @@ impl ZngurGenerator {
                     &method.output,
                     use_path,
                     deref.map(|x| x.1),
+                    &ctx,
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
@@ -190,7 +215,7 @@ impl ZngurGenerator {
                 });
             }
             cpp_file.type_defs.push(CppTypeDefinition {
-                ty: ty.into_cpp(),
+                ty: ty.into_cpp(&ctx),
                 layout: rust_file.add_layout_policy_shim(&ty, ty_def.layout),
                 constructors,
                 fields,
@@ -215,8 +240,8 @@ impl ZngurGenerator {
                                 e.insert(CppTraitDefinition::Fn {
                                     sig: CppFnSig {
                                         rust_link_name,
-                                        inputs: inputs.iter().map(|x| x.into_cpp()).collect(),
-                                        output: output.into_cpp(),
+                                        inputs: inputs.iter().map(|x| x.into_cpp(&ctx)).collect(),
+                                        output: output.into_cpp(&ctx),
                                     },
                                 });
                             }
@@ -242,9 +267,10 @@ impl ZngurGenerator {
                 &func.output,
                 None,
                 None,
+                &ctx,
             );
             cpp_file.fn_defs.push(CppFnDefinition {
-                name: CppPath::from_rust_path(&func.path.path),
+                name: CppPath::from_rust_path(&func.path.path, default_ns),
                 sig,
             });
         }
@@ -255,8 +281,8 @@ impl ZngurGenerator {
                 name: func.name.clone(),
                 sig: CppFnSig {
                     rust_link_name,
-                    inputs: func.inputs.into_iter().map(|x| x.into_cpp()).collect(),
-                    output: func.output.into_cpp(),
+                    inputs: func.inputs.into_iter().map(|x| x.into_cpp(&ctx)).collect(),
+                    output: func.output.into_cpp(&ctx),
                 },
             });
         }
@@ -267,28 +293,28 @@ impl ZngurGenerator {
                 &impl_block.methods,
             );
             cpp_file.exported_impls.push(CppExportedImplDefinition {
-                tr: impl_block.tr.map(|x| x.into_cpp()),
-                ty: impl_block.ty.into_cpp(),
+                tr: impl_block.tr.map(|x| x.into_cpp(&ctx)),
+                ty: impl_block.ty.into_cpp(&ctx),
                 methods: impl_block
                     .methods
                     .iter()
                     .zip(&rust_link_names)
                     .map(|(method, link_name)| {
                         let inputs = real_inputs_of_method(method, &impl_block.ty);
-                        let inputs = inputs.iter().map(|ty| ty.into_cpp()).collect();
+                        let inputs = inputs.iter().map(|ty| ty.into_cpp(&ctx)).collect();
                         (
                             cpp_handle_keyword(&method.name).to_owned(),
                             CppFnSig {
                                 rust_link_name: link_name.clone(),
                                 inputs,
-                                output: method.output.into_cpp(),
+                                output: method.output.into_cpp(&ctx),
                             },
                         )
                     })
                     .collect(),
             });
         }
-        let (h, cpp) = cpp_file.render();
+        let (h, cpp) = cpp_file.render(&ctx);
         (rust_file.text, h, cpp)
     }
 }
