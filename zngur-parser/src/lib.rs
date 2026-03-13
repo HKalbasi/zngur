@@ -12,6 +12,7 @@ use zngur_def::{
     MergeFailure, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType,
     ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod,
     ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
+    ModuleImport,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -247,6 +248,11 @@ enum ParsedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
+    ModuleImport {
+        alias: String,
+        path: std::path::PathBuf,
+        span: Span,
+    },
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, NItems>),
 }
 
@@ -270,6 +276,11 @@ enum ProcessedItem<'a> {
     Fn(Spanned<ParsedMethod<'a>>),
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Import(ParsedImportPath),
+    ModuleImport {
+        alias: String,
+        path: std::path::PathBuf,
+        span: Span,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -390,6 +401,9 @@ impl ProcessedItem<'_> {
                         path.span,
                     ),
                 }
+            }
+            ProcessedItem::ModuleImport { alias, path, span: _ } => {
+                r.imported_modules.push(ModuleImport { alias: alias.to_owned(), path: path.clone() });
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
@@ -1125,6 +1139,9 @@ fn process_parsed_item<'a>(
         ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
         ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
         ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
+        ParsedItem::ModuleImport { alias, path, span } => {
+            Ret::Processed(ProcessedItem::ModuleImport { alias, path, span })
+        }
         ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
             match_
                 .eval(ctx)
@@ -1864,6 +1881,7 @@ fn item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra
             fn_item(),
             additional_include_item(),
             import_item(),
+            module_import_item(),
             alias(),
             conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedItem::MatchOnCfg),
         ))
@@ -1887,6 +1905,20 @@ fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngPars
         .boxed()
 }
 
+fn module_import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
+    just(Token::KwUse)
+        .ignore_then(select! { Token::Str(path) => path })
+        .then_ignore(just(Token::KwAs))
+        .then(select! { Token::Ident(alias) => alias })
+        .then_ignore(just(Token::Semicolon))
+        .map_with(|(path, alias), extra| ParsedItem::ModuleImport {
+            path: std::path::PathBuf::from(path),
+            alias: alias.to_owned(),
+            span: extra.span(),
+        })
+        .boxed()
+}
+
 fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra<'a>> + Clone {
     let start = choice((
         just(Token::ColonColon).to(ParsedPathStart::Absolute),
@@ -1895,7 +1927,15 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
             .to(ParsedPathStart::Crate),
         empty().to(ParsedPathStart::Relative),
     ));
-    start
+    
+    let alias_prefix = select! {
+        Token::Ident(c) => c,
+    }
+    .then_ignore(just(Token::Dot))
+    .or_not();
+
+    alias_prefix
+        .ignore_then(start)
         .then(
             (select! {
                 Token::Ident(c) => c,

@@ -153,9 +153,17 @@ pub struct ConvertPanicToException(pub bool);
 
 #[derive(Clone, Debug, Default)]
 pub struct Import(pub std::path::PathBuf);
+
+#[derive(Debug, Clone)]
+pub struct ModuleImport {
+    pub alias: String,
+    pub path: std::path::PathBuf,
+}
+
 #[derive(Debug, Default)]
 pub struct ZngurSpec {
     pub imports: Vec<Import>,
+    pub imported_modules: Vec<ModuleImport>,
     pub types: Vec<ZngurType>,
     pub traits: IndexMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,

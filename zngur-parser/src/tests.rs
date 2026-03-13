@@ -911,3 +911,25 @@ fn cfg_match_unstable() {
         "#]],
     );
 }
+
+#[test]
+fn module_import_parser_test() {
+    let parsed = crate::ParsedZngFile::parse_str(
+        r#"
+use "module.zng" as mod_alias;
+type mod_alias.Type {
+    #layout(size = 1, align = 1);
+}
+    "#,
+        crate::cfg::NullCfg,
+    );
+    assert_eq!(parsed.spec.imported_modules.len(), 1);
+    assert_eq!(parsed.spec.imported_modules[0].alias, "mod_alias");
+    assert_eq!(
+        parsed.spec.imported_modules[0].path.to_str().unwrap(),
+        "module.zng"
+    );
+
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_ty_path!(["Type"], &ty.ty);
+}
