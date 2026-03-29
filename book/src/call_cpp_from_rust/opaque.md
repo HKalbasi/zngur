@@ -100,6 +100,33 @@ auto vec_as_iter = rust::Box<rust::Dyn<rust::std::iter::Iterator<int32_t>>>::mak
       VectorIterator<int32_t>>(std::move(vec));
 ```
 
+If you need to call the trait methods on the result, you need to add a `dyn Trait` or `Box<dyn Trait>` in your zng file as well:
+
+```
+trait iter::Iterator::<Item = i32> {
+    fn next(&mut self) -> ::std::option::Option<i32>;
+}
+
+type dyn iter::Iterator::<Item = i32> {
+    wellknown_traits(?Sized);
+
+    fn next(&mut self) -> ::std::option::Option<i32>;
+    fn map<i32, Box<dyn Fn(i32) -> i32>>(self, Box<dyn Fn(i32) -> i32>)
+                -> ::std::iter::Map<::std::vec::IntoIter<i32>, Box<dyn Fn(i32) -> i32>>;
+}
+
+type Box<dyn iter::Iterator<Item = i32>> {
+    #layout(size = 16, align = 8);
+    fn deref(&self) -> &dyn dyn iter::Iterator<Item = i32> use ::core::ops::Deref;
+    fn collect<::std::vec::Vec<i32>>(self) -> ::std::vec::Vec<i32>;
+}
+```
+
+Now you can call collect and map on the resulting iterator defined in C++.
+Note that you don't need the `trait` declaration in the zng file if you just need working with trait objects exposed from Rust code.
+In that case, just declaring the `type dyn Trait` is enough, and it works like any other type.
+The `trait` declaration in the zng file is only needed if you want to use this feature.
+
 ## Semantics of the opaque types
 
 The `ZngurCppOpaqueBorrowedObject` and newtype wrappers around it don't represent a C++ object,
