@@ -5,7 +5,7 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 	cargo build --release
 
 generated.h ./src/generated.rs: main.zng
-	cd ../../zngur-cli && cargo run g ../examples/rustyline/main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/rustyline/main.zng
 
 .PHONY: ../../target/release/libexample_rustyline.a generated.h clean
 

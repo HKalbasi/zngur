@@ -17,7 +17,7 @@ $(RUSTLIB_PATH)/$(RUSTLIB) :
 	cargo build --release
 
 $(GENERATED) : main.zng
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng
 
 clean :
 	- del /f /q generated.h generated.cpp src\generated.rs a.exe main.obj generated.obj actual_output.txt 2>nul

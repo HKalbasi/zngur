@@ -5,7 +5,7 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 	cargo build --release
 
 generated.h ./src/generated.rs: main.zng
-	cd ../../zngur-cli && cargo run g ../examples/regression_test1/main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/regression_test1/main.zng
 
 .PHONY: ../../target/release/libexample_regression_test1.a generated.h clean
 

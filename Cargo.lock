@@ -429,10 +429,6 @@ name = "example-memory_management"
 version = "0.8.0"
 
 [[package]]
-name = "example-multiple-zngur-files"
-version = "0.8.0"
-
-[[package]]
 name = "example-raw-pointer"
 version = "0.8.0"
 

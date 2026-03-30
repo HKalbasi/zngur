@@ -7,7 +7,7 @@ a.out: main.cpp foo.cpp bar.cpp generated.h src/generated.rs src/lib.rs ../../ta
 	cargo build --release
 
 generated.h ./src/generated.rs: main.zng primitives.zng foo.zng bar.zng
-	cd ../../zngur-cli && cargo run g ../examples/simple_import/main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/simple_import/main.zng
 
 clean:
 	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
