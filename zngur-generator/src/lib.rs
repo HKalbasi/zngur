@@ -32,7 +32,7 @@ impl ZngurGenerator {
         ZngurGenerator(zng)
     }
 
-    pub fn render(self) -> (String, String, Option<String>) {
+    pub fn render(self, zng_header_in_place: bool) -> (String, String, Option<String>) {
         let mut zng = self.0;
 
         // Unit type is a bit special, and almost everyone needs it, so we add it ourself.
@@ -49,6 +49,7 @@ impl ZngurGenerator {
         let mut cpp_file = CppFile::default();
         cpp_file.header_file_name = zng.cpp_include_header_name.clone();
         cpp_file.additional_includes = zng.additional_includes.0;
+        cpp_file.zng_header_in_place = zng_header_in_place;
         let mut rust_file = RustFile::new(&zng.mangling_base);
         rust_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file.trait_defs = zng

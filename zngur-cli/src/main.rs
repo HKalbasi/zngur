@@ -112,6 +112,13 @@ enum Command {
 
         #[command(flatten)]
         load_rustc_cfg: CfgFromRustc,
+
+        /// When set, the generator will embed the common Zngur types into the generated header.
+        ///
+        /// The recommended workflow is to generate a `zngur.h` header with `make-zng-header` which should
+        /// be shared between all of your generated modules and leave this flag unset.
+        #[arg(long = "in-place", short = 'i')]
+        zng_header_in_place: bool,
     },
     #[command(alias = "h")]
     /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
@@ -141,6 +148,7 @@ fn main() {
             rust_cfg,
             rust_features,
             load_rustc_cfg,
+            zng_header_in_place,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -149,7 +157,9 @@ fn main() {
             let mut zng = Zngur::from_zng_file(&path)
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
-                .with_rs_file(rs_file);
+                .with_rs_file(rs_file)
+                .with_zng_header_in_place_as(zng_header_in_place);
+
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
             if load_rustc_cfg.load_cfg_from_rustc {
                 cfg.extend(cfg_from_rustc(load_rustc_cfg, &rust_features));

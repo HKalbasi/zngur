@@ -348,6 +348,7 @@ pub struct CppFile {
     pub additional_includes: String,
     pub panic_to_exception: bool,
     pub rust_cfg_defines: Vec<String>,
+    pub zng_header_in_place: bool,
 }
 
 impl CppFile {
@@ -361,6 +362,7 @@ impl CppFile {
             exported_impls: &self.exported_impls,
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
+            zng_header_in_place: self.zng_header_in_place,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())

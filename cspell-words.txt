@@ -99,3 +99,9 @@ zngur's
 zængɑr
 zigza
 zoop
+ifndef
+endif
+ifdef
+selectany
+declspec
+elif

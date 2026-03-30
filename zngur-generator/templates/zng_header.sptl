@@ -1,6 +1,7 @@
 <%# #language:cpp %>
 
-#pragma once
+#ifndef __ZNG_HEADER_INTERNAL_TYPES
+#define __ZNG_HEADER_INTERNAL_TYPES
 
 #include <cstddef>
 #include <cstdint>
@@ -760,3 +761,4 @@ namespace rust {
 
 } // namespace rust
 
+#endif // __ZNG_HEADER_INTERNAL_TYPES

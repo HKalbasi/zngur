@@ -1,3 +1,4 @@
+use crate::ZngHeaderGenerator;
 use crate::cpp::{
     CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppFnSig, CppLayoutPolicy,
     CppTraitDefinition, CppTypeDefinition, cpp_handle_field_name,
@@ -53,6 +54,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) rust_cfg_defines: &'a Vec<String>,
+    pub(crate) zng_header_in_place: bool,
 }
 
 #[derive(Template)]
@@ -74,6 +76,13 @@ impl<'a> CppHeaderTemplate<'a> {
         } else {
             "".to_owned()
         }
+    }
+
+    fn render_zng_header(&self) -> String {
+        let generator = ZngHeaderGenerator {
+            panic_to_exception: self.panic_to_exception,
+        };
+        generator.render()
     }
 }
 

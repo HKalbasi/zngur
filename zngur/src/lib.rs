@@ -35,6 +35,7 @@ pub struct Zngur {
     mangling_base: Option<String>,
     cpp_namespace: Option<String>,
     rust_cfg: Option<Box<dyn RustCfgProvider>>,
+    zng_header_in_place: bool,
 }
 
 impl Zngur {
@@ -48,6 +49,7 @@ impl Zngur {
             mangling_base: None,
             cpp_namespace: None,
             rust_cfg: None,
+            zng_header_in_place: false,
         }
     }
 
@@ -90,6 +92,15 @@ impl Zngur {
             InMemoryRustCfgProvider::default().load_from_cargo_env(),
         ));
         self
+    }
+
+    pub fn with_zng_header_in_place_as(mut self, value: bool) -> Self {
+        self.zng_header_in_place = value;
+        self
+    }
+
+    pub fn with_zng_header_in_place(self) -> Self {
+        self.with_zng_header_in_place_as(true)
     }
 
     pub fn with_rust_in_memory_cfg<'a, CfgPairs, CfgKey, CfgValues>(
@@ -135,7 +146,7 @@ impl Zngur {
 
         let cpp_namespace = file.0.cpp_namespace.clone();
 
-        let (rust, mut h, mut cpp) = file.render();
+        let (rust, mut h, mut cpp) = file.render(self.zng_header_in_place);
 
         // TODO: Don't hard code namespace as "::rust" and remove this replace
         h = h

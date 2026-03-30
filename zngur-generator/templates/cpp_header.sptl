@@ -11,7 +11,12 @@
 #include <functional>
 #include <math.h>
 #include <type_traits>
+
+<% if !self.zng_header_in_place { %>
 #include <zngur.h>
+<% } else { %>
+<%- self.render_zng_header() %>
+<% } %>
 
 <%- self.additional_includes %>
 
