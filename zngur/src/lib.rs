@@ -8,6 +8,7 @@ use std::{
 };
 
 use zngur_generator::{
+    ParsedZngFile, ZngHeaderGenerator, ZngurGenerator,
     cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
 };
 
