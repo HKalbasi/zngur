@@ -8,7 +8,6 @@ use std::{
 };
 
 use zngur_generator::{
-    ParsedZngFile, ZngHeaderGenerator, ZngurGenerator,
     cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
 };
 
@@ -36,6 +35,7 @@ pub struct Zngur {
     cpp_namespace: Option<String>,
     rust_cfg: Option<Box<dyn RustCfgProvider>>,
     zng_header_in_place: bool,
+    zng_h_file_path: Option<PathBuf>,
 }
 
 impl Zngur {
@@ -50,7 +50,13 @@ impl Zngur {
             cpp_namespace: None,
             rust_cfg: None,
             zng_header_in_place: false,
+            zng_h_file_path: None,
         }
+    }
+
+    pub fn with_zng_header(mut self, zng_header: impl AsRef<Path>) -> Self {
+        self.zng_h_file_path.replace(zng_header.as_ref().to_owned());
+        self
     }
 
     pub fn with_h_file(mut self, path: impl AsRef<Path>) -> Self {
@@ -122,6 +128,7 @@ impl Zngur {
     pub fn generate(self) {
         let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
         let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
+        let panic_to_exception = parse_result.spec.convert_panic_to_exception.0;
         let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
@@ -199,6 +206,12 @@ impl Zngur {
                 .write_all(depfile_content.as_bytes())
                 .unwrap();
         }
+        if let Some(zng_h) = self.zng_h_file_path {
+            ZngurHdr::new()
+                .with_panic_to_exception_as(panic_to_exception)
+                .with_zng_header(zng_h)
+                .generate()
+        }
     }
 }
 
@@ -230,8 +243,7 @@ impl ZngurHdr {
     }
 
     pub fn with_zng_header(mut self, zng_header: impl Into<PathBuf>) -> Self {
-        let previous = self.zng_header_file.replace(zng_header.into());
-        assert!(previous.is_none(), "zng-header specified more than once");
+        self.zng_header_file.replace(zng_header.into());
         self
     }
 
