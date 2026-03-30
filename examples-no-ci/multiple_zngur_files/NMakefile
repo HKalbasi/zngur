@@ -19,13 +19,13 @@ $(RUSTLIB_PATH)/$(RUSTLIB) :
 	cargo build --release
 
 $(GENERATED1) : main.zng
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng \
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng \
 		--h-file=../examples/$(EXAMPLE_NAME)/generated1.h \
 		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated1.rs \
 		--cpp-namespace=m1
 
 $(GENERATED2) : main.zng
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng \
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng \
 		--h-file=../examples/$(EXAMPLE_NAME)/generated2.h \
 		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated2.rs \
 		--cpp-namespace=m2
