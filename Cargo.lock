@@ -421,6 +421,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-cxx_demo_split"
+version = "0.8.0"
+dependencies = [
+ "build-rs",
+ "cc",
+ "zngur",
+]
+
+[[package]]
 name = "example-impl-trait"
 version = "0.8.0"
 
@@ -434,6 +443,13 @@ version = "0.8.0"
 
 [[package]]
 name = "example-rayon"
+version = "0.8.0"
+dependencies = [
+ "rayon",
+]
+
+[[package]]
+name = "example-rayon_split"
 version = "0.8.0"
 dependencies = [
  "rayon",
