@@ -1,7 +1,7 @@
 use std::{collections::HashMap, path::PathBuf};
 
 use clap::Parser;
-use zngur::Zngur;
+use zngur::{Zngur, ZngurHdr};
 
 use crate::cfg_extractor::{CfgFromRustc, cfg_from_rustc};
 
@@ -112,6 +112,25 @@ enum Command {
 
         #[command(flatten)]
         load_rustc_cfg: CfgFromRustc,
+
+        /// When set, the generator will embed the common Zngur types into the generated header.
+        ///
+        /// The recommended workflow is to generate a `zngur.h` header with `make-zng-header` which should
+        /// be shared between all of your generated modules and leave this flag unset.
+        #[arg(long = "in-place", short = 'i')]
+        zng_header_in_place: bool,
+    },
+    #[command(alias = "h")]
+    /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
+    MakeZngHeader {
+        /// Path to the generated header file
+        path: PathBuf,
+
+        /// If set, it will generate the "panic to exceptions" mechanism in the generated header.
+        ///
+        /// Note that each `zng` module will need to use `#convert_panic_to_exception` in order to fully enable it.
+        #[arg(long = "panic-to-exception")]
+        convert_panic_to_exception: bool,
     },
 }
 
@@ -129,6 +148,7 @@ fn main() {
             rust_cfg,
             rust_features,
             load_rustc_cfg,
+            zng_header_in_place,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -137,7 +157,9 @@ fn main() {
             let mut zng = Zngur::from_zng_file(&path)
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
-                .with_rs_file(rs_file);
+                .with_rs_file(rs_file)
+                .with_zng_header_in_place_as(zng_header_in_place);
+
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
             if load_rustc_cfg.load_cfg_from_rustc {
                 cfg.extend(cfg_from_rustc(load_rustc_cfg, &rust_features));
@@ -161,6 +183,15 @@ fn main() {
                 zng = zng.with_cpp_namespace(&cpp_namespace);
             }
             zng.generate();
+        }
+        Command::MakeZngHeader {
+            path,
+            convert_panic_to_exception,
+        } => {
+            ZngurHdr::new()
+                .with_panic_to_exception_as(convert_panic_to_exception)
+                .with_zng_header(path)
+                .generate();
         }
     }
 }

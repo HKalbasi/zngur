@@ -8,7 +8,7 @@ use std::{
 };
 
 use zngur_generator::{
-    ParsedZngFile, ZngurGenerator,
+    ParsedZngFile, ZngHeaderGenerator, ZngurGenerator,
     cfg::{InMemoryRustCfgProvider, NullCfg, RustCfgProvider},
 };
 
@@ -35,6 +35,8 @@ pub struct Zngur {
     mangling_base: Option<String>,
     cpp_namespace: Option<String>,
     rust_cfg: Option<Box<dyn RustCfgProvider>>,
+    zng_header_in_place: bool,
+    zng_h_file_path: Option<PathBuf>,
 }
 
 impl Zngur {
@@ -48,7 +50,14 @@ impl Zngur {
             mangling_base: None,
             cpp_namespace: None,
             rust_cfg: None,
+            zng_header_in_place: false,
+            zng_h_file_path: None,
         }
+    }
+
+    pub fn with_zng_header(mut self, zng_header: impl AsRef<Path>) -> Self {
+        self.zng_h_file_path.replace(zng_header.as_ref().to_owned());
+        self
     }
 
     pub fn with_h_file(mut self, path: impl AsRef<Path>) -> Self {
@@ -92,6 +101,15 @@ impl Zngur {
         self
     }
 
+    pub fn with_zng_header_in_place_as(mut self, value: bool) -> Self {
+        self.zng_header_in_place = value;
+        self
+    }
+
+    pub fn with_zng_header_in_place(self) -> Self {
+        self.with_zng_header_in_place_as(true)
+    }
+
     pub fn with_rust_in_memory_cfg<'a, CfgPairs, CfgKey, CfgValues>(
         mut self,
         cfg_values: CfgPairs,
@@ -111,6 +129,7 @@ impl Zngur {
     pub fn generate(self) {
         let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
         let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
+        let panic_to_exception = parse_result.spec.convert_panic_to_exception.0;
         let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
@@ -135,7 +154,7 @@ impl Zngur {
 
         let cpp_namespace = file.0.cpp_namespace.clone();
 
-        let (rust, mut h, mut cpp) = file.render();
+        let (rust, mut h, mut cpp) = file.render(self.zng_header_in_place);
 
         // TODO: Don't hard code namespace as "::rust" and remove this replace
         h = h
@@ -188,5 +207,57 @@ impl Zngur {
                 .write_all(depfile_content.as_bytes())
                 .unwrap();
         }
+        if let Some(zng_h) = self.zng_h_file_path {
+            ZngurHdr::new()
+                .with_panic_to_exception_as(panic_to_exception)
+                .with_zng_header(zng_h)
+                .generate()
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ZngurHdr {
+    panic_to_exception: bool,
+    zng_header_file: Option<PathBuf>,
+}
+
+impl ZngurHdr {
+    pub const fn new() -> Self {
+        Self {
+            panic_to_exception: false,
+            zng_header_file: None,
+        }
+    }
+
+    pub fn with_panic_to_exception(self) -> Self {
+        self.with_panic_to_exception_as(true)
+    }
+
+    pub fn without_panic_to_exception(self) -> Self {
+        self.with_panic_to_exception_as(false)
+    }
+
+    pub fn with_panic_to_exception_as(mut self, panic_to_exception: bool) -> Self {
+        self.panic_to_exception = panic_to_exception;
+        self
+    }
+
+    pub fn with_zng_header(mut self, zng_header: impl Into<PathBuf>) -> Self {
+        self.zng_header_file.replace(zng_header.into());
+        self
+    }
+
+    pub fn generate(self) {
+        let generator = ZngHeaderGenerator {
+            panic_to_exception: self.panic_to_exception,
+        };
+
+        let out_h = self
+            .zng_header_file
+            .expect("Missing zng header output file");
+        let rendered = generator.render();
+        std::fs::write(&out_h, rendered)
+            .unwrap_or_else(|_| panic!("Couldn't write contents to {}", out_h.display()));
     }
 }

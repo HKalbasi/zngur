@@ -5,10 +5,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     ZngurTrait, ZngurWellknownTrait, ZngurWellknownTraitData,
-    cpp::{
-        CppFnSig, CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType,
-        PanicToExceptionSymbols,
-    },
+    cpp::{CppFnSig, CppLayoutPolicy, CppPath, CppTraitDefinition, CppTraitMethod, CppType},
 };
 
 use zngur_def::*;
@@ -1040,52 +1037,20 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
         }
     }
 
-    pub(crate) fn enable_panic_to_exception(&mut self) -> PanicToExceptionSymbols {
-        let detect_panic = self.mangle_name("@detect_panic");
-        let take_panic = self.mangle_name("@take_panic");
-        wln!(
-            self,
-            r#"thread_local! {{
-            pub static PANIC_PAYLOAD: ::std::cell::Cell<Option<()>> = ::std::cell::Cell::new(None);
-        }}
-        #[allow(non_snake_case)]
-        #[unsafe(no_mangle)]
-        pub fn {detect_panic}() -> u8 {{
-            PANIC_PAYLOAD.with(|p| {{
-                let pp = p.take();
-                let r = if pp.is_some() {{ 1 }} else {{ 0 }};
-                p.set(pp);
-                r
-            }})
-        }}
-
-        #[allow(non_snake_case)]
-        #[unsafe(no_mangle)]
-        pub fn {take_panic}() {{
-            PANIC_PAYLOAD.with(|p| {{
-                p.take();
-            }})
-        }}
-        "#,
-        );
-        self.panic_to_exception = true;
-        PanicToExceptionSymbols {
-            detect_panic,
-            take_panic,
-        }
-    }
-
     fn wrap_in_catch_unwind(&mut self, f: impl FnOnce(&mut RustFile)) {
         if !self.panic_to_exception {
             f(self);
         } else {
-            wln!(self, "let e = ::std::panic::catch_unwind(|| {{");
-            f(self);
-            wln!(self, "}});");
             wln!(
                 self,
-                "if let Err(_) = e {{ PANIC_PAYLOAD.with(|p| p.set(Some(()))) }}"
+                r#"unsafe extern "C" {{
+                fn __zngur_mark_panicked();   
+            }}
+            let e = ::std::panic::catch_unwind(|| {{"#
             );
+            f(self);
+            wln!(self, "}});");
+            wln!(self, "if let Err(_) = e {{ __zngur_mark_panicked(); }}");
         }
     }
 

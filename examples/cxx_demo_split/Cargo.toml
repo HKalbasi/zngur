@@ -1,0 +1,16 @@
+[package]
+name = "example-cxx_demo_split"
+version = "0.8.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+
+[build-dependencies]
+cc = "1.0"
+build-rs = "0.1.2"
+zngur = { path = "../../zngur" }

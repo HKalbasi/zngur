@@ -13,11 +13,12 @@
     ],
     "ignorePaths": [
         "target",
-        "generated.h",
-        "generated.rs",
+        "*generated*.*",
         "/cspell-words.txt",
+        "*.zng.h",
         "*.svg",
         "examples/**/Makefile",
-        "examples/**/NMakefile"
+        "examples/**/NMakefile",
+        "actual_output.txt"
     ]
 }

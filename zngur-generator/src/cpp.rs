@@ -223,12 +223,12 @@ impl From<&str> for CppType {
 // pub(crate) just for migration
 pub(crate) struct State {
     pub(crate) text: String,
-    pub(crate) panic_to_exception: Option<PanicToExceptionSymbols>,
+    pub(crate) panic_to_exception: bool,
 }
 
 impl State {
     fn remove_no_except_in_panic(&mut self) {
-        if self.panic_to_exception.is_some() {
+        if self.panic_to_exception {
             self.text = self.text.replace(" noexcept ", " ");
         }
     }
@@ -337,12 +337,6 @@ impl Default for CppTypeDefinition {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct PanicToExceptionSymbols {
-    pub detect_panic: String,
-    pub take_panic: String,
-}
-
 #[derive(Default)]
 pub struct CppFile {
     pub header_file_name: String,
@@ -352,14 +346,15 @@ pub struct CppFile {
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,
     pub additional_includes: String,
-    pub panic_to_exception: Option<PanicToExceptionSymbols>,
+    pub panic_to_exception: bool,
     pub rust_cfg_defines: Vec<String>,
+    pub zng_header_in_place: bool,
 }
 
 impl CppFile {
     fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
         let template = CppHeaderTemplate {
-            panic_to_exception: &self.panic_to_exception,
+            panic_to_exception: self.panic_to_exception,
             additional_includes: &self.additional_includes,
             fn_deps: &self.fn_defs,
             type_defs: &self.type_defs,
@@ -367,6 +362,7 @@ impl CppFile {
             exported_impls: &self.exported_impls,
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
+            zng_header_in_place: self.zng_header_in_place,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())
@@ -391,11 +387,11 @@ impl CppFile {
     pub fn render(self) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
-            panic_to_exception: self.panic_to_exception.clone(),
+            panic_to_exception: self.panic_to_exception,
         };
         let mut cpp_file = State {
             text: "".to_owned(),
-            panic_to_exception: self.panic_to_exception.clone(),
+            panic_to_exception: self.panic_to_exception,
         };
         self.emit_h_file(&mut h_file).unwrap();
         let mut is_cpp_needed = false;

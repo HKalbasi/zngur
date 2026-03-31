@@ -33,6 +33,7 @@ foldl
 foldr
 funcs
 fvec
+GNUC
 hkalbasi
 ilog
 impls
@@ -98,3 +99,9 @@ zngur's
 zængɑr
 zigza
 zoop
+ifndef
+endif
+ifdef
+selectany
+declspec
+elif

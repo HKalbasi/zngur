@@ -31,12 +31,12 @@ $(RUSTLIB_PATH_B)/$(RUSTLIB) :
 $(GENERATED_A) : main.zng
 	IF NOT EXIST "include" mkdir include
 	IF NOT EXIST "include\float" mkdir "include\float"
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/float/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_float.rs -F "float-values" --load-cfg-from-rustc --use-cargo-rustc --profile=release --package example-conditional
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/float/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_float.rs -F "float-values" --load-cfg-from-rustc --use-cargo-rustc --profile=release --package example-conditional
 
 $(GENERATED_B) : main.zng
 	IF NOT EXIST "include" mkdir include
 	IF NOT EXIST "include\int" mkdir "include\int"
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/int/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_int.rs --load-cfg-from-rustc
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng --h-file ../examples/$(EXAMPLE_NAME)/include/int/generated.h --rs-file ../examples/$(EXAMPLE_NAME)/src/generated_int.rs --load-cfg-from-rustc
 
 clean :
 	- del /f /q include\float\generated.h include\int\generated.h generated.cpp src\generated_float.rs src\generated_int.rs a.exe b.exe a.obj b.obj actual_output.txt 2>nul

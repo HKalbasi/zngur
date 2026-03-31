@@ -1,0 +1,764 @@
+<%# #language:cpp %>
+
+#ifndef __ZNG_HEADER_INTERNAL_TYPES
+#define __ZNG_HEADER_INTERNAL_TYPES
+
+#include <cstddef>
+#include <cstdint>
+#include <cstring>
+#include <csignal>
+#include <array>
+#include <iostream>
+#include <functional>
+#include <math.h>
+#include <type_traits>
+
+<% if self.panic_to_exception { %>
+  namespace rust {
+      class Panic {};
+  }
+  inline thread_local bool __zngur_rust_panicked_flag(false);
+
+#ifdef _MSC_VER
+    // MSVC: Functions use standard inline. Variables use selectany to prevent 
+    // multiple-definition errors when included in multiple .cpp files.
+    #define ZNGUR_FFI_EXPORT_FUNC extern "C" inline
+    #define ZNGUR_FFI_EXPORT_VAR  extern "C" __declspec(selectany)
+#elif defined(__GNUC__) || defined(__clang__)
+    // GCC/Clang: 'used' prevents the linker from stripping them. 'weak' on 
+    // the variable tells the linker to merge multiple definitions into one.
+    #define ZNGUR_FFI_EXPORT_FUNC extern "C" inline __attribute__((used))
+    #define ZNGUR_FFI_EXPORT_VAR  extern "C" __attribute__((weak, used))
+#else
+    #define ZNGUR_FFI_EXPORT_FUNC extern "C" inline
+    #define ZNGUR_FFI_EXPORT_VAR  extern "C"
+#endif
+
+  ZNGUR_FFI_EXPORT_FUNC void __zngur_mark_panicked() {
+    // TODO: While thread safe, you may end up with the wrong thread being
+    // notified of a panic
+    __zngur_rust_panicked_flag = true;
+  }
+  ZNGUR_FFI_EXPORT_FUNC bool __zngur_read_and_reset_rust_panic() {
+    bool out = __zngur_rust_panicked_flag;
+    __zngur_rust_panicked_flag = false;
+    return out;
+  }
+
+  // Force compilers that don't have `__attribute__((used))` to still export the functions by keeping
+  // function pointers.
+  ZNGUR_FFI_EXPORT_VAR void (* const __keep_zngur_mark_panicked)() = &__zngur_mark_panicked;
+  ZNGUR_FFI_EXPORT_VAR bool (* const __keep_zngur_read_and_reset_panic)() = &__zngur_read_and_reset_rust_panic;
+<% } %>
+
+#define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+
+namespace rust {
+
+  template<typename T>
+  struct __zngur_internal {
+    static inline uint8_t* data_ptr(const T& t) noexcept;
+    static void assume_init(T& t) noexcept ;
+    static void assume_deinit(T& t) noexcept ;
+    static inline void check_init(const T&) noexcept;
+    static inline size_t size_of() noexcept ;
+  };
+
+  template<typename T>
+  inline uint8_t* __zngur_internal_data_ptr(const T& t) noexcept {
+    return __zngur_internal<T>::data_ptr(t);
+  }
+
+  template<typename T>
+  void __zngur_internal_assume_init(T& t) noexcept {
+    __zngur_internal<T>::assume_init(t);
+  }
+
+  template<typename T>
+  void __zngur_internal_assume_deinit(T& t) noexcept {
+    __zngur_internal<T>::assume_deinit(t);
+  }
+
+  template<typename T>
+  inline size_t __zngur_internal_size_of() noexcept {
+    return __zngur_internal<T>::size_of();
+  }
+
+  template<typename T>
+  inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
+    memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
+    ::rust::__zngur_internal_assume_deinit(t);
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
+    T t;
+    ::rust::__zngur_internal_assume_init(t);
+    memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
+    return t;
+  }
+
+  template<typename T>
+  inline void __zngur_internal_check_init(const T& t) noexcept {
+    __zngur_internal<T>::check_init(t);
+  }
+
+  class ZngurCppOpaqueOwnedObject {
+    uint8_t* __zngur_data;
+    void (*destructor)(uint8_t*);
+
+  public:
+    template<typename T, typename... Args>
+    inline static ZngurCppOpaqueOwnedObject build(Args&&... args) {
+        ZngurCppOpaqueOwnedObject o;
+        o.__zngur_data = reinterpret_cast<uint8_t*>(new T(::std::forward<Args>(args)...));
+        o.destructor = [](uint8_t* d) {
+            delete reinterpret_cast<T*>(d);
+        };
+        return o;
+    }
+
+    template<typename T>
+    inline T& as_cpp() { return *reinterpret_cast<T *>(__zngur_data); }
+  };
+
+  template<typename T>
+  struct Ref;
+
+  template<typename T>
+  struct RefMut;
+
+
+  // offset encoded in type
+  template <typename Parent, size_t OFFSET>
+  struct FieldStaticOffset {};
+
+  // specialized per type to acquire offset from `extern const size_t`
+  template <typename Parent, size_t INDEX>
+  struct FieldAutoOffset {
+      static size_t offset() noexcept;
+  };
+
+  // specialize to record allocation strategy into type system
+  template <typename T>
+  struct zngur_heap_allocated : ::std::false_type {};
+
+  namespace zngur_detail {
+    // std::conjunction analog for c++11 support
+    template <typename... Conds>
+    struct conjunction : std::true_type {};
+
+    template <typename Cond, typename... Conds>
+    struct conjunction<Cond, Conds...>
+        : std::conditional<Cond::value, conjunction<Conds...>,
+                          std::false_type>::type {};
+
+    // Offset can be computed at compile time
+    template <typename...>
+    struct is_static_offset : std::false_type {};
+
+    // a static offset not behind a pointer can be computed
+    template <typename Parent, size_t OFFSET>
+    struct is_static_offset<FieldStaticOffset<Parent, OFFSET>>
+        : std::true_type {};
+
+    // All offsets can be compile time computed
+    template <typename First, typename... Rest>
+    using all_static_offset =
+        conjunction<is_static_offset<First>, is_static_offset<Rest>...>;
+  
+  }  // namespace zngur_detail
+
+  template <typename T>
+  struct __zngur_internal_field {
+      // offset for this type and offset
+      static constexpr size_t offset();
+      // is this offset behind a pointer
+      static constexpr bool heap_allocated();
+  };
+
+  template <typename Parent, size_t OFFSET>
+  struct __zngur_internal_field<FieldStaticOffset<Parent, OFFSET>> {
+      static constexpr size_t offset() { return OFFSET; }
+      static constexpr bool heap_allocated() { return zngur_heap_allocated<Parent>::value; }
+  };
+
+  template <typename Parent, size_t INDEX>
+  struct __zngur_internal_field<FieldAutoOffset<Parent, INDEX>> {
+      static size_t offset() {
+          return FieldAutoOffset<Parent, INDEX>::offset();
+      }
+      static constexpr bool heap_allocated() { return zngur_heap_allocated<Parent>::value; }
+  };
+
+  // NOTE: Offsets are in reverse order, last offset first.
+  // this allows offsets to be prepended in versions of c++ that don't have fold 
+  // expressions (pre c++17)
+  template <typename... Offsets>
+  struct __zngur_internal_calc_field {
+      // used to statically calculate a total offset
+      static constexpr size_t offset();
+      // used to check if the owner of the first offset is heap allocated
+      static constexpr bool heap_allocated();
+  };
+
+  // base case
+  template <typename Offset>
+  struct __zngur_internal_calc_field<Offset> {
+      static constexpr size_t offset() {
+          return __zngur_internal_field<Offset>::offset();
+      }
+      static constexpr bool heap_allocated() {
+          return __zngur_internal_field<Offset>::heap_allocated();
+      }
+  };
+
+  // recursively calculate offsets for Fields
+  template <typename LastOffset, typename PrevOffset, typename... Offsets>
+  struct __zngur_internal_calc_field<LastOffset, PrevOffset, Offsets...> {
+      static constexpr size_t offset() {
+          return __zngur_internal_calc_field<PrevOffset, Offsets...>::offset() +
+                __zngur_internal_field<LastOffset>::offset();
+      }
+      static constexpr bool heap_allocated() {
+          return __zngur_internal_calc_field<PrevOffset, Offsets...>::heap_allocated();
+      }
+  };
+
+  template<typename T, typename Offset, typename... Offsets>
+  struct FieldOwned {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+  template<typename T, typename Offset, typename... Offsets>
+  struct FieldRef {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+  template<typename T, typename Offset, typename... Offsets>
+  struct FieldRefMut {
+    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+  };
+
+#if __cplusplus >= 201703L
+  // deduction guides
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldOwned<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldRef<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  Ref(const FieldRefMut<T, Offset, Offsets...> &f) -> Ref<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldOwned<T, Offset, Offsets...> &f) -> RefMut<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldRef<T, Offset, Offsets...> &f) -> RefMut<T>;
+  template<typename T, typename Offset, typename... Offsets>
+  RefMut(const FieldRefMut<T, Offset, Offsets...> &f) -> RefMut<T>;
+#endif
+
+  template<typename T>
+  struct zngur_is_unsized : ::std::false_type {};
+  struct zngur_fat_pointer {
+    uint8_t* __zngur_data;
+    size_t metadata;
+  };
+  template<typename T>
+  struct Raw {
+      using DataType = typename ::std::conditional< zngur_is_unsized<T>::value, zngur_fat_pointer, uint8_t* >::type;
+      DataType __zngur_data;
+      Raw() {}
+      Raw(Ref<T> value) {
+          memcpy(&__zngur_data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+      }
+      Raw(RefMut<T> value) {
+          memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      Raw(DataType data) : __zngur_data(data) {
+      }
+      Raw<T> offset(ptrdiff_t n) {
+          return Raw(__zngur_data + n * __zngur_internal_size_of<T>());
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+  };
+  template<typename T>
+  struct RawMut {
+      using DataType = typename ::std::conditional< zngur_is_unsized<T>::value, zngur_fat_pointer, uint8_t* >::type;
+      DataType __zngur_data;
+      RawMut() {}
+      RawMut(RefMut<T> value) {
+          memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+      }
+      RawMut(DataType data) : __zngur_data(data) {
+      }
+      RawMut<T> offset(ptrdiff_t n) {
+          return RawMut(__zngur_data + n * __zngur_internal_size_of<T>());
+      }
+      T read() {
+          T value;
+          memcpy(__zngur_internal_data_ptr<T>(value), __zngur_data, __zngur_internal_size_of<T>());
+          __zngur_internal_assume_init<T>(value);
+          return value;
+      }
+      Ref<T> read_ref() {
+          Ref<T> value;
+          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
+          __zngur_internal_assume_init<Ref<T>>(value);
+          return value;
+      }
+      RefMut<T> read_mut() {
+          RefMut<T> value;
+          memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &__zngur_data, __zngur_internal_size_of<RefMut<T>>());
+          __zngur_internal_assume_init<RefMut<T>>(value);
+          return value;
+      }
+      void write(T value) {
+          memcpy(__zngur_data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+          __zngur_internal_assume_deinit<T>(value);
+      }
+  };
+  template<typename... T>
+  struct Tuple;
+
+  using Unit = Tuple<>;
+
+  template<typename T>
+  struct ZngurPrettyPrinter;
+
+  class Inherent;
+
+  template<typename Type, typename Trait = Inherent>
+  class Impl;
+
+  template<typename T>
+  T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
+    ::std::cerr << "[" << file_name << ":" << line_number << "] " << exp << " = ";
+    ZngurPrettyPrinter<typename ::std::remove_reference<T>::type>::print(input);
+    return ::std::forward<T>(input);
+  }
+
+  // specializations for Refs of Refs
+<% for ref_kind in ["Ref",  "RefMut"] { %>
+  <% for nested_ref_kind in ["Ref", "RefMut"] { %>
+
+  template<typename T>
+  struct <%- ref_kind %> < <%- nested_ref_kind %> < T > > {
+    <%- ref_kind %>() {
+      __zngur_data = 0;
+    }
+
+    <%- ref_kind %>(const <%- nested_ref_kind %> < T >& t) {
+      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+    
+    // construct a ref from a FieldOwned if it's offset can be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    // construct a ref from a FieldOwned if it's offset can not be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    <% if ref_kind == "Ref" { %>
+    // construct a ref from a FieldRef if all of it's offsets can be calculated
+    // at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRef if any of it's offsets can not be
+    // calculated at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+    <% } %>
+
+    // construct a ref from a FieldRefMut if all of it's offsets can be calculated
+    // at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRefMut if any of it's offsets can not be
+    // calculated at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    <%- nested_ref_kind %>< T >& operator*() {
+      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
+    }
+    <%- nested_ref_kind %>< T > const& operator*() const {
+      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
+    }
+
+  private:
+    size_t __zngur_data;
+    friend ::rust::__zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+    friend ::rust::ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+
+  };
+
+  template<typename T>
+  struct __zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
+    static inline uint8_t* data_ptr(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >& t) noexcept {
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
+    }
+    static inline void assume_init(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline void check_init(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline void assume_deinit(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+
+    static inline size_t size_of() noexcept {
+        return __zngur_internal_size_of< <%- nested_ref_kind %> < T > >({});
+    }
+  };
+
+  template<typename T>
+  struct ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
+    static inline void print(<%- ref_kind %> < <%- nested_ref_kind %> < T > > const& t) {
+      ::rust::__zngur_internal_check_init(t);
+      ::rust::ZngurPrettyPrinter< <%- nested_ref_kind %> < T > >::print( reinterpret_cast< const <%- nested_ref_kind %> < T > &>(t.__zngur_data) );
+    }
+  };
+
+  <% } %>
+<% } %>
+
+<% for ty in self.builtin_types() { %>
+  <% let needs_endif = ty == "::size_t"; %>
+  <% if needs_endif { %>
+    #if defined(__APPLE__) || defined(__wasm__)
+  <% } %>
+
+  template<>
+  struct __zngur_internal< <%- ty %> > {
+    static inline uint8_t* data_ptr(const <%- ty %>& t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %>&) noexcept {}
+    static inline void assume_deinit(<%- ty %>&) noexcept {}
+    static inline void check_init(<%- ty %>&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
+
+  template<>
+  struct __zngur_internal< <%- ty %>* > {
+    static inline uint8_t* data_ptr(<%- ty %>* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %>*&) noexcept {}
+    static inline void assume_deinit(<%- ty %>*&) noexcept {}
+    static inline void check_init(<%- ty %>*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
+
+  template<>
+  struct __zngur_internal< <%- ty %> const* > {
+    static inline uint8_t* data_ptr(<%- ty %> const* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init(<%- ty %> const*&) noexcept {}
+    static inline void assume_deinit(<%- ty %> const*&) noexcept {}
+    static inline void check_init(<%- ty %> const*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof(<%- ty %>);
+    }
+  };
+
+
+  template<>
+  struct Ref< <%- ty %> > {
+    Ref() {
+      __zngur_data = 0;
+    }
+
+    Ref(const <%- ty %>& t) {
+      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+
+    // construct a ref from a FieldOwned if all of it's offsets can be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    // construct a ref from a FieldOwned if any of it's offsets can not be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    // construct a ref from a FieldRef if all of it's offsets can be calculated
+    // at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldRef< <%- ty %>, Offset, Offsets...>& f) {
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRef if any of it's offsets can not be
+    // calculated at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldRef< <%- ty %>, Offset, Offsets...>& f) {
+        size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRefMut if all of it's offsets can be calculated
+    // at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRefMut if any of it's offsets can not be
+    // calculated at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    Ref(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    <%- ty %>& operator*() {
+      return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    }
+
+    <%- ty %> const& operator*() const {
+      return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    }
+
+  private:
+    size_t __zngur_data;
+    friend ::rust::__zngur_internal<Ref< <%- ty %> > >;
+    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+
+  };
+
+  template<>
+  struct RefMut< <%- ty %> > {
+    RefMut() {
+      __zngur_data = 0;
+    }
+
+    RefMut(<%- ty %>& t) {
+      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+    }
+
+    // construct a ref from a FieldOwned if all of it's offsets can be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    RefMut(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    // construct a ref from a FieldOwned if any of it's offsets can not be calculated at
+    // compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    RefMut(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+      constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      if (heap_allocated) {
+        __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+      } else {
+        __zngur_data = reinterpret_cast<size_t>(&f) + offset;
+      }
+    }
+
+    // construct a ref from a FieldRefMut if all of it's offsets can be calculated
+    // at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    RefMut(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+      constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    // construct a ref from a FieldRefMut if any of it's offsets can not be
+    // calculated at compile time
+    template <
+        typename Offset,
+        typename... Offsets,
+        typename ::std::enable_if<
+            !zngur_detail::all_static_offset<Offset, Offsets...>::value,
+            bool>::type = true>
+    RefMut(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+      size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+      __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
+    }
+
+    <%- ty %>& operator*() {
+        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    }
+
+    <%- ty %> const& operator*() const {
+        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    }
+  private:
+    size_t __zngur_data;
+    friend ::rust::__zngur_internal<RefMut< <%- ty %> > >;
+    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+  };
+
+  <% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
+  <% if printable { %>
+    template<>
+    struct ZngurPrettyPrinter< <%- ty %> > {
+      static inline void print(<%- ty %> const& t) {
+        ::std::cerr << t << ::std::endl;
+      }
+    };
+    template<>
+    struct ZngurPrettyPrinter< Ref< <%- ty %> > > {
+      static inline void print(Ref< <%- ty %> > const& t) {
+        ::std::cerr << *t << ::std::endl;
+      }
+    };
+    template<>
+    struct ZngurPrettyPrinter< RefMut< <%- ty %> > > {
+      static inline void print(RefMut< <%- ty %> > const& t) {
+        ::std::cerr << *t << ::std::endl;
+      }
+    };
+  <% } %>
+
+  <% if needs_endif { %>
+    #endif
+  <% } %>
+
+// end builtin types
+<% } %>
+
+} // namespace rust
+
+#endif // __ZNG_HEADER_INTERNAL_TYPES

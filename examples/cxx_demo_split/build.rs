@@ -7,6 +7,7 @@ fn main() {
     build::rerun_if_changed("main.zng");
     build::rerun_if_changed("blobstore.cpp");
     build::rerun_if_changed("src/");
+    build::rerun_if_changed("zngur.h");
     build::rerun_if_env_changed("CXX");
 
     #[cfg(not(target_os = "windows"))]
@@ -18,11 +19,11 @@ fn main() {
         .with_cpp_file(crate_dir.join("generated.cpp"))
         .with_h_file(crate_dir.join("generated.h"))
         .with_rs_file(crate_dir.join("./src/generated.rs"))
-        .with_zng_header_in_place()
+        .with_zng_header("zngur.h")
         .generate();
 
     let my_build = &mut cc::Build::new();
-    let my_build = my_build.cpp(true).std("c++17");
+    let my_build = my_build.cpp(true).std("c++17").include(".");
 
     #[cfg(not(target_os = "windows"))]
     my_build.compiler(&cxx);

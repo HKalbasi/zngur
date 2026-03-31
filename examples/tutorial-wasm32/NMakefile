@@ -1,5 +1,5 @@
 # can not eval mise after the fact in nmake, must preeval
-WASIFLAGS = -std=c++14 \
+WASIFLAGS = -std=c++17 \
            --target=wasm32-wasi \
            --sysroot=$(WASI_SDK_PATH)/share/wasi-sysroot \
            -D_WASI_EMULATED_SIGNAL \
@@ -32,7 +32,7 @@ main.wasm: main.cpp generated.h generated.cpp \
 	cargo build --target=wasm32-wasip1 --release
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
-	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g main32.zng
+	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g -i main32.zng
 
 clean:
 	cargo clean
