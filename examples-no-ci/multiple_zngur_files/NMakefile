@@ -1,5 +1,5 @@
 CXX = cl.exe
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++14 #c++14 is as low as MSVC goes 
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++17 #c++17 is needed for panic to exceptions 
 WINLIBS = ntdll.lib
 
 EXAMPLE_NAME = multiple_zngur_files

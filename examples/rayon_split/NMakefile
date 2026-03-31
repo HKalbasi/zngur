@@ -1,5 +1,5 @@
 CXX = cl.exe
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++14 # c++14 is as low as msvc goes 
+CXXFLAGS = /W4 /DEBUG /EHsc /external:I . /external:W0 /std:c++14 # c++14 is as low as msvc goes
 WINLIBS = ntdll.lib
 
 EXAMPLE_NAME = rayon_split
