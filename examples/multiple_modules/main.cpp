@@ -1,10 +1,20 @@
-#include "main.zng.h"
 #include <iostream>
-
-using namespace main_ns::std::vec;
+#include <packet.zng.h>
+#include <receiver.zng.h>
+#include <aggregation.zng.h>
+#include <processor.zng.h>
 
 int main() {
-    auto v = Vec<int32_t>::new_();
-    std::cout << "Created Vec!" << std::endl;
+    // Using default rust::crate namespace
+    auto processor = rust::crate::Processor::new_();
+    auto receiver = rust::crate::Receiver::new_();
+    auto stats = rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::create();
+
+    std::cout << "Starting LatencyAnalysis simulation..." << std::endl;
+
+    processor.run(receiver, stats, 5);
+
+    rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::print_report(stats);
+
     return 0;
 }

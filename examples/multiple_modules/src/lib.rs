@@ -1,14 +1,6 @@
-pub struct MainType(pub i64);
-
-impl MainType {
-    pub fn do_something(&self, _v: std::option::Option<&i32>) {
-        println!("do_something called!");
-    }
-}
-
-#[rustfmt::skip]
-#[path = "main.zng.rs"]
-mod main_generated;
-#[rustfmt::skip]
-#[path = "module.zng.rs"]
-mod module_generated;
+// Re-export everything from child crates to ensure symbols are included in the staticlib
+#![allow(unused)]
+pub use aggregation_crate::*;
+pub use packet_crate::*;
+pub use processor_crate::*;
+pub use receiver_crate::*;

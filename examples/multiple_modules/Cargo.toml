@@ -10,3 +10,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
+packet_crate = { path = "packet" }
+receiver_crate = { path = "receiver" }
+aggregation_crate = { path = "aggregation" }
+processor_crate = { path = "processor" }

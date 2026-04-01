@@ -1,0 +1,8 @@
+import extern "receiver.zng" as receiver;
+import extern "aggregation.zng" as aggregation;
+
+type crate::Processor {
+    #layout(size = 0, align = 1);
+    fn new() -> crate::Processor;
+    fn run(&self, &mut receiver@crate::Receiver, &mut aggregation@crate::StatsAccumulator, u32);
+}

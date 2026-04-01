@@ -3,6 +3,13 @@
 version = 4
 
 [[package]]
+name = "aggregation_crate"
+version = "0.1.0"
+dependencies = [
+ "packet_crate",
+]
+
+[[package]]
 name = "aho-corasick"
 version = "1.1.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -444,6 +451,12 @@ version = "0.8.0"
 [[package]]
 name = "example-multiple-modules"
 version = "0.8.0"
+dependencies = [
+ "aggregation_crate",
+ "packet_crate",
+ "processor_crate",
+ "receiver_crate",
+]
 
 [[package]]
 name = "example-multiple-zngur-files"
@@ -768,6 +781,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
+name = "packet_crate"
+version = "0.1.0"
+
+[[package]]
 name = "plain"
 version = "0.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -808,6 +825,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
+]
+
+[[package]]
+name = "processor_crate"
+version = "0.1.0"
+dependencies = [
+ "aggregation_crate",
+ "receiver_crate",
 ]
 
 [[package]]
@@ -857,6 +882,13 @@ checksum = "22e18b0f0062d30d4230b2e85ff77fdfe4326feb054b9783a3460d8435c8ab91"
 dependencies = [
  "crossbeam-deque",
  "crossbeam-utils",
+]
+
+[[package]]
+name = "receiver_crate"
+version = "0.1.0"
+dependencies = [
+ "packet_crate",
 ]
 
 [[package]]

@@ -1,0 +1,19 @@
+import extern "packet.zng" as packet;
+
+#cpp_additional_includes "
+#include <stats.h>
+"
+
+type crate::StatsAccumulator {
+    #layout(size = 16, align = 8);
+    constructor(ZngurCppOpaqueOwnedObject);
+    #cpp_value "0" "::cpp_stats::StatsAccumulator";
+}
+
+extern "C++" {
+    impl crate::StatsAccumulator {
+        fn create() -> crate::StatsAccumulator;
+        fn add_packet(&mut self, packet@crate::Packet);
+        fn print_report(&self);
+    }
+}

@@ -1,0 +1,7 @@
+import extern "packet.zng" as packet;
+
+type crate::Receiver {
+    #layout(size = 8, align = 8); // count: u64
+    fn new() -> crate::Receiver;
+    fn next_packet(&mut self) -> packet@crate::Packet;
+}

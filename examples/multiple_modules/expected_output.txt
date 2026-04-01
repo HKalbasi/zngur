@@ -1,1 +1,5 @@
-Created Vec!
+Starting LatencyAnalysis simulation...
+LatencyAnalysis Report:
+Total Packets: 5
+Total Bytes: 150
+Average Latency: 100
