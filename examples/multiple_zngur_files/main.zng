@@ -1,6 +1,3 @@
-#convert_panic_to_exception
-#cpp_namespace m1
-
 mod ::std {
     type option::Option<&i32> {
         #layout(size = 8, align = 8);

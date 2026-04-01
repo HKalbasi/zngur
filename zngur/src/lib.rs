@@ -146,7 +146,8 @@ impl Zngur {
             file.0.cpp_namespace = Some(cpp_namespace);
         }
 
-        if let Some(mangling_base) = self.mangling_base {
+        if let Some(mangling_base) = self.mangling_base.or_else(|| file.0.cpp_namespace.clone()) {
+            // println!("Mangling: {mangling_base}");
             file.0.mangling_base = mangling_base;
         }
         let (rust, h, cpp) = file.render(self.zng_header_in_place);

@@ -1,0 +1,4 @@
+#convert_panic_to_exception
+#cpp_namespace m1
+
+import "./main.zng";
