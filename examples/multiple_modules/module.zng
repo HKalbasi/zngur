@@ -1,7 +1,0 @@
-#cpp_namespace second_mod
-mod ::std {
-    type option::Option<&i32> {
-        #layout(size = 8, align = 8);
-        fn unwrap(self) -> &i32;
-    }
-}

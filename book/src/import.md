@@ -107,3 +107,88 @@ allowing for better organization of the zngur specification.
 Notice that `iterators.zng` is able to "reopen" the `::std::vec::Vec<i32>` specification
 and extend it with a single function, `into_iter`.
 It does not need to respecify the `#layout` because that is already declared in `core_types.zng`.
+
+# Extern Import
+
+On top of `zngur`s `import` syntax which enables better file organization,
+there's a different flavour of imports that enables zngur bridges to be split
+across multiple compilation units (i.e. Rust crate and C++ static libraries).
+
+## Syntax
+
+```zng
+import extern "./path/to/module.zng" as imported_module;
+```
+
+When you have to refer to a type defined in a separate module, you can prefix
+the type with `import_module@`.
+
+## Path Resolution
+
+Path resolution is identical to regular `import`s.
+
+## Behavior
+
+The direct implication of an `extern` import is that the generated `.h` will add
+an `#include "./path/to/module.zng.h"` (A follow up feature may allow this path
+to be defined per module).
+
+When the `zngur` generator notices an extern module prefix on a path (i.e.
+`module@`), it will use it to deduce the C++ metadata needed to refer to this
+type (e.g. the C++ namespace where the type is defined)
+
+## Example
+
+**main.zng:**
+
+```zng
+import extern "./core_types.zng" as core;
+
+// May only appear in the top-level file per module. Both these files are top level modules.
+#convert_panic_to_exception
+
+type MyApp {
+    #layout(size = 8, align = 8);
+
+    fn run(&self) -> core@::std::option::Option<i32>;
+}
+```
+
+**core_types.zng:**
+
+```zng
+// May only appear in the top-level file per module. Both these files are top level modules.
+#convert_panic_to_exception
+
+mod ::std {
+    type option::Option<i32> {
+        #layout(size = 8, align = 4);
+        wellknown_traits(Copy);
+
+        constructor None;
+        constructor Some(i32);
+
+        fn unwrap(self) -> i32;
+    }
+}
+```
+
+## Note: Build System Integration
+
+This feature requires significantly more involvement with the build system
+but it's necessary to scale to larger projects that span multiple crates, C++
+compilation units, and binaries. To use this feature, your build system should
+be able to manage the dependencies between the two modules and guarantee that
+the build system will generate the files required in the right place.
+
+In particular
+
+- Each module should generate its header file in the same directory as the top
+  level `.zng` and with the exact same name as the `.zng` with a `.h` extension
+  added (e.g. `a/b/c.zng` -> `a/b/c.zng.h`)
+- Exactly one Rust static library must be generated and linked to the final
+  binary and it should contain all the symbols needed by all the transitive zngur
+  bridges
+
+Some build systems may be able to automate this more easily than others but any specific
+build system integration is outside the scope of this chapter.

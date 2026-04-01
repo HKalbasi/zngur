@@ -1,20 +1,23 @@
 #include <iostream>
-#include <packet.zng.h>
-#include <receiver.zng.h>
+
 #include <aggregation.zng.h>
+#include <packet.zng.h>
 #include <processor.zng.h>
+#include <receiver.zng.h>
 
 int main() {
-    // Using default rust::crate namespace
-    auto processor = rust::crate::Processor::new_();
-    auto receiver = rust::crate::Receiver::new_();
-    auto stats = rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::create();
+  // Using default rust::crate namespace
+  auto processor = rust::crate::Processor::new_();
+  auto receiver = rust::crate::Receiver::new_();
+  auto stats =
+      rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::create();
 
-    std::cout << "Starting LatencyAnalysis simulation..." << std::endl;
+  std::cout << "Starting LatencyAnalysis simulation..." << std::endl;
 
-    processor.run(receiver, stats, 5);
+  processor.run(receiver, stats, 5);
 
-    rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::print_report(stats);
+  rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::print_report(
+      stats);
 
-    return 0;
+  return 0;
 }
