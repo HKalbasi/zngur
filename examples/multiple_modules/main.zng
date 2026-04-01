@@ -1,5 +1,5 @@
 #cpp_namespace main_ns
-use "module.zng" as mod_alias;
+import extern "module.zng" as mod_alias;
 
 mod ::std {
     mod vec {
@@ -12,5 +12,5 @@ mod ::std {
 
 type crate::MainType {
     #layout(size = 8, align = 8);
-    fn do_something(&self, mod_alias.::std::option::Option<&i32>);
+    fn do_something(&self, mod_alias@::std::option::Option<&i32>);
 }

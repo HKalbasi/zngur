@@ -1247,6 +1247,7 @@ enum Token<'a> {
     Underscore,
     Dot,
     Bang,
+    At,
     KwAs,
     KwAsync,
     KwDyn,
@@ -1323,6 +1324,7 @@ impl Display for Token<'_> {
             Token::Underscore => write!(f, "_"),
             Token::Dot => write!(f, "."),
             Token::Bang => write!(f, "!"),
+            Token::At => write!(f, "@"),
             Token::KwAs => write!(f, "as"),
             Token::KwAsync => write!(f, "async"),
             Token::KwDyn => write!(f, "dyn"),
@@ -1376,6 +1378,7 @@ fn lexer<'src>()
             just("_").to(Token::Underscore),
             just(".").to(Token::Dot),
             just("!").to(Token::Bang),
+            just("@").to(Token::At),
         ]),
         text::ident().map(Token::ident_or_kw),
         text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
@@ -1946,7 +1949,8 @@ fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngPars
 
 fn module_import_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
-    just(Token::KwUse)
+    just(Token::KwImport)
+        .ignore_then(just(Token::KwExtern))
         .ignore_then(select! { Token::Str(path) => path })
         .then_ignore(just(Token::KwAs))
         .then(select! { Token::Ident(alias) => alias })
@@ -1972,7 +1976,7 @@ fn path_with_alias<'a>()
     let alias_prefix = select! {
         Token::Ident(c) => c,
     }
-    .then_ignore(just(Token::Dot))
+    .then_ignore(just(Token::At))
     .or_not();
 
     alias_prefix
@@ -2008,7 +2012,7 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
     let alias_prefix = select! {
         Token::Ident(c) => c,
     }
-    .then_ignore(just(Token::Dot))
+    .then_ignore(just(Token::At))
     .or_not();
 
     alias_prefix
