@@ -352,11 +352,7 @@ pub struct CppFile {
 }
 
 impl CppFile {
-    fn emit_h_file(
-        &self,
-        state: &mut State,
-        ctx: &crate::rust::GeneratorContext,
-    ) -> std::fmt::Result {
+    fn emit_h_file(&self, state: &mut State, namespace: &str) -> std::fmt::Result {
         let template = CppHeaderTemplate {
             panic_to_exception: self.panic_to_exception,
             additional_includes: &self.additional_includes,
@@ -367,7 +363,7 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
             zng_header_in_place: self.zng_header_in_place,
-            ctx,
+            namespace,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())
@@ -389,7 +385,7 @@ impl CppFile {
         Ok(())
     }
 
-    pub fn render(self, ctx: &crate::rust::GeneratorContext) -> (String, Option<String>) {
+    pub fn render(self, namespace: &str) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
@@ -398,7 +394,7 @@ impl CppFile {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
         };
-        self.emit_h_file(&mut h_file, ctx).unwrap();
+        self.emit_h_file(&mut h_file, namespace).unwrap();
         let mut is_cpp_needed = false;
         self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
             .unwrap();

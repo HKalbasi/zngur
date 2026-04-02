@@ -210,6 +210,7 @@ impl Zngur {
 pub struct ZngurHdr {
     panic_to_exception: bool,
     zng_header_file: Option<PathBuf>,
+    cpp_namespace: Option<String>,
 }
 
 impl ZngurHdr {
@@ -217,6 +218,7 @@ impl ZngurHdr {
         Self {
             panic_to_exception: false,
             zng_header_file: None,
+            cpp_namespace: None,
         }
     }
 
@@ -238,9 +240,15 @@ impl ZngurHdr {
         self
     }
 
+    pub fn with_cpp_namespace(mut self, cpp_namespace: &str) -> Self {
+        self.cpp_namespace = Some(cpp_namespace.to_owned());
+        self
+    }
+
     pub fn generate(self) {
         let generator = ZngHeaderGenerator {
             panic_to_exception: self.panic_to_exception,
+            cpp_namespace: self.cpp_namespace.unwrap_or_else(|| "rust".to_owned()),
         };
 
         let out_h = self

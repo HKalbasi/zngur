@@ -161,7 +161,6 @@ pub struct ModuleAlias(pub String);
 pub struct ModuleImport {
     pub alias: ModuleAlias,
     pub path: std::path::PathBuf,
-    pub cpp_namespace: Option<String>,
 }
 
 #[derive(Debug, Default)]

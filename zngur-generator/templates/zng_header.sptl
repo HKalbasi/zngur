@@ -14,7 +14,7 @@
 #include <type_traits>
 
 <% if self.panic_to_exception { %>
-  namespace rust {
+  namespace <%- self.cpp_namespace %> {
       class Panic {};
   }
   inline thread_local bool __zngur_rust_panicked_flag(false);
@@ -51,9 +51,11 @@
   ZNGUR_FFI_EXPORT_VAR bool (* const __keep_zngur_read_and_reset_panic)() = &__zngur_read_and_reset_rust_panic;
 <% } %>
 
-#define zngur_dbg(x) (::rust::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+#ifndef zngur_dbg
+#define zngur_dbg(x) (::<%- self.cpp_namespace %>::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+#endif // zngur_dbg
 
-namespace rust {
+namespace <%- self.cpp_namespace %> {
 
   template<typename T>
   struct __zngur_internal {
@@ -86,15 +88,15 @@ namespace rust {
 
   template<typename T>
   inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
-    memcpy(dst, ::rust::__zngur_internal_data_ptr(t), ::rust::__zngur_internal_size_of<T>());
-    ::rust::__zngur_internal_assume_deinit(t);
+    memcpy(dst, ::<%- self.cpp_namespace %>::__zngur_internal_data_ptr(t), ::<%- self.cpp_namespace %>::__zngur_internal_size_of<T>());
+    ::<%- self.cpp_namespace %>::__zngur_internal_assume_deinit(t);
   }
 
   template<typename T>
   inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
     T t;
-    ::rust::__zngur_internal_assume_init(t);
-    memcpy(::rust::__zngur_internal_data_ptr(t), src, ::rust::__zngur_internal_size_of<T>());
+    ::<%- self.cpp_namespace %>::__zngur_internal_assume_init(t);
+    memcpy(::<%- self.cpp_namespace %>::__zngur_internal_data_ptr(t), src, ::<%- self.cpp_namespace %>::__zngur_internal_size_of<T>());
     return t;
   }
 
@@ -227,17 +229,17 @@ namespace rust {
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldOwned {
-    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
   };
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldRef {
-    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
   };
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldRefMut {
-    inline operator T() const noexcept { return *::rust::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
   };
 
 #if __cplusplus >= 201703L
@@ -334,130 +336,130 @@ namespace rust {
   using Unit = Tuple<>;
 
   template<>
-  struct __zngur_internal< ::rust::Unit > {
-    static inline uint8_t* data_ptr(const ::rust::Unit& t) noexcept {
+  struct __zngur_internal< ::<%- self.cpp_namespace %>::Unit > {
+    static inline uint8_t* data_ptr(const ::<%- self.cpp_namespace %>::Unit& t) noexcept {
         return const_cast<uint8_t*>(t.__zngur_data.data());
     }
-    static inline void check_init(const ::rust::Unit&) noexcept {}
-    static inline void assume_init(::rust::Unit&) noexcept {}
-    static inline void assume_deinit(::rust::Unit&) noexcept {}
+    static inline void check_init(const ::<%- self.cpp_namespace %>::Unit&) noexcept {}
+    static inline void assume_init(::<%- self.cpp_namespace %>::Unit&) noexcept {}
+    static inline void assume_deinit(::<%- self.cpp_namespace %>::Unit&) noexcept {}
     static inline size_t size_of() noexcept { return 0; }
   };
 
   template<>
-  struct RefMut< ::rust::Unit > {
+  struct RefMut< ::<%- self.cpp_namespace %>::Unit > {
   public:
     RefMut() { __zngur_data = 0; }
     union { size_t __zngur_data; };
-    RefMut(const ::rust::Unit& t) {
+    RefMut(const ::<%- self.cpp_namespace %>::Unit& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldOwned< ::rust::Unit, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldOwned< ::rust::Unit, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldRefMut< ::rust::Unit, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldRefMut< ::rust::Unit, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
   };
 
   template<>
-  struct __zngur_internal< RefMut < ::rust::Unit > > {
-    static inline uint8_t* data_ptr(const RefMut< ::rust::Unit >& t) noexcept {
+  struct __zngur_internal< RefMut < ::<%- self.cpp_namespace %>::Unit > > {
+    static inline uint8_t* data_ptr(const RefMut< ::<%- self.cpp_namespace %>::Unit >& t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
     }
-    static inline void assume_init(RefMut< ::rust::Unit >&) noexcept {}
-    static inline void check_init(const RefMut< ::rust::Unit >&) noexcept {}
-    static inline void assume_deinit(RefMut< ::rust::Unit >&) noexcept {}
+    static inline void assume_init(RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void check_init(const RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void assume_deinit(RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct Ref< ::rust::Unit > {
+  struct Ref< ::<%- self.cpp_namespace %>::Unit > {
   public:
     Ref() { __zngur_data = 0; }
     union { size_t __zngur_data; };
-    Ref(const ::rust::Unit& t) {
+    Ref(const ::<%- self.cpp_namespace %>::Unit& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
-    Ref(RefMut< ::rust::Unit > rm) { __zngur_data = rm.__zngur_data; }
+    Ref(RefMut< ::<%- self.cpp_namespace %>::Unit > rm) { __zngur_data = rm.__zngur_data; }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldOwned< ::rust::Unit, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldOwned< ::rust::Unit, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRef< ::rust::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRef< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRef< ::rust::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRef< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRefMut< ::rust::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRefMut< ::rust::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
   };
 
   template<>
-  struct __zngur_internal< Ref < ::rust::Unit > > {
-    static inline uint8_t* data_ptr(const Ref < ::rust::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(Ref < ::rust::Unit >&) noexcept {}
-    static inline void check_init(const Ref < ::rust::Unit >&) noexcept {}
-    static inline void assume_deinit(Ref < ::rust::Unit >&) noexcept {}
+  struct __zngur_internal< Ref < ::<%- self.cpp_namespace %>::Unit > > {
+    static inline uint8_t* data_ptr(const Ref < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void check_init(const Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void assume_deinit(Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct __zngur_internal< Raw < ::rust::Unit > > {
-    static inline uint8_t* data_ptr(const Raw < ::rust::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(Raw < ::rust::Unit >&) noexcept {}
-    static inline void check_init(const Raw < ::rust::Unit >&) noexcept {}
-    static inline void assume_deinit(Raw < ::rust::Unit >&) noexcept {}
+  struct __zngur_internal< Raw < ::<%- self.cpp_namespace %>::Unit > > {
+    static inline uint8_t* data_ptr(const Raw < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void check_init(const Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void assume_deinit(Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct __zngur_internal< RawMut < ::rust::Unit > > {
-    static inline uint8_t* data_ptr(const RawMut < ::rust::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(RawMut < ::rust::Unit >&) noexcept {}
-    static inline void check_init(const RawMut < ::rust::Unit >&) noexcept {}
-    static inline void assume_deinit(RawMut < ::rust::Unit >&) noexcept {}
+  struct __zngur_internal< RawMut < ::<%- self.cpp_namespace %>::Unit > > {
+    static inline uint8_t* data_ptr(const RawMut < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void check_init(const RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void assume_deinit(RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
@@ -589,8 +591,8 @@ namespace rust {
 
   private:
     size_t __zngur_data;
-    friend ::rust::__zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
-    friend ::rust::ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+    friend ::<%- self.cpp_namespace %>::__zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
 
   };
 
@@ -613,8 +615,8 @@ namespace rust {
   template<typename T>
   struct ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
     static inline void print(<%- ref_kind %> < <%- nested_ref_kind %> < T > > const& t) {
-      ::rust::__zngur_internal_check_init(t);
-      ::rust::ZngurPrettyPrinter< <%- nested_ref_kind %> < T > >::print( reinterpret_cast< const <%- nested_ref_kind %> < T > &>(t.__zngur_data) );
+      ::<%- self.cpp_namespace %>::__zngur_internal_check_init(t);
+      ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< <%- nested_ref_kind %> < T > >::print( reinterpret_cast< const <%- nested_ref_kind %> < T > &>(t.__zngur_data) );
     }
   };
 
@@ -775,8 +777,8 @@ namespace rust {
 
   private:
     size_t __zngur_data;
-    friend ::rust::__zngur_internal<Ref< <%- ty %> > >;
-    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+    friend ::<%- self.cpp_namespace %>::__zngur_internal<Ref< <%- ty %> > >;
+    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< Ref< <%- ty %> > >;
 
   };
 
@@ -861,8 +863,8 @@ namespace rust {
     }
   private:
     size_t __zngur_data;
-    friend ::rust::__zngur_internal<RefMut< <%- ty %> > >;
-    friend ::rust::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+    friend ::<%- self.cpp_namespace %>::__zngur_internal<RefMut< <%- ty %> > >;
+    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< Ref< <%- ty %> > >;
   };
 
   <% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
@@ -894,6 +896,6 @@ namespace rust {
 // end builtin types
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.cpp_namespace %>
 
 #endif // __ZNG_HEADER_INTERNAL_TYPES

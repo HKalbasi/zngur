@@ -253,7 +253,6 @@ enum ParsedItem<'a> {
         path: std::path::PathBuf,
         span: Span,
     },
-    CppNamespace(String),
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedItem<'a>, NItems>),
 }
 
@@ -282,7 +281,6 @@ enum ProcessedItem<'a> {
         path: std::path::PathBuf,
         span: Span,
     },
-    CppNamespace(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -412,7 +410,6 @@ impl ProcessedItem<'_> {
                 r.imported_modules.push(ModuleImport {
                     alias: ModuleAlias(alias.to_owned()),
                     path: path.clone(),
-                    cpp_namespace: None,
                 });
             }
             ProcessedItem::Type { ty, items } => {
@@ -718,9 +715,6 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         unreachable!() // For now, CPtE also can't have conflicts.
                     }
                 }
-            }
-            ProcessedItem::CppNamespace(s) => {
-                r.cpp_namespace = Some(s);
             }
         }
     }
@@ -1047,21 +1041,6 @@ impl<'a> ParsedZngFile<'a> {
                     }
                 }
             }
-
-            for module_import in &mut zngur.imported_modules {
-                if let Ok(text) = resolver.resolve_import(dirname, &module_import.path) {
-                    if let Some(tokens) = lexer().parse(&text).into_output() {
-                        for window in tokens.as_slice().windows(3) {
-                            if let (Token::Sharp, Token::Ident("cpp_namespace"), Token::Ident(ns)) =
-                                (&window[0].0, &window[1].0, &window[2].0)
-                            {
-                                module_import.cpp_namespace = Some(ns.to_string());
-                                break;
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -1175,7 +1154,6 @@ fn process_parsed_item<'a>(
         ParsedItem::ModuleImport { alias, path, span } => {
             Ret::Processed(ProcessedItem::ModuleImport { alias, path, span })
         }
-        ParsedItem::CppNamespace(ns) => Ret::Processed(ProcessedItem::CppNamespace(ns)),
         ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
             match_
                 .eval(ctx)
@@ -1838,9 +1816,6 @@ fn additional_include_item<'a>()
             }),
             just(Token::Ident("convert_panic_to_exception"))
                 .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span())),
-            just(Token::Ident("cpp_namespace")).ignore_then(select! {
-                Token::Ident(ns) => ParsedItem::CppNamespace(ns.to_owned()),
-            }),
         )))
         .boxed()
 }

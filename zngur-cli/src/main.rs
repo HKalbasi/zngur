@@ -110,6 +110,10 @@ enum Command {
         /// be shared between all of your generated modules and leave this flag unset.
         #[arg(long = "in-place", short = 'i')]
         zng_header_in_place: bool,
+
+        /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        #[arg(long)]
+        cpp_namespace: Option<String>,
     },
     #[command(alias = "h")]
     /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
@@ -122,6 +126,10 @@ enum Command {
         /// Note that each `zng` module will need to use `#convert_panic_to_exception` in order to fully enable it.
         #[arg(long = "panic-to-exception")]
         convert_panic_to_exception: bool,
+
+        /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        #[arg(long)]
+        cpp_namespace: Option<String>,
     },
 }
 
@@ -139,6 +147,7 @@ fn main() {
             rust_features,
             load_rustc_cfg,
             zng_header_in_place,
+            cpp_namespace,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -149,6 +158,9 @@ fn main() {
                 .with_h_file(h_file)
                 .with_rs_file(rs_file)
                 .with_zng_header_in_place_as(zng_header_in_place);
+            if let Some(cpp_namespace) = cpp_namespace {
+                zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
 
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
             if load_rustc_cfg.load_cfg_from_rustc {
@@ -174,11 +186,15 @@ fn main() {
         Command::MakeZngHeader {
             path,
             convert_panic_to_exception,
+            cpp_namespace,
         } => {
-            ZngurHdr::new()
+            let mut hdr = ZngurHdr::new()
                 .with_panic_to_exception_as(convert_panic_to_exception)
-                .with_zng_header(path)
-                .generate();
+                .with_zng_header(path);
+            if let Some(cpp_namespace) = cpp_namespace {
+                hdr = hdr.with_cpp_namespace(&cpp_namespace);
+            }
+            hdr.generate();
         }
     }
 }

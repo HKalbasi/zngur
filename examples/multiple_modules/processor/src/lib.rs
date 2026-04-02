@@ -1,5 +1,5 @@
-pub use receiver_crate::Receiver;
 pub use aggregation_crate::StatsAccumulator;
+pub use receiver_crate::Receiver;
 
 pub struct Processor;
 

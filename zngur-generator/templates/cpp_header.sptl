@@ -110,7 +110,7 @@ extern "C" {
   <% } %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 <% for td in self.type_defs {
     if td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) { %>
@@ -137,7 +137,7 @@ namespace rust {
   <% } %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 // Field specializations templates 
 // (declared before types so fields instantiate the correct template)
@@ -153,7 +153,7 @@ namespace rust {
     union {
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::<%- field_kind %><
-        <%- field.ty.into_cpp(self.ctx) %>,
+        <%- field.ty.into_cpp(self.namespace) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -181,14 +181,14 @@ namespace rust {
 
 <% } /* for td in self.type_defs */ %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 <% for td in self.type_defs { %>
   <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
   <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
   <% let name = td.ty.path.name(); %>
 
-  namespace rust {
+  namespace <%- self.namespace %> {
     template<>
     struct __zngur_internal< <%- td.ty %> > {
       static inline uint8_t* data_ptr(const <%- td.ty %>& t) noexcept ;
@@ -213,7 +213,7 @@ namespace rust {
           alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> __zngur_data;
         <% for (index, field) in td.fields.iter().enumerate() { %>
           ::rust::FieldOwned<
-            <%- field.ty.into_cpp(self.ctx) %>,
+            <%- field.ty.into_cpp(self.namespace) %>,
           <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
             ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
           <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -227,7 +227,7 @@ namespace rust {
         ::uint8_t* __zngur_data;
       <% for (index, field) in td.fields.iter().enumerate() { %>
         ::rust::FieldOwned<
-          <%- field.ty.into_cpp(self.ctx) %>,
+          <%- field.ty.into_cpp(self.namespace) %>,
         <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
           ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
         <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -334,7 +334,7 @@ namespace rust {
 
       <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
         static inline <%- name %> make_box(
-          ::std::function< <%- output.into_cpp(self.ctx) %> (<%- inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ") %>) > f
+          ::std::function< <%- output.into_cpp(self.namespace) %> (<%- inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ") %>) > f
         );
       <% } Some(RustTrait::Normal{..}) => { %>
         template<typename T, typename... Args>
@@ -374,7 +374,7 @@ namespace rust {
 
 <%- td.ty.path.close_namespace() %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 <% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
   inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
@@ -434,9 +434,9 @@ namespace rust {
   <% } %>
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   template<>
   struct RefMut< <%- td.ty %> > {
@@ -451,7 +451,7 @@ namespace rust {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::FieldRefMut<
-        <%- field.ty.into_cpp(self.ctx) %>,
+        <%- field.ty.into_cpp(self.namespace) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -536,10 +536,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.ctx), inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace), inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
       <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-        <% let tr = tr.into_cpp(self.ctx); %>
+        <% let tr = tr.into_cpp(self.namespace); %>
         inline RefMut(<%- tr %>& arg);
       <% } None => { %>
       <% }
@@ -581,14 +581,14 @@ namespace rust {
     }
   };
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 // Ref specialization
 <% if td.ty.path.to_string() == "::rust::Str" { %>
     auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   template<>
   struct Ref< <%- td.ty %> > {
@@ -603,7 +603,7 @@ namespace rust {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::rust::FieldRef<
-        <%- field.ty.into_cpp(self.ctx) %>,
+        <%- field.ty.into_cpp(self.namespace) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -716,10 +716,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.ctx), inputs.iter().map(|x| x.into_cpp(self.ctx)).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace), inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
     <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-      <% let tr = tr.into_cpp(self.ctx); %>
+      <% let tr = tr.into_cpp(self.namespace); %>
       inline Ref(<%- tr %>& arg);
     <% } None => { %>
     <% }
@@ -768,7 +768,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
 
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 <% if td.ty.path.to_string() == "::rust::Str" { %>
   inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
@@ -949,7 +949,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
     <% }%>
   <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   <% for tr in &td.wellknown_traits { %>
     <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print: _ } = tr { %>
@@ -1017,7 +1017,7 @@ namespace rust {
       <% } %>
     <% } %>
   <% } %>
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 <% } %>
 
@@ -1040,7 +1040,7 @@ namespace rust {
   <%- fd.name.close_namespace() %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 namespace exported_functions {
 
 <% for func in self.exported_fn_defs { %>
@@ -1065,4 +1065,4 @@ namespace exported_functions {
   };
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>

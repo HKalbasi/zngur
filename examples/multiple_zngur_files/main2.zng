@@ -1,4 +1,3 @@
 #convert_panic_to_exception
-#cpp_namespace m2
 
 import "./main.zng";
