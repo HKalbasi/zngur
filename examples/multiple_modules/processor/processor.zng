@@ -6,3 +6,13 @@ type crate::Processor {
     fn new() -> crate::Processor;
     fn run(&self, &mut receiver@crate::Receiver, &mut aggregation@crate::StatsAccumulator, u32);
 }
+
+// This isn't necessary for the example but we want to test that specialization
+// of the same type across modules works properly (See receiver.zng)
+type ::std::option::Option<crate::Processor> {
+    #layout(size = 1, align = 1);
+
+    constructor None;
+    constructor Some(crate::Processor);
+    fn unwrap(self) -> crate::Processor;   
+}

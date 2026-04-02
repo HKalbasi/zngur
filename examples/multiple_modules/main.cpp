@@ -6,15 +6,16 @@
 #include <receiver.zng.h>
 
 int main() {
-  // Using default rust::crate namespace
-  auto processor = rust::crate::Processor::new_();
-  auto receiver = rust::crate::Receiver::new_();
+  auto processor = rust::std::option::Option<rust::crate::Processor>::Some(
+      rust::crate::Processor::new_());
+  auto receiver = rust::std::option::Option<rust::crate::Receiver>::Some(
+      rust::crate::Receiver::new_());
   auto stats =
       rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::create();
 
   std::cout << "Starting LatencyAnalysis simulation..." << std::endl;
 
-  processor.run(receiver, stats, 5);
+  processor.unwrap().run(receiver.unwrap(), stats, 5);
 
   rust::Impl<rust::crate::StatsAccumulator, rust::Inherent>::print_report(
       stats);
