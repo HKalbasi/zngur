@@ -20,7 +20,6 @@ impl IntoCpp for RustPathAndGenerics {
             path,
             generics,
             named_generics,
-            module_alias: _,
         } = self;
         let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {

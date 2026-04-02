@@ -9,10 +9,10 @@ use itertools::{Either, Itertools};
 
 use zngur_def::{
     AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
-    MergeFailure, ModuleAlias, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics,
-    RustTrait, RustType, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField,
-    ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait,
-    ZngurType, ZngurWellknownTrait,
+    MergeFailure, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait,
+    RustType, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
+    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType,
+    ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -249,7 +249,6 @@ enum ParsedItem<'a> {
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
     ModuleImport {
-        alias: String,
         path: std::path::PathBuf,
         span: Span,
     },
@@ -277,7 +276,6 @@ enum ProcessedItem<'a> {
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Import(ParsedImportPath),
     ModuleImport {
-        alias: String,
         path: std::path::PathBuf,
         span: Span,
     },
@@ -402,15 +400,8 @@ impl ProcessedItem<'_> {
                     ),
                 }
             }
-            ProcessedItem::ModuleImport {
-                alias,
-                path,
-                span: _,
-            } => {
-                r.imported_modules.push(ModuleImport {
-                    alias: ModuleAlias(alias.to_owned()),
-                    path: path.clone(),
-                });
+            ProcessedItem::ModuleImport { path, span: _ } => {
+                r.imported_modules.push(ModuleImport { path: path.clone() });
             }
             ProcessedItem::Type { ty, items } => {
                 if ty.inner == ParsedRustType::Tuple(vec![]) {
@@ -648,7 +639,6 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                             path: scope.simple_relative_path(&method.name),
                             generics: method.generics,
                             named_generics: vec![],
-                            module_alias: None,
                         },
                         inputs: method.inputs,
                         output: method.output,
@@ -789,7 +779,6 @@ struct ParsedRustPathAndGenerics<'a> {
     path: ParsedPath<'a>,
     generics: Vec<ParsedRustType<'a>>,
     named_generics: Vec<(&'a str, ParsedRustType<'a>)>,
-    module_alias: Option<&'a str>,
 }
 
 impl ParsedRustPathAndGenerics<'_> {
@@ -806,9 +795,6 @@ impl ParsedRustPathAndGenerics<'_> {
                 .into_iter()
                 .map(|(name, x)| (name.to_owned(), x.to_zngur(scope)))
                 .collect(),
-            module_alias: self
-                .module_alias
-                .map(|x| zngur_def::ModuleAlias(x.to_owned())),
         }
     }
 }
@@ -1151,8 +1137,8 @@ fn process_parsed_item<'a>(
         ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
         ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
         ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
-        ParsedItem::ModuleImport { alias, path, span } => {
-            Ret::Processed(ProcessedItem::ModuleImport { alias, path, span })
+        ParsedItem::ModuleImport { path, span } => {
+            Ret::Processed(ProcessedItem::ModuleImport { path, span })
         }
         ParsedItem::MatchOnCfg(match_) => Ret::ChildItems(
             match_
@@ -1225,7 +1211,6 @@ enum Token<'a> {
     Underscore,
     Dot,
     Bang,
-    At,
     KwAs,
     KwAsync,
     KwDyn,
@@ -1302,7 +1287,6 @@ impl Display for Token<'_> {
             Token::Underscore => write!(f, "_"),
             Token::Dot => write!(f, "."),
             Token::Bang => write!(f, "!"),
-            Token::At => write!(f, "@"),
             Token::KwAs => write!(f, "as"),
             Token::KwAsync => write!(f, "async"),
             Token::KwDyn => write!(f, "dyn"),
@@ -1356,7 +1340,6 @@ fn lexer<'src>()
             just("_").to(Token::Underscore),
             just(".").to(Token::Dot),
             just("!").to(Token::Bang),
-            just("@").to(Token::At),
         ]),
         text::ident().map(Token::ident_or_kw),
         text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
@@ -1509,17 +1492,15 @@ fn rust_path_and_generics<'a>(
     rust_type: Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>>,
 ) -> impl Parser<'a, ParserInput<'a>, ParsedRustPathAndGenerics<'a>, ZngParserExtra<'a>> + Clone {
     let generics = rust_generics(rust_type.clone());
-    path_with_alias()
+    path()
         .then(generics.clone().repeated().at_most(1).collect::<Vec<_>>())
-        .map(|(path_data, generics_list)| {
-            let (module_alias, path) = path_data;
-            let generics = generics_list.into_iter().next().unwrap_or_default();
+        .map(|x| {
+            let generics = x.1.into_iter().next().unwrap_or_default();
             let (named_generics, generics) = generics.into_iter().partition_map(|x| x);
             ParsedRustPathAndGenerics {
-                path,
+                path: x.0,
                 generics,
                 named_generics,
-                module_alias,
             }
         })
 }
@@ -1611,7 +1592,6 @@ fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserE
                         },
                         generics: vec![],
                         named_generics: vec![("Output", output)],
-                        module_alias: None,
                     }),
                     vec![],
                 )
@@ -1927,51 +1907,11 @@ fn module_import_item<'a>()
     just(Token::KwImport)
         .ignore_then(just(Token::KwExtern))
         .ignore_then(select! { Token::Str(path) => path })
-        .then_ignore(just(Token::KwAs))
-        .then(select! { Token::Ident(alias) => alias })
         .then_ignore(just(Token::Semicolon))
-        .map_with(|(path, alias), extra| ParsedItem::ModuleImport {
+        .map_with(|path, extra| ParsedItem::ModuleImport {
             path: std::path::PathBuf::from(path),
-            alias: alias.to_owned(),
             span: extra.span(),
         })
-        .boxed()
-}
-
-fn path_with_alias<'a>()
--> impl Parser<'a, ParserInput<'a>, (Option<&'a str>, ParsedPath<'a>), ZngParserExtra<'a>> + Clone {
-    let start = choice((
-        just(Token::ColonColon).to(ParsedPathStart::Absolute),
-        just(Token::KwCrate)
-            .then(just(Token::ColonColon))
-            .to(ParsedPathStart::Crate),
-        empty().to(ParsedPathStart::Relative),
-    ));
-
-    let alias_prefix = select! {
-        Token::Ident(c) => c,
-    }
-    .then_ignore(just(Token::At))
-    .or_not();
-
-    alias_prefix
-        .then(
-            start
-                .then(
-                    (select! {
-                        Token::Ident(c) => c,
-                    })
-                    .separated_by(just(Token::ColonColon))
-                    .at_least(1)
-                    .collect::<Vec<_>>(),
-                )
-                .or(just(Token::KwCrate).to((ParsedPathStart::Crate, vec![])))
-                .map_with(|(start, segments), extra| ParsedPath {
-                    start,
-                    segments,
-                    span: extra.span(),
-                }),
-        )
         .boxed()
 }
 
@@ -1984,14 +1924,7 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
         empty().to(ParsedPathStart::Relative),
     ));
 
-    let alias_prefix = select! {
-        Token::Ident(c) => c,
-    }
-    .then_ignore(just(Token::At))
-    .or_not();
-
-    alias_prefix
-        .ignore_then(start)
+    start
         .then(
             (select! {
                 Token::Ident(c) => c,

@@ -49,7 +49,12 @@ impl CppPath {
         if self.0.len() == 1 && self.0[0].ends_with("_t") {
             return false;
         }
-        self.0 != ["rust", "Unit"] && self.0 != ["rust", "Ref"] && self.0 != ["rust", "RefMut"]
+        // Top level namespace and type...
+        if self.0.len() == 2 {
+            let ty = &self.0[1];
+            return ty != "Unit" && ty != "Ref" && ty != "RefMut";
+        }
+        true
     }
 
     pub(crate) fn from_rust_path(path: &[String], ns: &str) -> CppPath {

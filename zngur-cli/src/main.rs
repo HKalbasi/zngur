@@ -112,6 +112,10 @@ enum Command {
         zng_header_in_place: bool,
 
         /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        ///
+        /// You may use this to customize overarching namespace for all the
+        /// generated types in C++, but if your project spans multiple .zng modules, you
+        /// must use a shared namespace
         #[arg(long)]
         cpp_namespace: Option<String>,
     },
@@ -128,6 +132,10 @@ enum Command {
         convert_panic_to_exception: bool,
 
         /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        ///
+        /// You may use this to customize overarching namespace for all the
+        /// generated types in C++, but if your project spans multiple .zng modules, you
+        /// must use a shared namespace
         #[arg(long)]
         cpp_namespace: Option<String>,
     },

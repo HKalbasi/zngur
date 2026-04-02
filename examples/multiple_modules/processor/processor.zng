@@ -1,10 +1,10 @@
-import extern "receiver.zng" as receiver;
-import extern "aggregation.zng" as aggregation;
+import extern "receiver.zng";
+import extern "aggregation.zng";
 
 type crate::Processor {
     #layout(size = 0, align = 1);
     fn new() -> crate::Processor;
-    fn run(&self, &mut receiver@crate::Receiver, &mut aggregation@crate::StatsAccumulator, u32);
+    fn run(&self, &mut crate::Receiver, &mut crate::StatsAccumulator, u32);
 }
 
 // This isn't necessary for the example but we want to test that specialization

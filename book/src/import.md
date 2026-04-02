@@ -117,11 +117,8 @@ across multiple compilation units (i.e. Rust crate and C++ static libraries).
 ## Syntax
 
 ```zng
-import extern "./path/to/module.zng" as imported_module;
+import extern "./path/to/module.zng";
 ```
-
-When you have to refer to a type defined in a separate module, you can prefix
-the type with `import_module@`.
 
 ## Path Resolution
 
@@ -131,18 +128,15 @@ Path resolution is identical to regular `import`s.
 
 The direct implication of an `extern` import is that the generated `.h` will add
 an `#include "./path/to/module.zng.h"` (A follow up feature may allow this path
-to be defined per module).
-
-When the `zngur` generator notices an extern module prefix on a path (i.e.
-`module@`), it will use it to deduce the C++ metadata needed to refer to this
-type (e.g. the C++ namespace where the type is defined)
+to be defined per module). This enables you to use the generated types from the
+external module without regenerating them in this zngur module.
 
 ## Example
 
 **main.zng:**
 
 ```zng
-import extern "./core_types.zng" as core;
+import extern "./core_types.zng";
 
 // May only appear in the top-level file per module. Both these files are top level modules.
 #convert_panic_to_exception
@@ -150,7 +144,7 @@ import extern "./core_types.zng" as core;
 type MyApp {
     #layout(size = 8, align = 8);
 
-    fn run(&self) -> core@::std::option::Option<i32>;
+    fn run(&self) -> ::std::option::Option<i32>;
 }
 ```
 
@@ -179,7 +173,7 @@ This feature requires significantly more involvement with the build system
 but it's necessary to scale to larger projects that span multiple crates, C++
 compilation units, and binaries. To use this feature, your build system should
 be able to manage the dependencies between the two modules and guarantee that
-the build system will generate the files required in the right place.
+it will generate the files required in the right place.
 
 In particular
 
@@ -189,6 +183,8 @@ In particular
 - Exactly one Rust static library must be generated and linked to the final
   binary and it should contain all the symbols needed by all the transitive zngur
   bridges
+- Every generated header and `zngur.h` header must use the same top level namespace.
+  can leave the default "rust" namespace or set your own
 
 Some build systems may be able to automate this more easily than others but any specific
 build system integration is outside the scope of this chapter.

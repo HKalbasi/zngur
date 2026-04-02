@@ -1,9 +1,9 @@
-import extern "packet.zng" as packet;
+import extern "packet.zng";
 
 type crate::Receiver {
     #layout(size = 8, align = 8); // count: u64
     fn new() -> crate::Receiver;
-    fn next_packet(&mut self) -> packet@crate::Packet;
+    fn next_packet(&mut self) -> crate::Packet;
 }
 
 // This isn't necessary for the example but we want to test that specialization

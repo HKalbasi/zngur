@@ -1,4 +1,4 @@
-import extern "packet.zng" as packet;
+import extern "packet.zng";
 
 #cpp_additional_includes "
 #include <stats.h>
@@ -13,7 +13,7 @@ type crate::StatsAccumulator {
 extern "C++" {
     impl crate::StatsAccumulator {
         fn create() -> crate::StatsAccumulator;
-        fn add_packet(&mut self, packet@crate::Packet);
+        fn add_packet(&mut self, crate::Packet);
         fn print_report(&self);
     }
 }
