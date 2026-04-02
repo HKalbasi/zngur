@@ -104,9 +104,13 @@ impl sailfish::runtime::Render for CppType {
 impl CppType {
     pub fn into_ref(self) -> CppType {
         CppType {
-            path: CppPath::from("rust::Ref"),
+            path: CppPath::from(&*format!("{}::Ref", self.top_level_ns())),
             generic_args: vec![self],
         }
+    }
+
+    fn top_level_ns(&self) -> &String {
+        &self.path.namespace()[0]
     }
 
     pub(crate) fn specialization_decl(&self) -> String {
@@ -369,12 +373,18 @@ impl CppFile {
         Ok(())
     }
 
-    fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
+    fn emit_cpp_file(
+        &self,
+        state: &mut State,
+        is_really_needed: &mut bool,
+        namespace: &str,
+    ) -> std::fmt::Result {
         let template = CppSourceTemplate {
             header_file_name: &self.header_file_name,
             trait_defs: &self.trait_defs,
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
+            cpp_namespace: namespace,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
 
@@ -396,7 +406,7 @@ impl CppFile {
         };
         self.emit_h_file(&mut h_file, namespace).unwrap();
         let mut is_cpp_needed = false;
-        self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
+        self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed, namespace)
             .unwrap();
         h_file.remove_no_except_in_panic();
         (h_file.text, is_cpp_needed.then_some(cpp_file.text))

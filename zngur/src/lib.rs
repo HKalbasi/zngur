@@ -141,9 +141,9 @@ impl Zngur {
             .to_string_lossy()
             .into_owned();
 
-        if let Some(cpp_namespace) = self.cpp_namespace {
+        if let Some(cpp_namespace) = &self.cpp_namespace {
             file.0.mangling_base = cpp_namespace.clone();
-            file.0.cpp_namespace = Some(cpp_namespace);
+            file.0.cpp_namespace = Some(cpp_namespace.clone());
         }
 
         if let Some(mangling_base) = self.mangling_base.or_else(|| file.0.cpp_namespace.clone()) {
@@ -198,10 +198,13 @@ impl Zngur {
                 .unwrap();
         }
         if let Some(zng_h) = self.zng_h_file_path {
-            ZngurHdr::new()
+            let mut zng = ZngurHdr::new()
                 .with_panic_to_exception_as(panic_to_exception)
-                .with_zng_header(zng_h)
-                .generate()
+                .with_zng_header(zng_h);
+            if let Some(cpp_namespace) = &self.cpp_namespace {
+                zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
+            zng.generate();
         }
     }
 }

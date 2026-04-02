@@ -43,7 +43,7 @@ impl IntoCpp for RustTrait {
                 inputs,
                 output,
             } => CppType {
-                path: CppPath::from(&*format!("rust::{name}")),
+                path: CppPath::from(&*format!("{namespace}::{name}")),
                 generic_args: inputs
                     .iter()
                     .chain(Some(&**output))
@@ -56,7 +56,7 @@ impl IntoCpp for RustTrait {
 
 impl IntoCpp for RustType {
     fn into_cpp(&self, namespace: &str) -> CppType {
-        fn for_builtin(this: &RustType) -> Option<CppType> {
+        fn for_builtin(this: &RustType, namespace: &str) -> Option<CppType> {
             match this {
                 RustType::Primitive(s) => match s {
                     PrimitiveRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
@@ -68,73 +68,73 @@ impl IntoCpp for RustType {
                     PrimitiveRustType::Bool | PrimitiveRustType::Str | PrimitiveRustType::Char => {
                         None
                     }
-                    PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
-                        Some(CppType::from("rust::ZngurCppOpaqueOwnedObject"))
-                    }
+                    PrimitiveRustType::ZngurCppOpaqueOwnedObject => Some(CppType::from(&*format!(
+                        "{namespace}::ZngurCppOpaqueOwnedObject"
+                    ))),
                 },
                 RustType::Raw(Mutability::Mut, t) => Some(CppType::from(&*format!(
                     "{}*",
-                    for_builtin(t)?.to_string().strip_prefix("::")?
+                    for_builtin(t, namespace)?.to_string().strip_prefix("::")?
                 ))),
                 RustType::Raw(Mutability::Not, t) => Some(CppType::from(&*format!(
                     "{} const*",
-                    for_builtin(t)?.to_string().strip_prefix("::")?
+                    for_builtin(t, namespace)?.to_string().strip_prefix("::")?
                 ))),
                 _ => None,
             }
         }
-        if let Some(builtin) = for_builtin(self) {
+        if let Some(builtin) = for_builtin(self, namespace) {
             return builtin;
         }
         match self {
             RustType::Primitive(s) => match s {
-                PrimitiveRustType::Bool => CppType::from("rust::Bool"),
-                PrimitiveRustType::Str => CppType::from("rust::Str"),
-                PrimitiveRustType::Char => CppType::from("rust::Char"),
+                PrimitiveRustType::Bool => CppType::from(&*format!("{namespace}::Bool")),
+                PrimitiveRustType::Str => CppType::from(&*format!("{namespace}::Str")),
+                PrimitiveRustType::Char => CppType::from(&*format!("{namespace}::Char")),
                 _ => unreachable!(),
             },
             RustType::Boxed(t) => CppType {
-                path: CppPath::from("rust::Box"),
+                path: CppPath::from(&*format!("{namespace}::Box")),
                 generic_args: vec![t.into_cpp(namespace)],
             },
             RustType::Ref(m, t) => CppType {
                 path: match m {
-                    Mutability::Mut => CppPath::from("rust::RefMut"),
-                    Mutability::Not => CppPath::from("rust::Ref"),
+                    Mutability::Mut => CppPath::from(&*format!("{}::RefMut", namespace)),
+                    Mutability::Not => CppPath::from(&*format!("{}::Ref", namespace)),
                 },
                 generic_args: vec![t.into_cpp(namespace)],
             },
             RustType::Slice(s) => CppType {
-                path: CppPath::from("rust::Slice"),
+                path: CppPath::from(&*format!("{namespace}::Slice")),
                 generic_args: vec![s.into_cpp(namespace)],
             },
             RustType::Raw(m, t) => CppType {
                 path: match m {
-                    Mutability::Mut => CppPath::from("rust::RawMut"),
-                    Mutability::Not => CppPath::from("rust::Raw"),
+                    Mutability::Mut => CppPath::from(&*format!("{namespace}::RawMut")),
+                    Mutability::Not => CppPath::from(&*format!("{namespace}::Raw")),
                 },
                 generic_args: vec![t.into_cpp(namespace)],
             },
             RustType::Adt(pg) => pg.into_cpp(namespace),
             RustType::Tuple(v) => {
                 if v.is_empty() {
-                    return CppType::from("rust::Unit");
+                    return CppType::from(&*format!("{namespace}::Unit"));
                 }
                 CppType {
-                    path: CppPath::from("rust::Tuple"),
+                    path: CppPath::from(&*format!("{namespace}::Tuple")),
                     generic_args: v.into_iter().map(|x| x.into_cpp(namespace)).collect(),
                 }
             }
             RustType::Dyn(tr, marker_bounds) => {
                 let tr_as_cpp_type = tr.into_cpp(namespace);
                 CppType {
-                    path: CppPath::from("rust::Dyn"),
+                    path: CppPath::from(&*format!("{namespace}::Dyn")),
                     generic_args: [tr_as_cpp_type]
                         .into_iter()
                         .chain(
                             marker_bounds
                                 .iter()
-                                .map(|x| CppType::from(&*format!("rust::{x}"))),
+                                .map(|x| CppType::from(&*format!("{namespace}::{x}"))),
                         )
                         .collect(),
                 }

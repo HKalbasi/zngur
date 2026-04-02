@@ -19,21 +19,21 @@ use itertools::Itertools;
 /// - splat!(items, "{el} i{n}")  // Default names: n (index), el (element)
 macro_rules! splat {
     // Closure-style with custom variable names
-    ($inputs:expr, |$n:ident, $el:ident|, $pattern:literal) => {{
+    ($inputs:expr, |$n:ident, $el:ident|, $pattern:literal $(, $format_vars:expr)* $(,)?) => {{
         use itertools::Itertools;
         $inputs
             .into_iter()
             .enumerate()
-            .map(|($n, $el)| format!($pattern))
+            .map(|($n, $el)| format!($pattern $(, $format_vars)*))
             .join(", ")
     }};
 
-    ($inputs:expr, |$n:ident, _|, $pattern:literal) => {{
+    ($inputs:expr, |$n:ident, _|, $pattern:literal, $($format_vars:expr,)* $(,)?) => {{
       use itertools::Itertools;
       $inputs
           .into_iter()
           .enumerate()
-          .map(|($n, _)| format!($pattern))
+          .map(|($n, $el)| format!($pattern $(, $format_vars)*))
           .join(", ")
   }};
 
@@ -71,9 +71,10 @@ impl<'a> CppHeaderTemplate<'a> {
             format!(
                 r#"
             if (__zngur_read_and_reset_rust_panic()) {{
-                throw ::rust::Panic{{}};
+                throw ::{}::Panic{{}};
             }}
-            "#
+            "#,
+                self.namespace
             )
         } else {
             "".to_owned()
@@ -99,13 +100,13 @@ impl ZngHeaderTemplate {
             .flat_map(|x| {
                 [
                     x.clone(),
-                    format!("::rust::Ref<{x}>"),
-                    format!("::rust::RefMut<{x}>"),
+                    format!("::{}::Ref<{x}>", &self.cpp_namespace),
+                    format!("::{}::RefMut<{x}>", &self.cpp_namespace),
                 ]
             });
         builtins
             .chain([
-                "::rust::ZngurCppOpaqueOwnedObject".to_owned(),
+                format!("::{}::ZngurCppOpaqueOwnedObject", &self.cpp_namespace),
                 "::size_t".to_owned(),
             ])
             .collect()
@@ -119,4 +120,5 @@ pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) cpp_namespace: &'a str,
 }
