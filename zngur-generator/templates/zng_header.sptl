@@ -1,4 +1,4 @@
-<%# #language:cpp %>
+{# #language:cpp #}
 
 #ifndef __ZNG_HEADER_INTERNAL_TYPES
 #define __ZNG_HEADER_INTERNAL_TYPES
@@ -13,8 +13,8 @@
 #include <math.h>
 #include <type_traits>
 
-<% if self.panic_to_exception { %>
-  namespace <%- self.cpp_namespace %> {
+{% if self.panic_to_exception %}
+  namespace {{ self.cpp_namespace }} {
       class Panic {};
   }
   inline thread_local bool __zngur_rust_panicked_flag(false);
@@ -49,13 +49,13 @@
   // function pointers.
   ZNGUR_FFI_EXPORT_VAR void (* const __keep_zngur_mark_panicked)() = &__zngur_mark_panicked;
   ZNGUR_FFI_EXPORT_VAR bool (* const __keep_zngur_read_and_reset_panic)() = &__zngur_read_and_reset_rust_panic;
-<% } %>
+{% endif %}
 
 #ifndef zngur_dbg
-#define zngur_dbg(x) (::<%- self.cpp_namespace %>::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
+#define zngur_dbg(x) (::{{ self.cpp_namespace }}::zngur_dbg_impl(__FILE__, __LINE__, #x, x))
 #endif // zngur_dbg
 
-namespace <%- self.cpp_namespace %> {
+namespace {{ self.cpp_namespace }} {
 
   template<typename T>
   struct __zngur_internal {
@@ -88,15 +88,15 @@ namespace <%- self.cpp_namespace %> {
 
   template<typename T>
   inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
-    memcpy(dst, ::<%- self.cpp_namespace %>::__zngur_internal_data_ptr(t), ::<%- self.cpp_namespace %>::__zngur_internal_size_of<T>());
-    ::<%- self.cpp_namespace %>::__zngur_internal_assume_deinit(t);
+    memcpy(dst, ::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
+    ::{{ self.cpp_namespace }}::__zngur_internal_assume_deinit(t);
   }
 
   template<typename T>
   inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
     T t;
-    ::<%- self.cpp_namespace %>::__zngur_internal_assume_init(t);
-    memcpy(::<%- self.cpp_namespace %>::__zngur_internal_data_ptr(t), src, ::<%- self.cpp_namespace %>::__zngur_internal_size_of<T>());
+    ::{{ self.cpp_namespace }}::__zngur_internal_assume_init(t);
+    memcpy(::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), src, ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
     return t;
   }
 
@@ -229,17 +229,17 @@ namespace <%- self.cpp_namespace %> {
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldOwned {
-    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::{{ self.cpp_namespace }}::Ref<T>(*this); }
   };
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldRef {
-    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::{{ self.cpp_namespace }}::Ref<T>(*this); }
   };
 
   template<typename T, typename Offset, typename... Offsets>
   struct FieldRefMut {
-    inline operator T() const noexcept { return *::<%- self.cpp_namespace %>::Ref<T>(*this); }
+    inline operator T() const noexcept { return *::{{ self.cpp_namespace }}::Ref<T>(*this); }
   };
 
 #if __cplusplus >= 201703L
@@ -336,130 +336,130 @@ namespace <%- self.cpp_namespace %> {
   using Unit = Tuple<>;
 
   template<>
-  struct __zngur_internal< ::<%- self.cpp_namespace %>::Unit > {
-    static inline uint8_t* data_ptr(const ::<%- self.cpp_namespace %>::Unit& t) noexcept {
+  struct __zngur_internal< ::{{ self.cpp_namespace }}::Unit > {
+    static inline uint8_t* data_ptr(const ::{{ self.cpp_namespace }}::Unit& t) noexcept {
         return const_cast<uint8_t*>(t.__zngur_data.data());
     }
-    static inline void check_init(const ::<%- self.cpp_namespace %>::Unit&) noexcept {}
-    static inline void assume_init(::<%- self.cpp_namespace %>::Unit&) noexcept {}
-    static inline void assume_deinit(::<%- self.cpp_namespace %>::Unit&) noexcept {}
+    static inline void check_init(const ::{{ self.cpp_namespace }}::Unit&) noexcept {}
+    static inline void assume_init(::{{ self.cpp_namespace }}::Unit&) noexcept {}
+    static inline void assume_deinit(::{{ self.cpp_namespace }}::Unit&) noexcept {}
     static inline size_t size_of() noexcept { return 0; }
   };
 
   template<>
-  struct RefMut< ::<%- self.cpp_namespace %>::Unit > {
+  struct RefMut< ::{{ self.cpp_namespace }}::Unit > {
   public:
     RefMut() { __zngur_data = 0; }
     union { size_t __zngur_data; };
-    RefMut(const ::<%- self.cpp_namespace %>::Unit& t) {
+    RefMut(const ::{{ self.cpp_namespace }}::Unit& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    RefMut(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
   };
 
   template<>
-  struct __zngur_internal< RefMut < ::<%- self.cpp_namespace %>::Unit > > {
-    static inline uint8_t* data_ptr(const RefMut< ::<%- self.cpp_namespace %>::Unit >& t) noexcept {
+  struct __zngur_internal< RefMut < ::{{ self.cpp_namespace }}::Unit > > {
+    static inline uint8_t* data_ptr(const RefMut< ::{{ self.cpp_namespace }}::Unit >& t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
     }
-    static inline void assume_init(RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void check_init(const RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void assume_deinit(RefMut< ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+    static inline void assume_init(RefMut< ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void check_init(const RefMut< ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void assume_deinit(RefMut< ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct Ref< ::<%- self.cpp_namespace %>::Unit > {
+  struct Ref< ::{{ self.cpp_namespace }}::Unit > {
   public:
     Ref() { __zngur_data = 0; }
     union { size_t __zngur_data; };
-    Ref(const ::<%- self.cpp_namespace %>::Unit& t) {
+    Ref(const ::{{ self.cpp_namespace }}::Unit& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
-    Ref(RefMut< ::<%- self.cpp_namespace %>::Unit > rm) { __zngur_data = rm.__zngur_data; }
+    Ref(RefMut< ::{{ self.cpp_namespace }}::Unit > rm) { __zngur_data = rm.__zngur_data; }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::is_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldOwned< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets... >& f) {
         constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         if (heap_allocated) { __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset; }
         else { __zngur_data = reinterpret_cast<size_t>(&f) + offset; }
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRef< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRef< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRef< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRef< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
     template <typename Offset, typename... Offsets, typename ::std::enable_if<!zngur_detail::all_static_offset<Offset, Offsets...>::value, bool>::type = true>
-    Ref(const FieldRefMut< ::<%- self.cpp_namespace %>::Unit, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< ::{{ self.cpp_namespace }}::Unit, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
   };
 
   template<>
-  struct __zngur_internal< Ref < ::<%- self.cpp_namespace %>::Unit > > {
-    static inline uint8_t* data_ptr(const Ref < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void check_init(const Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void assume_deinit(Ref < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+  struct __zngur_internal< Ref < ::{{ self.cpp_namespace }}::Unit > > {
+    static inline uint8_t* data_ptr(const Ref < ::{{ self.cpp_namespace }}::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(Ref < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void check_init(const Ref < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void assume_deinit(Ref < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct __zngur_internal< Raw < ::<%- self.cpp_namespace %>::Unit > > {
-    static inline uint8_t* data_ptr(const Raw < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void check_init(const Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void assume_deinit(Raw < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+  struct __zngur_internal< Raw < ::{{ self.cpp_namespace }}::Unit > > {
+    static inline uint8_t* data_ptr(const Raw < ::{{ self.cpp_namespace }}::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(Raw < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void check_init(const Raw < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void assume_deinit(Raw < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
   template<>
-  struct __zngur_internal< RawMut < ::<%- self.cpp_namespace %>::Unit > > {
-    static inline uint8_t* data_ptr(const RawMut < ::<%- self.cpp_namespace %>::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
-    static inline void assume_init(RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void check_init(const RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
-    static inline void assume_deinit(RawMut < ::<%- self.cpp_namespace %>::Unit >&) noexcept {}
+  struct __zngur_internal< RawMut < ::{{ self.cpp_namespace }}::Unit > > {
+    static inline uint8_t* data_ptr(const RawMut < ::{{ self.cpp_namespace }}::Unit >& t) noexcept { return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data)); }
+    static inline void assume_init(RawMut < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void check_init(const RawMut < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
+    static inline void assume_deinit(RawMut < ::{{ self.cpp_namespace }}::Unit >&) noexcept {}
     static inline size_t size_of() noexcept { return 8; }
   };
 
@@ -479,16 +479,16 @@ namespace <%- self.cpp_namespace %> {
   }
 
   // specializations for Refs of Refs
-<% for ref_kind in ["Ref",  "RefMut"] { %>
-  <% for nested_ref_kind in ["Ref", "RefMut"] { %>
+{% for ref_kind in ["Ref",  "RefMut"] %}
+  {% for nested_ref_kind in ["Ref", "RefMut"] %}
 
   template<typename T>
-  struct <%- ref_kind %> < <%- nested_ref_kind %> < T > > {
-    <%- ref_kind %>() {
+  struct {{ ref_kind }} < {{ nested_ref_kind }} < T > > {
+    {{ ref_kind }}() {
       __zngur_data = 0;
     }
 
-    <%- ref_kind %>(const <%- nested_ref_kind %> < T >& t) {
+    {{ ref_kind }}(const {{ nested_ref_kind }} < T >& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
     
@@ -500,7 +500,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, Offset, Offsets... >& f) {
+    {{ ref_kind }}(const FieldOwned< {{ nested_ref_kind }} < T >, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -518,7 +518,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldOwned< <%- nested_ref_kind %> < T >, Offset, Offsets... >& f) {
+    {{ ref_kind }}(const FieldOwned< {{ nested_ref_kind }} < T >, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -528,7 +528,7 @@ namespace <%- self.cpp_namespace %> {
       }
     }
 
-    <% if ref_kind == "Ref" { %>
+    {% if self.is_ref_kind_ref(ref_kind) %}
     // construct a ref from a FieldRef if all of it's offsets can be calculated
     // at compile time
     template <
@@ -537,7 +537,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+    {{ ref_kind }}(const FieldRef< {{ nested_ref_kind }} < T >, Offset, Offsets...>& f) {
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -550,11 +550,11 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldRef< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+    {{ ref_kind }}(const FieldRef< {{ nested_ref_kind }} < T >, Offset, Offsets...>& f) {
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
-    <% } %>
+    {% endif %}
 
     // construct a ref from a FieldRefMut if all of it's offsets can be calculated
     // at compile time
@@ -564,7 +564,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+    {{ ref_kind }}(const FieldRefMut< {{ nested_ref_kind }} < T >, Offset, Offsets...>& f) {
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -577,105 +577,105 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    <%- ref_kind %>(const FieldRefMut< <%- nested_ref_kind %> < T >, Offset, Offsets...>& f) {
+    {{ ref_kind }}(const FieldRefMut< {{ nested_ref_kind }} < T >, Offset, Offsets...>& f) {
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
 
-    <%- nested_ref_kind %>< T >& operator*() {
-      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
+    {{ nested_ref_kind }}< T >& operator*() {
+      return *reinterpret_cast< {{ nested_ref_kind }} < T >*>(__zngur_data);
     }
-    <%- nested_ref_kind %>< T > const& operator*() const {
-      return *reinterpret_cast< <%- nested_ref_kind %> < T >*>(__zngur_data);
+    {{ nested_ref_kind }}< T > const& operator*() const {
+      return *reinterpret_cast< {{ nested_ref_kind }} < T >*>(__zngur_data);
     }
 
   private:
     size_t __zngur_data;
-    friend ::<%- self.cpp_namespace %>::__zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
-    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > >;
+    friend ::{{ self.cpp_namespace }}::__zngur_internal< {{ ref_kind }} < {{ nested_ref_kind }} < T > > >;
+    friend ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< {{ ref_kind }} < {{ nested_ref_kind }} < T > > >;
 
   };
 
   template<typename T>
-  struct __zngur_internal< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
-    static inline uint8_t* data_ptr(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >& t) noexcept {
+  struct __zngur_internal< {{ ref_kind }} < {{ nested_ref_kind }} < T > > > {
+    static inline uint8_t* data_ptr(const {{ ref_kind }} < {{ nested_ref_kind }} < T > >& t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
     }
-    static inline void assume_init(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+    static inline void assume_init({{ ref_kind }} < {{ nested_ref_kind }} < T > >&) noexcept {}
 
-    static inline void check_init(const <%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+    static inline void check_init(const {{ ref_kind }} < {{ nested_ref_kind }} < T > >&) noexcept {}
 
-    static inline void assume_deinit(<%- ref_kind %> < <%- nested_ref_kind %> < T > >&) noexcept {}
+    static inline void assume_deinit({{ ref_kind }} < {{ nested_ref_kind }} < T > >&) noexcept {}
 
     static inline size_t size_of() noexcept {
-        return __zngur_internal_size_of< <%- nested_ref_kind %> < T > >({});
+        return __zngur_internal_size_of< {{ nested_ref_kind }} < T > >({});
     }
   };
 
   template<typename T>
-  struct ZngurPrettyPrinter< <%- ref_kind %> < <%- nested_ref_kind %> < T > > > {
-    static inline void print(<%- ref_kind %> < <%- nested_ref_kind %> < T > > const& t) {
-      ::<%- self.cpp_namespace %>::__zngur_internal_check_init(t);
-      ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< <%- nested_ref_kind %> < T > >::print( reinterpret_cast< const <%- nested_ref_kind %> < T > &>(t.__zngur_data) );
+  struct ZngurPrettyPrinter< {{ ref_kind }} < {{ nested_ref_kind }} < T > > > {
+    static inline void print({{ ref_kind }} < {{ nested_ref_kind }} < T > > const& t) {
+      ::{{ self.cpp_namespace }}::__zngur_internal_check_init(t);
+      ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< {{ nested_ref_kind }} < T > >::print( reinterpret_cast< const {{ nested_ref_kind }} < T > &>(t.__zngur_data) );
     }
   };
 
-  <% } %>
-<% } %>
+  {% endfor %}
+{% endfor %}
 
-<% for ty in self.builtin_types() { %>
-  <% let needs_endif = ty == "::size_t"; %>
-  <% if needs_endif { %>
+{% for ty in self.builtin_types() %}
+  {% let needs_endif = self.is_size_t(ty) %}
+  {% if needs_endif %}
     #if defined(__APPLE__) || defined(__wasm__)
-  <% } %>
+  {% endif %}
 
   template<>
-  struct __zngur_internal< <%- ty %> > {
-    static inline uint8_t* data_ptr(const <%- ty %>& t) noexcept {
+  struct __zngur_internal< {{ ty }} > {
+    static inline uint8_t* data_ptr(const {{ ty }}& t) noexcept {
       return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
-    static inline void assume_init(<%- ty %>&) noexcept {}
-    static inline void assume_deinit(<%- ty %>&) noexcept {}
-    static inline void check_init(<%- ty %>&) noexcept {}
+    static inline void assume_init({{ ty }}&) noexcept {}
+    static inline void assume_deinit({{ ty }}&) noexcept {}
+    static inline void check_init({{ ty }}&) noexcept {}
     static inline size_t size_of() noexcept {
-      return sizeof(<%- ty %>);
+      return sizeof({{ ty }});
     }
   };
 
   template<>
-  struct __zngur_internal< <%- ty %>* > {
-    static inline uint8_t* data_ptr(<%- ty %>* const & t) noexcept {
+  struct __zngur_internal< {{ ty }}* > {
+    static inline uint8_t* data_ptr({{ ty }}* const & t) noexcept {
       return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
-    static inline void assume_init(<%- ty %>*&) noexcept {}
-    static inline void assume_deinit(<%- ty %>*&) noexcept {}
-    static inline void check_init(<%- ty %>*&) noexcept {}
+    static inline void assume_init({{ ty }}*&) noexcept {}
+    static inline void assume_deinit({{ ty }}*&) noexcept {}
+    static inline void check_init({{ ty }}*&) noexcept {}
     static inline size_t size_of() noexcept {
-      return sizeof(<%- ty %>);
+      return sizeof({{ ty }});
     }
   };
 
   template<>
-  struct __zngur_internal< <%- ty %> const* > {
-    static inline uint8_t* data_ptr(<%- ty %> const* const & t) noexcept {
+  struct __zngur_internal< {{ ty }} const* > {
+    static inline uint8_t* data_ptr({{ ty }} const* const & t) noexcept {
       return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
     }
-    static inline void assume_init(<%- ty %> const*&) noexcept {}
-    static inline void assume_deinit(<%- ty %> const*&) noexcept {}
-    static inline void check_init(<%- ty %> const*&) noexcept {}
+    static inline void assume_init({{ ty }} const*&) noexcept {}
+    static inline void assume_deinit({{ ty }} const*&) noexcept {}
+    static inline void check_init({{ ty }} const*&) noexcept {}
     static inline size_t size_of() noexcept {
-      return sizeof(<%- ty %>);
+      return sizeof({{ ty }});
     }
   };
 
 
   template<>
-  struct Ref< <%- ty %> > {
+  struct Ref< {{ ty }} > {
     Ref() {
       __zngur_data = 0;
     }
 
-    Ref(const <%- ty %>& t) {
+    Ref(const {{ ty }}& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
 
@@ -687,7 +687,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< {{ ty }}, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -705,7 +705,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+    Ref(const FieldOwned< {{ ty }}, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -723,7 +723,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldRef< <%- ty %>, Offset, Offsets...>& f) {
+    Ref(const FieldRef< {{ ty }}, Offset, Offsets...>& f) {
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -736,7 +736,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldRef< <%- ty %>, Offset, Offsets...>& f) {
+    Ref(const FieldRef< {{ ty }}, Offset, Offsets...>& f) {
         size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
         __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -749,7 +749,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< {{ ty }}, Offset, Offsets...>& f) {
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -762,33 +762,33 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    Ref(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+    Ref(const FieldRefMut< {{ ty }}, Offset, Offsets...>& f) {
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
 
-    <%- ty %>& operator*() {
-      return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    {{ ty }}& operator*() {
+      return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
 
-    <%- ty %> const& operator*() const {
-      return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    {{ ty }} const& operator*() const {
+      return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
 
   private:
     size_t __zngur_data;
-    friend ::<%- self.cpp_namespace %>::__zngur_internal<Ref< <%- ty %> > >;
-    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+    friend ::{{ self.cpp_namespace }}::__zngur_internal<Ref< {{ ty }} > >;
+    friend ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< Ref< {{ ty }} > >;
 
   };
 
   template<>
-  struct RefMut< <%- ty %> > {
+  struct RefMut< {{ ty }} > {
     RefMut() {
       __zngur_data = 0;
     }
 
-    RefMut(<%- ty %>& t) {
+    RefMut({{ ty }}& t) {
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
 
@@ -800,7 +800,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    RefMut(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< {{ ty }}, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -818,7 +818,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    RefMut(const FieldOwned< <%- ty %>, Offset, Offsets... >& f) {
+    RefMut(const FieldOwned< {{ ty }}, Offset, Offsets... >& f) {
       constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       if (heap_allocated) {
@@ -836,7 +836,7 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    RefMut(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< {{ ty }}, Offset, Offsets...>& f) {
       constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
@@ -849,53 +849,53 @@ namespace <%- self.cpp_namespace %> {
         typename ::std::enable_if<
             !zngur_detail::all_static_offset<Offset, Offsets...>::value,
             bool>::type = true>
-    RefMut(const FieldRefMut< <%- ty %>, Offset, Offsets...>& f) {
+    RefMut(const FieldRefMut< {{ ty }}, Offset, Offsets...>& f) {
       size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
       __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
     }
 
-    <%- ty %>& operator*() {
-        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    {{ ty }}& operator*() {
+        return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
 
-    <%- ty %> const& operator*() const {
-        return *reinterpret_cast< <%- ty %>*>(__zngur_data);
+    {{ ty }} const& operator*() const {
+        return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
   private:
     size_t __zngur_data;
-    friend ::<%- self.cpp_namespace %>::__zngur_internal<RefMut< <%- ty %> > >;
-    friend ::<%- self.cpp_namespace %>::ZngurPrettyPrinter< Ref< <%- ty %> > >;
+    friend ::{{ self.cpp_namespace }}::__zngur_internal<RefMut< {{ ty }} > >;
+    friend ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< Ref< {{ ty }} > >;
   };
 
-  <% let printable = ty.starts_with("int") || ty.starts_with("uint") || ty.starts_with("::size_t") || ty.starts_with("::double") || ty.starts_with("::float"); %>
-  <% if printable { %>
+  {% let printable = self.is_printable(ty) %}
+  {% if printable %}
     template<>
-    struct ZngurPrettyPrinter< <%- ty %> > {
-      static inline void print(<%- ty %> const& t) {
+    struct ZngurPrettyPrinter< {{ ty }} > {
+      static inline void print({{ ty }} const& t) {
         ::std::cerr << t << ::std::endl;
       }
     };
     template<>
-    struct ZngurPrettyPrinter< Ref< <%- ty %> > > {
-      static inline void print(Ref< <%- ty %> > const& t) {
+    struct ZngurPrettyPrinter< Ref< {{ ty }} > > {
+      static inline void print(Ref< {{ ty }} > const& t) {
         ::std::cerr << *t << ::std::endl;
       }
     };
     template<>
-    struct ZngurPrettyPrinter< RefMut< <%- ty %> > > {
-      static inline void print(RefMut< <%- ty %> > const& t) {
+    struct ZngurPrettyPrinter< RefMut< {{ ty }} > > {
+      static inline void print(RefMut< {{ ty }} > const& t) {
         ::std::cerr << *t << ::std::endl;
       }
     };
-  <% } %>
+  {% endif %}
 
-  <% if needs_endif { %>
+  {% if needs_endif %}
     #endif
-  <% } %>
+  {% endif %}
 
 // end builtin types
-<% } %>
+{% endfor %}
 
-} // namespace <%- self.cpp_namespace %>
+} // namespace {{ self.cpp_namespace }}
 
 #endif // __ZNG_HEADER_INTERNAL_TYPES
