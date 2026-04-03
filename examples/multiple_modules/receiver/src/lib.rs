@@ -1,4 +1,4 @@
-pub use packet_crate::Packet;
+pub use packet::Packet;
 
 pub struct Receiver {
     count: u64,

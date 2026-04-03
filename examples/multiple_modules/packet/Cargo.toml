@@ -1,5 +1,5 @@
 [package]
-name = "packet_crate"
+name = "packet"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true

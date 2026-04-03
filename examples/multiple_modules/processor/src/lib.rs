@@ -1,5 +1,5 @@
-pub use aggregation_crate::StatsAccumulator;
-pub use receiver_crate::Receiver;
+pub use aggregation::StatsAccumulator;
+pub use receiver::Receiver;
 
 pub struct Processor;
 
@@ -10,8 +10,8 @@ impl Processor {
 
     pub fn run(
         &self,
-        receiver: &mut receiver_crate::Receiver,
-        stats: &mut aggregation_crate::StatsAccumulator,
+        receiver: &mut receiver::Receiver,
+        stats: &mut aggregation::StatsAccumulator,
         count: u32,
     ) {
         for _ in 0..count {

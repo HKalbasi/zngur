@@ -5,7 +5,7 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 	cargo build --release
 
 generated.h ./src/generated.rs: main.zng zngur.h
-	cd ../../zngur-cli && cargo run g ../examples/rayon_split/main.zng
+	cd ../../zngur-cli && cargo run g ../examples/rayon_split/main.zng --crate-name "crate"
 
 zngur.h:
 	cd ../../zngur-cli && cargo run h ../examples/rayon_split/zngur.h

@@ -118,6 +118,12 @@ enum Command {
         /// must use a shared namespace
         #[arg(long)]
         cpp_namespace: Option<String>,
+
+        /// Set the crate name to be used in the generated code where `crate` appears.
+        ///
+        /// If not provided, it tries to read `CARGO_PKG_NAME` and defaults to `crate` if unset.
+        #[arg(long)]
+        crate_name: Option<String>,
     },
     #[command(alias = "h")]
     /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
@@ -156,6 +162,7 @@ fn main() {
             load_rustc_cfg,
             zng_header_in_place,
             cpp_namespace,
+            crate_name,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -168,6 +175,9 @@ fn main() {
                 .with_zng_header_in_place_as(zng_header_in_place);
             if let Some(cpp_namespace) = cpp_namespace {
                 zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
+            if let Some(crate_name) = crate_name {
+                zng = zng.with_crate_name(&crate_name);
             }
 
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();

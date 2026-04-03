@@ -56,6 +56,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) rust_cfg_defines: &'a Vec<String>,
     pub(crate) zng_header_in_place: bool,
     pub(crate) namespace: &'a str,
+    pub(crate) crate_name: &'a str,
 }
 
 #[derive(Template)]

@@ -11,11 +11,11 @@ use crate::{
 use zngur_def::*;
 
 pub trait IntoCpp {
-    fn into_cpp(&self, namespace: &str) -> CppType;
+    fn into_cpp(&self, namespace: &str, crate_name: &str) -> CppType;
 }
 
 impl IntoCpp for RustPathAndGenerics {
-    fn into_cpp(&self, namespace: &str) -> CppType {
+    fn into_cpp(&self, namespace: &str, crate_name: &str) -> CppType {
         let RustPathAndGenerics {
             path,
             generics,
@@ -23,20 +23,20 @@ impl IntoCpp for RustPathAndGenerics {
         } = self;
         let named_generics = named_generics.iter().sorted_by_key(|x| &x.0).map(|x| &x.1);
         CppType {
-            path: CppPath::from_rust_path(path, namespace),
+            path: CppPath::from_rust_path(path, namespace, crate_name),
             generic_args: generics
                 .iter()
                 .chain(named_generics)
-                .map(|x| x.into_cpp(namespace))
+                .map(|x| x.into_cpp(namespace, crate_name))
                 .collect(),
         }
     }
 }
 
 impl IntoCpp for RustTrait {
-    fn into_cpp(&self, namespace: &str) -> CppType {
+    fn into_cpp(&self, namespace: &str, crate_name: &str) -> CppType {
         match self {
-            RustTrait::Normal(pg) => pg.into_cpp(namespace),
+            RustTrait::Normal(pg) => pg.into_cpp(namespace, crate_name),
             RustTrait::Fn {
                 name,
                 inputs,
@@ -46,7 +46,7 @@ impl IntoCpp for RustTrait {
                 generic_args: inputs
                     .iter()
                     .chain(Some(&**output))
-                    .map(|x| x.into_cpp(namespace))
+                    .map(|x| x.into_cpp(namespace, crate_name))
                     .collect(),
             },
         }
@@ -54,8 +54,8 @@ impl IntoCpp for RustTrait {
 }
 
 impl IntoCpp for RustType {
-    fn into_cpp(&self, namespace: &str) -> CppType {
-        fn for_builtin(this: &RustType, namespace: &str) -> Option<CppType> {
+    fn into_cpp(&self, namespace: &str, crate_name: &str) -> CppType {
+        fn for_builtin(this: &RustType, namespace: &str, crate_name: &str) -> Option<CppType> {
             match this {
                 RustType::Primitive(s) => match s {
                     PrimitiveRustType::Uint(s) => Some(CppType::from(&*format!("uint{s}_t"))),
@@ -73,16 +73,20 @@ impl IntoCpp for RustType {
                 },
                 RustType::Raw(Mutability::Mut, t) => Some(CppType::from(&*format!(
                     "{}*",
-                    for_builtin(t, namespace)?.to_string().strip_prefix("::")?
+                    for_builtin(t, namespace, crate_name)?
+                        .to_string()
+                        .strip_prefix("::")?
                 ))),
                 RustType::Raw(Mutability::Not, t) => Some(CppType::from(&*format!(
                     "{} const*",
-                    for_builtin(t, namespace)?.to_string().strip_prefix("::")?
+                    for_builtin(t, namespace, crate_name)?
+                        .to_string()
+                        .strip_prefix("::")?
                 ))),
                 _ => None,
             }
         }
-        if let Some(builtin) = for_builtin(self, namespace) {
+        if let Some(builtin) = for_builtin(self, namespace, crate_name) {
             return builtin;
         }
         match self {
@@ -94,38 +98,41 @@ impl IntoCpp for RustType {
             },
             RustType::Boxed(t) => CppType {
                 path: CppPath::from(&*format!("{namespace}::Box")),
-                generic_args: vec![t.into_cpp(namespace)],
+                generic_args: vec![t.into_cpp(namespace, crate_name)],
             },
             RustType::Ref(m, t) => CppType {
                 path: match m {
                     Mutability::Mut => CppPath::from(&*format!("{}::RefMut", namespace)),
                     Mutability::Not => CppPath::from(&*format!("{}::Ref", namespace)),
                 },
-                generic_args: vec![t.into_cpp(namespace)],
+                generic_args: vec![t.into_cpp(namespace, crate_name)],
             },
             RustType::Slice(s) => CppType {
                 path: CppPath::from(&*format!("{namespace}::Slice")),
-                generic_args: vec![s.into_cpp(namespace)],
+                generic_args: vec![s.into_cpp(namespace, crate_name)],
             },
             RustType::Raw(m, t) => CppType {
                 path: match m {
                     Mutability::Mut => CppPath::from(&*format!("{namespace}::RawMut")),
                     Mutability::Not => CppPath::from(&*format!("{namespace}::Raw")),
                 },
-                generic_args: vec![t.into_cpp(namespace)],
+                generic_args: vec![t.into_cpp(namespace, crate_name)],
             },
-            RustType::Adt(pg) => pg.into_cpp(namespace),
+            RustType::Adt(pg) => pg.into_cpp(namespace, crate_name),
             RustType::Tuple(v) => {
                 if v.is_empty() {
                     return CppType::from(&*format!("{namespace}::Unit"));
                 }
                 CppType {
                     path: CppPath::from(&*format!("{namespace}::Tuple")),
-                    generic_args: v.into_iter().map(|x| x.into_cpp(namespace)).collect(),
+                    generic_args: v
+                        .into_iter()
+                        .map(|x| x.into_cpp(namespace, crate_name))
+                        .collect(),
                 }
             }
             RustType::Dyn(tr, marker_bounds) => {
-                let tr_as_cpp_type = tr.into_cpp(namespace);
+                let tr_as_cpp_type = tr.into_cpp(namespace, crate_name);
                 CppType {
                     path: CppPath::from(&*format!("{namespace}::Dyn")),
                     generic_args: [tr_as_cpp_type]
@@ -444,6 +451,7 @@ fn mangle_name(name: &str, mangling_base: &str) -> String {
         (2, "(", 'p'),
         (2, ")", 'q'),
         (2, "@", 'z'),
+        (2, "-", 'h'),
     ];
     while let Some((pos, which)) = bads.iter().filter_map(|x| Some((name.find(x.1)?, x))).min() {
         name.replace_range(pos..pos + which.1.len(), "_");
@@ -502,6 +510,7 @@ impl RustFile {
         &mut self,
         tr: &ZngurTrait,
         namespace: &str,
+        crate_name: &str,
     ) -> CppTraitDefinition {
         assert!(matches!(tr.tr, RustTrait::Normal { .. }));
         let mut method_mangled_name = vec![];
@@ -530,7 +539,7 @@ impl RustFile {
         let link_name = self.add_builder_for_dyn_trait_owned(tr, &method_mangled_name);
         let link_name_ref = self.add_builder_for_dyn_trait_borrowed(tr, &method_mangled_name);
         CppTraitDefinition::Normal {
-            as_ty: tr.tr.into_cpp(namespace),
+            as_ty: tr.tr.into_cpp(namespace, crate_name),
             methods: tr
                 .methods
                 .clone()
@@ -542,9 +551,9 @@ impl RustFile {
                     inputs: x
                         .inputs
                         .into_iter()
-                        .map(|x| x.into_cpp(namespace))
+                        .map(|x| x.into_cpp(namespace, crate_name))
                         .collect(),
-                    output: x.output.into_cpp(namespace),
+                    output: x.output.into_cpp(namespace, crate_name),
                 })
                 .collect(),
             link_name,
@@ -929,6 +938,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
         namespace: &str,
+        crate_name: &str,
     ) -> CppFnSig {
         let mut mangled_name = self.mangle_name(rust_name) + "_" + &hash_of_sig(&inputs);
         if deref.is_some() {
@@ -985,8 +995,11 @@ pub extern "C" fn {mangled_name}("#
         wln!(self, " }} }}");
         CppFnSig {
             rust_link_name: mangled_name,
-            inputs: inputs.iter().map(|ty| ty.into_cpp(namespace)).collect(),
-            output: modified_output.into_cpp(namespace),
+            inputs: inputs
+                .iter()
+                .map(|ty| ty.into_cpp(namespace, crate_name))
+                .collect(),
+            output: modified_output.into_cpp(namespace, crate_name),
         }
     }
 

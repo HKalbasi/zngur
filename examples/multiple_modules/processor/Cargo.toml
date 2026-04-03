@@ -1,5 +1,5 @@
 [package]
-name = "processor_crate"
+name = "processor"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -9,5 +9,5 @@ license.workspace = true
 crate-type = ["rlib"]
 
 [dependencies]
-receiver_crate = { path = "../receiver" }
-aggregation_crate = { path = "../aggregation" }
+receiver = { path = "../receiver" }
+aggregation = { path = "../aggregation" }

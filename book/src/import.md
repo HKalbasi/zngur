@@ -136,7 +136,7 @@ external module without regenerating them in this zngur module.
 **main.zng:**
 
 ```zng
-import extern "./core_types.zng";
+import extern "./my_types.zng";
 
 // May only appear in the top-level file per module. Both these files are top level modules.
 #convert_panic_to_exception
@@ -144,18 +144,19 @@ import extern "./core_types.zng";
 type MyApp {
     #layout(size = 8, align = 8);
 
-    fn run(&self) -> ::std::option::Option<i32>;
+    // Note how I have to assume the crate name of `my_types.zng` is my_types.
+    fn run(&self) -> ::my_types::MyOption<i32>;
 }
 ```
 
-**core_types.zng:**
+**my_types.zng:**
 
 ```zng
 // May only appear in the top-level file per module. Both these files are top level modules.
 #convert_panic_to_exception
 
-mod ::std {
-    type option::Option<i32> {
+mod ::crate {
+    type MyOption<i32> {
         #layout(size = 8, align = 4);
         wellknown_traits(Copy);
 
@@ -185,6 +186,10 @@ In particular
   bridges
 - Every generated header and `zngur.h` header must use the same top level namespace.
   can leave the default "rust" namespace or set your own
+- When you import a module to your zngur definition, you have to refer to the types exported
+  from that module using their fully qualified name, which means you must know the
+  crate name that is utilized in the generated module and this should be constant throughout
+  your project (i.e. no aliasing!).
 
 Some build systems may be able to automate this more easily than others but any specific
 build system integration is outside the scope of this chapter.

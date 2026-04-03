@@ -57,10 +57,13 @@ impl CppPath {
         true
     }
 
-    pub(crate) fn from_rust_path(path: &[String], ns: &str) -> CppPath {
+    pub(crate) fn from_rust_path(path: &[String], ns: &str, crate_name: &str) -> CppPath {
         CppPath(
             iter::once(ns)
-                .chain(path.iter().map(|x| x.as_str()))
+                .chain(
+                    path.iter()
+                        .map(|x| if x == "crate" { crate_name } else { x.as_str() }),
+                )
                 .map(cpp_handle_keyword)
                 .map(|x| x.to_owned())
                 .collect(),
@@ -361,7 +364,12 @@ pub struct CppFile {
 }
 
 impl CppFile {
-    fn emit_h_file(&self, state: &mut State, namespace: &str) -> std::fmt::Result {
+    fn emit_h_file(
+        &self,
+        state: &mut State,
+        namespace: &str,
+        crate_name: &str,
+    ) -> std::fmt::Result {
         let template = CppHeaderTemplate {
             panic_to_exception: self.panic_to_exception,
             additional_includes: &self.additional_includes,
@@ -373,6 +381,7 @@ impl CppFile {
             rust_cfg_defines: &self.rust_cfg_defines,
             zng_header_in_place: self.zng_header_in_place,
             namespace,
+            crate_name,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())
@@ -400,7 +409,7 @@ impl CppFile {
         Ok(())
     }
 
-    pub fn render(self, namespace: &str) -> (String, Option<String>) {
+    pub fn render(self, namespace: &str, crate_name: &str) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
@@ -409,11 +418,13 @@ impl CppFile {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
         };
-        self.emit_h_file(&mut h_file, namespace).unwrap();
+        self.emit_h_file(&mut h_file, namespace, crate_name)
+            .unwrap();
         let mut is_cpp_needed = false;
         self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed, namespace)
             .unwrap();
         h_file.remove_no_except_in_panic();
+
         (h_file.text, is_cpp_needed.then_some(cpp_file.text))
     }
 }

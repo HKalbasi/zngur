@@ -5,7 +5,7 @@ a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/lib
 	cargo build --release
 
 generated.h ./src/generated.rs: main.zng
-	cd ../../zngur-cli && cargo run g -i ../examples/impl_trait/main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/impl_trait/main.zng --crate-name "crate"
 
 .PHONY: ../../target/release/libexample_impl_trait.a generated.h clean
 

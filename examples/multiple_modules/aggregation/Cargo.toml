@@ -1,5 +1,5 @@
 [package]
-name = "aggregation_crate"
+name = "aggregation"
 version = "0.1.0"
 edition.workspace = true
 rust-version.workspace = true
@@ -9,4 +9,4 @@ license.workspace = true
 crate-type = ["rlib"]
 
 [dependencies]
-packet_crate = { path = "../packet" }
+packet = { path = "../packet" }

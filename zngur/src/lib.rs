@@ -37,6 +37,7 @@ pub struct Zngur {
     rust_cfg: Option<Box<dyn RustCfgProvider>>,
     zng_header_in_place: bool,
     zng_h_file_path: Option<PathBuf>,
+    crate_name: Option<String>,
 }
 
 impl Zngur {
@@ -52,6 +53,7 @@ impl Zngur {
             rust_cfg: None,
             zng_header_in_place: false,
             zng_h_file_path: None,
+            crate_name: None,
         }
     }
 
@@ -94,6 +96,11 @@ impl Zngur {
         self
     }
 
+    pub fn with_crate_name(mut self, crate_name: &str) -> Self {
+        self.crate_name = Some(crate_name.to_owned());
+        self
+    }
+
     pub fn with_rust_cargo_cfg(mut self) -> Self {
         self.rust_cfg = Some(Box::new(
             InMemoryRustCfgProvider::default().load_from_cargo_env(),
@@ -129,8 +136,13 @@ impl Zngur {
     pub fn generate(self) {
         let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
         let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
+        let crate_name = self
+            .crate_name
+            .or_else(|| std::env::var("CARGO_PKG_NAME").ok())
+            .unwrap_or_else(|| "crate".to_owned());
+        // We will pass crate_name to ZngurGenerator instead of mutating spec.
         let panic_to_exception = parse_result.spec.convert_panic_to_exception.0;
-        let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
+        let mut file = ZngurGenerator::build_from_zng(parse_result.spec, crate_name);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
         let h_file_path = self.h_file_path.expect("No h file path provided");

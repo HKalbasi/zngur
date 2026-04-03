@@ -153,7 +153,7 @@ namespace <%- self.namespace %> {
     union {
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::<%- self.namespace %>::<%- field_kind %><
-        <%- field.ty.into_cpp(self.namespace) %>,
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -213,7 +213,7 @@ namespace <%- self.namespace %> {
           alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> __zngur_data;
         <% for (index, field) in td.fields.iter().enumerate() { %>
           ::<%- self.namespace %>::FieldOwned<
-            <%- field.ty.into_cpp(self.namespace) %>,
+            <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
           <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
             ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
           <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -227,7 +227,7 @@ namespace <%- self.namespace %> {
         ::uint8_t* __zngur_data;
       <% for (index, field) in td.fields.iter().enumerate() { %>
         ::<%- self.namespace %>::FieldOwned<
-          <%- field.ty.into_cpp(self.namespace) %>,
+          <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
         <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
           ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
         <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -334,7 +334,7 @@ namespace <%- self.namespace %> {
 
       <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
         static inline <%- name %> make_box(
-          ::std::function< <%- output.into_cpp(self.namespace) %> (<%- inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ") %>) > f
+          ::std::function< <%- output.into_cpp(self.namespace, self.crate_name) %> (<%- inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ") %>) > f
         );
       <% } Some(RustTrait::Normal{..}) => { %>
         template<typename T, typename... Args>
@@ -451,7 +451,7 @@ namespace <%- self.namespace %> {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::<%- self.namespace %>::FieldRefMut<
-        <%- field.ty.into_cpp(self.namespace) %>,
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -536,10 +536,10 @@ namespace <%- self.namespace %> {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace), inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
       <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-        <% let tr = tr.into_cpp(self.namespace); %>
+        <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
         inline RefMut(<%- tr %>& arg);
       <% } None => { %>
       <% }
@@ -603,7 +603,7 @@ namespace <%- self.namespace %> {
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
       ::<%- self.namespace %>::FieldRef<
-        <%- field.ty.into_cpp(self.namespace) %>,
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
         ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
       <% } ZngurFieldDataOffset::Auto(_) => { %>
@@ -716,10 +716,10 @@ namespace <%- self.namespace %> {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace), inputs.iter().map(|x| x.into_cpp(self.namespace)).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
     <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-      <% let tr = tr.into_cpp(self.namespace); %>
+      <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
       inline Ref(<%- tr %>& arg);
     <% } None => { %>
     <% }

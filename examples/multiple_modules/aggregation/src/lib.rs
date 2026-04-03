@@ -2,6 +2,6 @@
 #[path = "aggregation.zng.rs"]
 mod generated;
 
-pub use packet_crate::Packet;
+pub use packet::Packet;
 
 pub struct StatsAccumulator(pub generated::ZngurCppOpaqueOwnedObject);

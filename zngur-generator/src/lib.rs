@@ -25,11 +25,11 @@ pub use zngur_def::*;
 
 use crate::template::ZngHeaderTemplate;
 
-pub struct ZngurGenerator(pub ZngurSpec);
+pub struct ZngurGenerator(pub ZngurSpec, pub String);
 
 impl ZngurGenerator {
-    pub fn build_from_zng(zng: ZngurSpec) -> Self {
-        ZngurGenerator(zng)
+    pub fn build_from_zng(zng: ZngurSpec, crate_name: String) -> Self {
+        ZngurGenerator(zng, crate_name)
     }
 
     pub fn render(self, zng_header_in_place: bool) -> (String, String, Option<String>) {
@@ -44,6 +44,7 @@ impl ZngurGenerator {
                 .push_str(&format!("\n#include \"{}.h\"", module.path.display()));
         }
         let default_ns = zng.cpp_namespace.as_deref().unwrap_or("rust");
+        let sanitized_crate_name = self.1.replace('-', "_");
         let mut rust_file = RustFile::new(&zng.mangling_base);
         rust_file.panic_to_exception = zng.convert_panic_to_exception.0;
         cpp_file.trait_defs = zng
@@ -52,7 +53,7 @@ impl ZngurGenerator {
             .map(|(key, value)| {
                 (
                     key.clone(),
-                    rust_file.add_builder_for_dyn_trait(value, default_ns),
+                    rust_file.add_builder_for_dyn_trait(value, default_ns, &sanitized_crate_name),
                 )
             })
             .collect();
@@ -115,9 +116,9 @@ impl ZngurGenerator {
                                 inputs: constructor
                                     .inputs
                                     .iter()
-                                    .map(|x| x.1.into_cpp(default_ns))
+                                    .map(|x| x.1.into_cpp(default_ns, &sanitized_crate_name))
                                     .collect(),
-                                output: ty.into_cpp(default_ns),
+                                output: ty.into_cpp(default_ns, &sanitized_crate_name),
                             },
                         });
                         cpp_methods.push(CppMethod {
@@ -125,7 +126,9 @@ impl ZngurGenerator {
                             kind: ZngurMethodReceiver::Ref(Mutability::Not),
                             sig: CppFnSig {
                                 rust_link_name: rust_link_names.match_check,
-                                inputs: vec![ty.into_cpp(default_ns).into_ref()],
+                                inputs: vec![
+                                    ty.into_cpp(default_ns, &sanitized_crate_name).into_ref(),
+                                ],
                                 output: CppType::from("uint8_t"),
                             },
                         });
@@ -139,9 +142,9 @@ impl ZngurGenerator {
                             inputs: constructor
                                 .inputs
                                 .iter()
-                                .map(|x| x.1.into_cpp(default_ns))
+                                .map(|x| x.1.into_cpp(default_ns, &sanitized_crate_name))
                                 .collect(),
-                            output: ty.into_cpp(default_ns),
+                            output: ty.into_cpp(default_ns, &sanitized_crate_name),
                         });
                     }
                 }
@@ -165,8 +168,11 @@ impl ZngurGenerator {
                     let rust_link_name = rust_file.add_tuple_constructor(&fields);
                     constructors.push(CppFnSig {
                         rust_link_name,
-                        inputs: fields.iter().map(|x| x.into_cpp(default_ns)).collect(),
-                        output: ty.into_cpp(default_ns),
+                        inputs: fields
+                            .iter()
+                            .map(|x| x.into_cpp(default_ns, &sanitized_crate_name))
+                            .collect(),
+                        output: ty.into_cpp(default_ns, &sanitized_crate_name),
                     });
                 }
             }
@@ -197,6 +203,7 @@ impl ZngurGenerator {
                     use_path,
                     deref.map(|x| x.1),
                     default_ns,
+                    &sanitized_crate_name,
                 );
                 cpp_methods.push(CppMethod {
                     name: cpp_handle_keyword(&method.name).to_owned(),
@@ -205,7 +212,7 @@ impl ZngurGenerator {
                 });
             }
             cpp_file.type_defs.push(CppTypeDefinition {
-                ty: ty.into_cpp(default_ns),
+                ty: ty.into_cpp(default_ns, &sanitized_crate_name),
                 layout: rust_file.add_layout_policy_shim(&ty, ty_def.layout),
                 constructors,
                 fields,
@@ -232,9 +239,9 @@ impl ZngurGenerator {
                                         rust_link_name,
                                         inputs: inputs
                                             .iter()
-                                            .map(|x| x.into_cpp(default_ns))
+                                            .map(|x| x.into_cpp(default_ns, &sanitized_crate_name))
                                             .collect(),
-                                        output: output.into_cpp(default_ns),
+                                        output: output.into_cpp(default_ns, &sanitized_crate_name),
                                     },
                                 });
                             }
@@ -261,9 +268,10 @@ impl ZngurGenerator {
                 None,
                 None,
                 default_ns,
+                &sanitized_crate_name,
             );
             cpp_file.fn_defs.push(CppFnDefinition {
-                name: CppPath::from_rust_path(&func.path.path, default_ns),
+                name: CppPath::from_rust_path(&func.path.path, default_ns, &sanitized_crate_name),
                 sig,
             });
         }
@@ -277,9 +285,9 @@ impl ZngurGenerator {
                     inputs: func
                         .inputs
                         .into_iter()
-                        .map(|x| x.into_cpp(default_ns))
+                        .map(|x| x.into_cpp(default_ns, &sanitized_crate_name))
                         .collect(),
-                    output: func.output.into_cpp(default_ns),
+                    output: func.output.into_cpp(default_ns, &sanitized_crate_name),
                 },
             });
         }
@@ -290,28 +298,33 @@ impl ZngurGenerator {
                 &impl_block.methods,
             );
             cpp_file.exported_impls.push(CppExportedImplDefinition {
-                tr: impl_block.tr.map(|x| x.into_cpp(default_ns)),
-                ty: impl_block.ty.into_cpp(default_ns),
+                tr: impl_block
+                    .tr
+                    .map(|x| x.into_cpp(default_ns, &sanitized_crate_name)),
+                ty: impl_block.ty.into_cpp(default_ns, &sanitized_crate_name),
                 methods: impl_block
                     .methods
                     .iter()
                     .zip(&rust_link_names)
                     .map(|(method, link_name)| {
                         let inputs = real_inputs_of_method(method, &impl_block.ty);
-                        let inputs = inputs.iter().map(|ty| ty.into_cpp(default_ns)).collect();
+                        let inputs = inputs
+                            .iter()
+                            .map(|ty| ty.into_cpp(default_ns, &sanitized_crate_name))
+                            .collect();
                         (
                             cpp_handle_keyword(&method.name).to_owned(),
                             CppFnSig {
                                 rust_link_name: link_name.clone(),
                                 inputs,
-                                output: method.output.into_cpp(default_ns),
+                                output: method.output.into_cpp(default_ns, &sanitized_crate_name),
                             },
                         )
                     })
                     .collect(),
             });
         }
-        let (h, cpp) = cpp_file.render(default_ns);
+        let (h, cpp) = cpp_file.render(default_ns, &sanitized_crate_name);
         (rust_file.text, h, cpp)
     }
 }

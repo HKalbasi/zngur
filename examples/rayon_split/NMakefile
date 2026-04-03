@@ -17,7 +17,7 @@ $(RUSTLIB_PATH)/$(RUSTLIB) :
 	cargo build --release
 
 $(GENERATED) : main.zng zngur.h
-	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng
+	cd ../../zngur-cli && cargo run g ../examples/$(EXAMPLE_NAME)/main.zng --crate-name "crate"
 
 zngur.h:
 	cd ../../zngur-cli && cargo run h ../examples/$(EXAMPLE_NAME)/zngur.h

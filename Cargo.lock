@@ -3,10 +3,10 @@
 version = 4
 
 [[package]]
-name = "aggregation_crate"
+name = "aggregation"
 version = "0.1.0"
 dependencies = [
- "packet_crate",
+ "packet",
 ]
 
 [[package]]
@@ -452,10 +452,10 @@ version = "0.8.0"
 name = "example-multiple-modules"
 version = "0.8.0"
 dependencies = [
- "aggregation_crate",
- "packet_crate",
- "processor_crate",
- "receiver_crate",
+ "aggregation",
+ "packet",
+ "processor",
+ "receiver",
 ]
 
 [[package]]
@@ -777,7 +777,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
-name = "packet_crate"
+name = "packet"
 version = "0.1.0"
 
 [[package]]
@@ -824,11 +824,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "processor_crate"
+name = "processor"
 version = "0.1.0"
 dependencies = [
- "aggregation_crate",
- "receiver_crate",
+ "aggregation",
+ "receiver",
 ]
 
 [[package]]
@@ -881,10 +881,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "receiver_crate"
+name = "receiver"
 version = "0.1.0"
 dependencies = [
- "packet_crate",
+ "packet",
 ]
 
 [[package]]

@@ -15,7 +15,7 @@ class StatsAccumulator {
 public:
   StatsAccumulator() = default;
 
-  void add_packet(const rust::crate::Packet &p) {
+  void add_packet(const rust::packet::Packet &p) {
     timestamps.push_back(p.timestamp());
     sizes.push_back(p.size());
   }
