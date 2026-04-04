@@ -11,9 +11,9 @@ extern "C" {
       ) {
         <%- as_ty %>* data_typed = reinterpret_cast< <%- as_ty %>* >(data);
         <%- method.output %> oo = data_typed-><%- method.name %>(
-          <%- method.inputs.iter().enumerate().map(|(n, ty)| format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")).join(", ") %>
+          <%- method.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
         );
-        ::rust::__zngur_internal_move_to_rust(o, oo);
+        ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
       }
     <% } %>
   <% } %>
@@ -23,10 +23,10 @@ extern "C" {
   void <%- func.sig.rust_link_name %>(
     <% for n in 0..func.sig.inputs.len() { %>uint8_t* i<%- n %>, <% } %>uint8_t* o
   ) {
-    <%- func.sig.output %> oo = ::rust::exported_functions::<%- func.name %>(
-      <%- func.sig.inputs.iter().enumerate().map(|(n, ty)| format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")).join(", ") %>
+    <%- func.sig.output %> oo = ::<%- self.cpp_namespace %>::exported_functions::<%- func.name %>(
+      <%- func.sig.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
     );
-    ::rust::__zngur_internal_move_to_rust(o, oo);
+    ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
   }
 <% } %>
 
@@ -35,10 +35,10 @@ extern "C" {
     void <%- sig.rust_link_name %>(
       <% for n in 0..sig.inputs.len() { %>uint8_t* i<%- n %>, <% } %>uint8_t* o
     ) {
-      <%- sig.output %> oo = ::rust::Impl< <%- imp.ty %>, <%- match &imp.tr { Some(x) => format!("{x}"), None => "::rust::Inherent".to_string() } %> >::<%- name %>(
-        <%- sig.inputs.iter().enumerate().map(|(n, ty)| format!("::rust::__zngur_internal_move_from_rust< {ty} >(i{n})")).join(", ") %>
+      <%- sig.output %> oo = ::<%- self.cpp_namespace %>::Impl< <%- imp.ty %>, <%- match &imp.tr { Some(x) => format!("{x}"), None => format!("::{}::Inherent", self.cpp_namespace) } %> >::<%- name %>(
+        <%- sig.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
       );
-      ::rust::__zngur_internal_move_to_rust(o, oo);
+      ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
     }
   <% } %>
 <% } %>

@@ -153,9 +153,16 @@ pub struct ConvertPanicToException(pub bool);
 
 #[derive(Clone, Debug, Default)]
 pub struct Import(pub std::path::PathBuf);
+
+#[derive(Debug, Clone)]
+pub struct ModuleImport {
+    pub path: std::path::PathBuf,
+}
+
 #[derive(Debug, Default)]
 pub struct ZngurSpec {
     pub imports: Vec<Import>,
+    pub imported_modules: Vec<ModuleImport>,
     pub types: Vec<ZngurType>,
     pub traits: IndexMap<RustTrait, ZngurTrait>,
     pub funcs: Vec<ZngurFn>,
@@ -165,7 +172,7 @@ pub struct ZngurSpec {
     pub convert_panic_to_exception: ConvertPanicToException,
     pub cpp_include_header_name: String,
     pub mangling_base: String,
-    pub cpp_namespace: String,
+    pub cpp_namespace: Option<String>,
     pub rust_cfg: Vec<(String, Option<String>)>,
 }
 

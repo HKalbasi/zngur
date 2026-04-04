@@ -1,0 +1,6 @@
+type crate::Packet {
+    #layout(size = 16, align = 8); // u64 timestamp, u32 size
+    fn new(u64, u32) -> crate::Packet;
+    fn timestamp(&self) -> u64;
+    fn size(&self) -> u32;
+}

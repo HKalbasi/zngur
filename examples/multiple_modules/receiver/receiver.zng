@@ -1,0 +1,17 @@
+import extern "packet.zng";
+
+type crate::Receiver {
+    #layout(size = 8, align = 8); // count: u64
+    fn new() -> crate::Receiver;
+    fn next_packet(&mut self) -> packet::Packet;
+}
+
+// This isn't necessary for the example but we want to test that specialization
+// of the same type across modules works properly (See processor.zng)
+type ::std::option::Option<crate::Receiver> {
+    #layout(size = 16, align = 8);
+
+    constructor None;
+    constructor Some(crate::Receiver);
+    fn unwrap(self) -> crate::Receiver;   
+}

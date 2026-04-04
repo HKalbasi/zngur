@@ -37,6 +37,7 @@ pub struct Zngur {
     rust_cfg: Option<Box<dyn RustCfgProvider>>,
     zng_header_in_place: bool,
     zng_h_file_path: Option<PathBuf>,
+    crate_name: Option<String>,
 }
 
 impl Zngur {
@@ -52,6 +53,7 @@ impl Zngur {
             rust_cfg: None,
             zng_header_in_place: false,
             zng_h_file_path: None,
+            crate_name: None,
         }
     }
 
@@ -94,6 +96,11 @@ impl Zngur {
         self
     }
 
+    pub fn with_crate_name(mut self, crate_name: &str) -> Self {
+        self.crate_name = Some(crate_name.to_owned());
+        self
+    }
+
     pub fn with_rust_cargo_cfg(mut self) -> Self {
         self.rust_cfg = Some(Box::new(
             InMemoryRustCfgProvider::default().load_from_cargo_env(),
@@ -129,8 +136,13 @@ impl Zngur {
     pub fn generate(self) {
         let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
         let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
+        let crate_name = self
+            .crate_name
+            .or_else(|| std::env::var("CARGO_PKG_NAME").ok())
+            .unwrap_or_else(|| "crate".to_owned());
+        // We will pass crate_name to ZngurGenerator instead of mutating spec.
         let panic_to_exception = parse_result.spec.convert_panic_to_exception.0;
-        let mut file = ZngurGenerator::build_from_zng(parse_result.spec);
+        let mut file = ZngurGenerator::build_from_zng(parse_result.spec, crate_name);
 
         let rs_file_path = self.rs_file_path.expect("No rs file path provided");
         let h_file_path = self.h_file_path.expect("No h file path provided");
@@ -141,26 +153,16 @@ impl Zngur {
             .to_string_lossy()
             .into_owned();
 
-        file.0.cpp_namespace = "rust".to_owned();
-
-        if let Some(cpp_namespace) = self.cpp_namespace {
+        if let Some(cpp_namespace) = &self.cpp_namespace {
             file.0.mangling_base = cpp_namespace.clone();
-            file.0.cpp_namespace = cpp_namespace;
+            file.0.cpp_namespace = Some(cpp_namespace.clone());
         }
 
-        if let Some(mangling_base) = self.mangling_base {
+        if let Some(mangling_base) = self.mangling_base.or_else(|| file.0.cpp_namespace.clone()) {
+            // println!("Mangling: {mangling_base}");
             file.0.mangling_base = mangling_base;
         }
-
-        let cpp_namespace = file.0.cpp_namespace.clone();
-
-        let (rust, mut h, mut cpp) = file.render(self.zng_header_in_place);
-
-        // TODO: Don't hard code namespace as "::rust" and remove this replace
-        h = h
-            .replace("rust::", &format!("{cpp_namespace}::"))
-            .replace("namespace rust", &format!("namespace {cpp_namespace}"));
-        cpp = cpp.map(|cpp| cpp.replace("rust::", &format!("{cpp_namespace}::")));
+        let (rust, h, cpp) = file.render(self.zng_header_in_place);
 
         File::create(&rs_file_path)
             .unwrap()
@@ -208,10 +210,13 @@ impl Zngur {
                 .unwrap();
         }
         if let Some(zng_h) = self.zng_h_file_path {
-            ZngurHdr::new()
+            let mut zng = ZngurHdr::new()
                 .with_panic_to_exception_as(panic_to_exception)
-                .with_zng_header(zng_h)
-                .generate()
+                .with_zng_header(zng_h);
+            if let Some(cpp_namespace) = &self.cpp_namespace {
+                zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
+            zng.generate();
         }
     }
 }
@@ -220,6 +225,7 @@ impl Zngur {
 pub struct ZngurHdr {
     panic_to_exception: bool,
     zng_header_file: Option<PathBuf>,
+    cpp_namespace: Option<String>,
 }
 
 impl ZngurHdr {
@@ -227,6 +233,7 @@ impl ZngurHdr {
         Self {
             panic_to_exception: false,
             zng_header_file: None,
+            cpp_namespace: None,
         }
     }
 
@@ -248,9 +255,15 @@ impl ZngurHdr {
         self
     }
 
+    pub fn with_cpp_namespace(mut self, cpp_namespace: &str) -> Self {
+        self.cpp_namespace = Some(cpp_namespace.to_owned());
+        self
+    }
+
     pub fn generate(self) {
         let generator = ZngHeaderGenerator {
             panic_to_exception: self.panic_to_exception,
+            cpp_namespace: self.cpp_namespace.unwrap_or_else(|| "rust".to_owned()),
         };
 
         let out_h = self

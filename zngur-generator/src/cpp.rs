@@ -46,16 +46,24 @@ impl CppPath {
     }
 
     fn need_header(&self) -> bool {
-        self.0.first().map(|x| x.as_str()) == Some("rust")
-            && self.0 != ["rust", "Unit"]
-            && self.0 != ["rust", "Ref"]
-            && self.0 != ["rust", "RefMut"]
+        if self.0.len() == 1 && self.0[0].ends_with("_t") {
+            return false;
+        }
+        // Top level namespace and type...
+        if self.0.len() == 2 {
+            let ty = &self.0[1];
+            return ty != "Unit" && ty != "Ref" && ty != "RefMut";
+        }
+        true
     }
 
-    pub(crate) fn from_rust_path(path: &[String]) -> CppPath {
+    pub(crate) fn from_rust_path(path: &[String], ns: &str, crate_name: &str) -> CppPath {
         CppPath(
-            iter::once("rust")
-                .chain(path.iter().map(|x| x.as_str()))
+            iter::once(ns)
+                .chain(
+                    path.iter()
+                        .map(|x| if x == "crate" { crate_name } else { x.as_str() }),
+                )
                 .map(cpp_handle_keyword)
                 .map(|x| x.to_owned())
                 .collect(),
@@ -104,9 +112,13 @@ impl sailfish::runtime::Render for CppType {
 impl CppType {
     pub fn into_ref(self) -> CppType {
         CppType {
-            path: CppPath::from("rust::Ref"),
+            path: CppPath::from(&*format!("{}::Ref", self.top_level_ns())),
             generic_args: vec![self],
         }
+    }
+
+    fn top_level_ns(&self) -> &String {
+        &self.path.namespace()[0]
     }
 
     pub(crate) fn specialization_decl(&self) -> String {
@@ -352,7 +364,12 @@ pub struct CppFile {
 }
 
 impl CppFile {
-    fn emit_h_file(&self, state: &mut State) -> std::fmt::Result {
+    fn emit_h_file(
+        &self,
+        state: &mut State,
+        namespace: &str,
+        crate_name: &str,
+    ) -> std::fmt::Result {
         let template = CppHeaderTemplate {
             panic_to_exception: self.panic_to_exception,
             additional_includes: &self.additional_includes,
@@ -363,17 +380,25 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
             zng_header_in_place: self.zng_header_in_place,
+            namespace,
+            crate_name,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
         Ok(())
     }
 
-    fn emit_cpp_file(&self, state: &mut State, is_really_needed: &mut bool) -> std::fmt::Result {
+    fn emit_cpp_file(
+        &self,
+        state: &mut State,
+        is_really_needed: &mut bool,
+        namespace: &str,
+    ) -> std::fmt::Result {
         let template = CppSourceTemplate {
             header_file_name: &self.header_file_name,
             trait_defs: &self.trait_defs,
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
+            cpp_namespace: namespace,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
 
@@ -384,7 +409,7 @@ impl CppFile {
         Ok(())
     }
 
-    pub fn render(self) -> (String, Option<String>) {
+    pub fn render(self, namespace: &str, crate_name: &str) -> (String, Option<String>) {
         let mut h_file = State {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
@@ -393,11 +418,13 @@ impl CppFile {
             text: "".to_owned(),
             panic_to_exception: self.panic_to_exception,
         };
-        self.emit_h_file(&mut h_file).unwrap();
+        self.emit_h_file(&mut h_file, namespace, crate_name)
+            .unwrap();
         let mut is_cpp_needed = false;
-        self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed)
+        self.emit_cpp_file(&mut cpp_file, &mut is_cpp_needed, namespace)
             .unwrap();
         h_file.remove_no_except_in_panic();
+
         (h_file.text, is_cpp_needed.then_some(cpp_file.text))
     }
 }

@@ -1,0 +1,18 @@
+import extern "receiver.zng";
+import extern "aggregation.zng";
+
+type crate::Processor {
+    #layout(size = 0, align = 1);
+    fn new() -> crate::Processor;
+    fn run(&self, &mut receiver::Receiver, &mut aggregation::StatsAccumulator, u32);
+}
+
+// This isn't necessary for the example but we want to test that specialization
+// of the same type across modules works properly (See receiver.zng)
+type ::std::option::Option<crate::Processor> {
+    #layout(size = 1, align = 1);
+
+    constructor None;
+    constructor Some(crate::Processor);
+    fn unwrap(self) -> crate::Processor;   
+}

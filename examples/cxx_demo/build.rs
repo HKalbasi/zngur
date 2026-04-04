@@ -18,6 +18,7 @@ fn main() {
         .with_cpp_file(crate_dir.join("generated.cpp"))
         .with_h_file(crate_dir.join("generated.h"))
         .with_rs_file(crate_dir.join("./src/generated.rs"))
+        .with_crate_name("crate")
         .with_zng_header_in_place()
         .generate();
 

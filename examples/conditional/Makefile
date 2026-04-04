@@ -14,11 +14,11 @@ b.out: main.cpp include/int/generated.h src/lib.rs ../../target/debug/libexample
 
 include/float/generated.h ./src/generated_float.rs: main.zng
 	mkdir -p include/float
-	cd ../../zngur-cli && cargo run g -i ../examples/conditional/main.zng --h-file ../examples/conditional/include/float/generated.h --rs-file ../examples/conditional/src/generated_float.rs -F "float-values" --load-cfg-from-rustc --use-cargo-rustc --profile=release --package example-conditional
+	cd ../../zngur-cli && cargo run g -i ../examples/conditional/main.zng --h-file ../examples/conditional/include/float/generated.h --rs-file ../examples/conditional/src/generated_float.rs -F "float-values" --load-cfg-from-rustc --use-cargo-rustc --profile=release --package example-conditional --crate-name "crate"
 
 include/int/generated.h ./src/generated_int.rs: main.zng
 	mkdir -p include/int
-	cd ../../zngur-cli && cargo run g -i ../examples/conditional/main.zng --h-file ../examples/conditional/include/int/generated.h --rs-file ../examples/conditional/src/generated_int.rs --load-cfg-from-rustc
+	cd ../../zngur-cli && cargo run g -i ../examples/conditional/main.zng --h-file ../examples/conditional/include/int/generated.h --rs-file ../examples/conditional/src/generated_int.rs --load-cfg-from-rustc --crate-name "crate"
 
 .PHONY: ../../target/release/libexample_conditional.a ../../target/debug/libexample_conditional.a include/float/generated.h include/int/generated.h clean
 

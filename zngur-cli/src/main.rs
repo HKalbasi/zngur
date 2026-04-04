@@ -76,18 +76,9 @@ enum Command {
         /// A unique string which is included in zngur symbols to prevent duplicate
         /// symbols in linker
         ///
-        /// Default is the value of cpp_namespace, so you don't need to set this manually
-        /// if you change cpp_namespace as well
-        #[arg(long)]
-        mangling_base: Option<String>,
-
-        /// The C++ namespace which zngur puts its things in it. You can change it
-        /// to prevent violation of ODR when you have multiple independent zngur
-        /// libraries
-        ///
         /// Default is "rust"
         #[arg(long)]
-        cpp_namespace: Option<String>,
+        mangling_base: Option<String>,
 
         /// A rust config value of the form key(=value1(,value2 ...)) to use when
         /// generating the zngur spec.
@@ -119,6 +110,20 @@ enum Command {
         /// be shared between all of your generated modules and leave this flag unset.
         #[arg(long = "in-place", short = 'i')]
         zng_header_in_place: bool,
+
+        /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        ///
+        /// You may use this to customize overarching namespace for all the
+        /// generated types in C++, but if your project spans multiple .zng modules, you
+        /// must use a shared namespace
+        #[arg(long)]
+        cpp_namespace: Option<String>,
+
+        /// Set the crate name to be used in the generated code where `crate` appears.
+        ///
+        /// If not provided, it tries to read `CARGO_PKG_NAME` and defaults to `crate` if unset.
+        #[arg(long)]
+        crate_name: Option<String>,
     },
     #[command(alias = "h")]
     /// Generates the zngur.h file that contains shared interop definitions used by all generated zngur bridges.
@@ -131,6 +136,14 @@ enum Command {
         /// Note that each `zng` module will need to use `#convert_panic_to_exception` in order to fully enable it.
         #[arg(long = "panic-to-exception")]
         convert_panic_to_exception: bool,
+
+        /// Set the namespace of the generated C++ types. If not provided it defaults to `rust`
+        ///
+        /// You may use this to customize overarching namespace for all the
+        /// generated types in C++, but if your project spans multiple .zng modules, you
+        /// must use a shared namespace
+        #[arg(long)]
+        cpp_namespace: Option<String>,
     },
 }
 
@@ -144,11 +157,12 @@ fn main() {
             rs_file,
             depfile,
             mangling_base,
-            cpp_namespace,
             rust_cfg,
             rust_features,
             load_rustc_cfg,
             zng_header_in_place,
+            cpp_namespace,
+            crate_name,
         } => {
             let pp = path.parent().unwrap();
             let cpp_file = cpp_file.unwrap_or_else(|| pp.join("generated.cpp"));
@@ -159,6 +173,12 @@ fn main() {
                 .with_h_file(h_file)
                 .with_rs_file(rs_file)
                 .with_zng_header_in_place_as(zng_header_in_place);
+            if let Some(cpp_namespace) = cpp_namespace {
+                zng = zng.with_cpp_namespace(&cpp_namespace);
+            }
+            if let Some(crate_name) = crate_name {
+                zng = zng.with_crate_name(&crate_name);
+            }
 
             let mut cfg: HashMap<String, Vec<String>> = HashMap::new();
             if load_rustc_cfg.load_cfg_from_rustc {
@@ -179,19 +199,20 @@ fn main() {
             if let Some(mangling_base) = mangling_base {
                 zng = zng.with_mangling_base(&mangling_base);
             }
-            if let Some(cpp_namespace) = cpp_namespace {
-                zng = zng.with_cpp_namespace(&cpp_namespace);
-            }
             zng.generate();
         }
         Command::MakeZngHeader {
             path,
             convert_panic_to_exception,
+            cpp_namespace,
         } => {
-            ZngurHdr::new()
+            let mut hdr = ZngurHdr::new()
                 .with_panic_to_exception_as(convert_panic_to_exception)
-                .with_zng_header(path)
-                .generate();
+                .with_zng_header(path);
+            if let Some(cpp_namespace) = cpp_namespace {
+                hdr = hdr.with_cpp_namespace(&cpp_namespace);
+            }
+            hdr.generate();
         }
     }
 }

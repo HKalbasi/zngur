@@ -18,17 +18,15 @@ a.exe : main.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
 $(RUSTLIB_PATH)/$(RUSTLIB) :
 	cargo build --release
 
-$(GENERATED1) : main.zng
-	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng \
+$(GENERATED1) : main1.zng main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main1.zng \
 		--h-file=../examples/$(EXAMPLE_NAME)/generated1.h \
-		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated1.rs \
-		--cpp-namespace=m1
+		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated1.rs
 
-$(GENERATED2) : main.zng
-	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main.zng \
+$(GENERATED2) : main2.zng main.zng
+	cd ../../zngur-cli && cargo run g -i ../examples/$(EXAMPLE_NAME)/main2.zng \
 		--h-file=../examples/$(EXAMPLE_NAME)/generated2.h \
-		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated2.rs \
-		--cpp-namespace=m2
+		--rs-file=../examples/$(EXAMPLE_NAME)/src/generated2.rs
 
 clean :
 	- del /f /q generated1.h src\generated1.rs generated2.h src\generated2.rs a.exe main.obj actual_output.txt 2>nul

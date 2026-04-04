@@ -54,7 +54,7 @@ extern "C" {
     <% } %>
 
     <% if let Some(cpp_value) = &td.cpp_value { %>
-      ::rust::ZngurCppOpaqueOwnedObject* <%- cpp_value.0 %>(uint8_t*);
+      ::<%- self.namespace %>::ZngurCppOpaqueOwnedObject* <%- cpp_value.0 %>(uint8_t*);
     <% } %>
 
     <% if let CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } = &td.layout { %>
@@ -110,7 +110,7 @@ extern "C" {
   <% } %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 <% for td in self.type_defs {
     if td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) { %>
@@ -137,7 +137,7 @@ namespace rust {
   <% } %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 // Field specializations templates 
 // (declared before types so fields instantiate the correct template)
@@ -152,12 +152,12 @@ namespace rust {
     <% if !td.fields.is_empty() { %>
     union {
     <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::rust::<%- field_kind %><
-        <%- field.ty.into_cpp() %>,
+      ::<%- self.namespace %>::<%- field_kind %><
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
+        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
       <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::rust::FieldAutoOffset< <%- td.ty %>, <%- index %> >,
+        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >,
       <% } } %>
         Offset,
         Offsets...
@@ -181,14 +181,14 @@ namespace rust {
 
 <% } /* for td in self.type_defs */ %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 <% for td in self.type_defs { %>
   <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
   <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
   <% let name = td.ty.path.name(); %>
 
-  namespace rust {
+  namespace <%- self.namespace %> {
     template<>
     struct __zngur_internal< <%- td.ty %> > {
       static inline uint8_t* data_ptr(const <%- td.ty %>& t) noexcept ;
@@ -212,12 +212,12 @@ namespace rust {
         union alignas(<%- align %>) {
           alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> __zngur_data;
         <% for (index, field) in td.fields.iter().enumerate() { %>
-          ::rust::FieldOwned<
-            <%- field.ty.into_cpp() %>,
+          ::<%- self.namespace %>::FieldOwned<
+            <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
           <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-            ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
+            ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
           <% } ZngurFieldDataOffset::Auto(_) => { %>
-            ::rust::FieldAutoOffset< <%- td.ty %>, <%- index %> >
+            ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
           <% } } %>
           > <%- cpp_handle_field_name(&field.name) %>;
         <% } %>
@@ -226,12 +226,12 @@ namespace rust {
       union {
         ::uint8_t* __zngur_data;
       <% for (index, field) in td.fields.iter().enumerate() { %>
-        ::rust::FieldOwned<
-          <%- field.ty.into_cpp() %>,
+        ::<%- self.namespace %>::FieldOwned<
+          <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
         <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-          ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
+          ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
         <% } ZngurFieldDataOffset::Auto(_) => { %>
-          ::rust::FieldAutoOffset< <%- td.ty %>, <%- index %> >
+          ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
         <% } } %>
         > <%- cpp_handle_field_name(&field.name) %>;
       <% } %>
@@ -242,7 +242,7 @@ namespace rust {
     <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
     <% } CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
 
-    <% if td.ty.path.to_string() == "::rust::Bool" { %>
+    <% if td.ty.path.to_string() == format!("::{}::Bool", self.namespace) { %>
       public:
         operator bool() {
           return __zngur_data[0];
@@ -252,7 +252,7 @@ namespace rust {
         }
     <% } %>
 
-    <% if td.ty.path.to_string() == "::rust::Char" { %>
+    <% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) { %>
       public:
         operator char32_t() const {
           return *reinterpret_cast<const char32_t*>(__zngur_data.data());
@@ -309,7 +309,7 @@ namespace rust {
         <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
         ~<%- name %>() {
           if (drop_flag) {
-            <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
+            <%- drop_in_place %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this));
           }
           <%- free_heap %>
         }
@@ -322,7 +322,7 @@ namespace rust {
         <%- name %>& operator=(<%- name %>&& other) {
           if (this != &other) {
             if (drop_flag) {
-              <%- drop_in_place %>(::rust::__zngur_internal_data_ptr(*this));
+              <%- drop_in_place %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this));
             }
             this->drop_flag = other.drop_flag;
             <%- copy_data %>
@@ -334,7 +334,7 @@ namespace rust {
 
       <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
         static inline <%- name %> make_box(
-          ::std::function< <%- output.into_cpp() %> (<%- inputs.iter().map(|x| x.into_cpp()).join(", ") %>) > f
+          ::std::function< <%- output.into_cpp(self.namespace, self.crate_name) %> (<%- inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ") %>) > f
         );
       <% } Some(RustTrait::Normal{..}) => { %>
         template<typename T, typename... Args>
@@ -345,7 +345,7 @@ namespace rust {
 
       <% if let Some(cpp_value) = &td.cpp_value { %>
           inline <%- cpp_value.1 %>& cpp() {
-              return (*<%- cpp_value.0 %>(::rust::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
+              return (*<%- cpp_value.0 %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
           }
       <% } %>
 
@@ -374,7 +374,7 @@ namespace rust {
 
 <%- td.ty.path.close_namespace() %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
 <% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
   inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
@@ -410,7 +410,7 @@ namespace rust {
     }
 
     inline void __zngur_internal< <%- td.ty %> >::assume_deinit(<%- td.ty %>& t) noexcept {
-        ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
+        ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
         t.drop_flag = false;
     }
   <% } %>
@@ -434,9 +434,9 @@ namespace rust {
   <% } %>
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   template<>
   struct RefMut< <%- td.ty %> > {
@@ -450,12 +450,12 @@ namespace rust {
 
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::rust::FieldRefMut<
-        <%- field.ty.into_cpp() %>,
+      ::<%- self.namespace %>::FieldRefMut<
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
+        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
       <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::rust::FieldAutoOffset< <%- td.ty %>, <%- index %>>
+        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %>>
       <% } } %>
       > <%- cpp_handle_field_name(&field.name) %>;
     <% } %>
@@ -464,7 +464,7 @@ namespace rust {
 
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
       RefMut(const <%- td.ty %>& t) {
-        ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
+        ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
         __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
       }
     <% } %>
@@ -536,10 +536,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
       <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-        <% let tr = tr.into_cpp(); %>
+        <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
         inline RefMut(<%- tr %>& arg);
       <% } None => { %>
       <% }
@@ -581,14 +581,14 @@ namespace rust {
     }
   };
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 // Ref specialization
-<% if td.ty.path.to_string() == "::rust::Str" { %>
-    auto operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+<% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) { %>
+    auto operator""_rs(const char* input, size_t len) -> ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str>;
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   template<>
   struct Ref< <%- td.ty %> > {
@@ -602,12 +602,12 @@ namespace rust {
 
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::rust::FieldRef<
-        <%- field.ty.into_cpp() %>,
+      ::<%- self.namespace %>::FieldRef<
+        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
       <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::rust::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
+        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
       <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::rust::FieldAutoOffset< <%- td.ty %>, <%- index %> >
+        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
       <% } } %>
       > <%- cpp_handle_field_name(&field.name) %>;
     <% } %>
@@ -616,7 +616,7 @@ namespace rust {
 
     <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
     Ref(const <%- td.ty %>& t) {
-      ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
+      ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
     <% } %>
@@ -716,10 +716,10 @@ namespace rust {
     <% } %>
 
     <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(), inputs.iter().map(|x| x.into_cpp()).join(", ")); %>
+      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
       inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
     <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-      <% let tr = tr.into_cpp(); %>
+      <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
       inline Ref(<%- tr %>& arg);
     <% } None => { %>
     <% }
@@ -746,8 +746,8 @@ namespace rust {
       <% } %>
     <% } %>
 
-    <% if td.ty.path.to_string() == "::rust::Str" { %>
-      friend auto ::operator""_rs(const char* input, size_t len) -> ::rust::Ref<::rust::Str>;
+    <% if td.ty.path.to_string() == format!("::{}::Str", &self.namespace) { %>
+      friend auto ::operator""_rs(const char* input, size_t len) -> ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str>;
     <% } %>
 };
 
@@ -768,23 +768,23 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
 
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
 
-<% if td.ty.path.to_string() == "::rust::Str" { %>
-  inline ::rust::Ref<::rust::Str> operator""_rs(const char* input, size_t len) {
-    ::rust::Ref<::rust::Str> o;
+<% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) { %>
+  inline ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str> operator""_rs(const char* input, size_t len) {
+    ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str> o;
     o.__zngur_data[0] = reinterpret_cast<size_t>(input);
     o.__zngur_data[1] = len;
     return o;
   }
 <% } %>
 
-<% if td.ty.path.to_string() == "::rust::Char" { %>
-  inline ::rust::Char operator""_rs(char32_t c) {
+<% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) { %>
+  inline ::<%- self.namespace %>::Char operator""_rs(char32_t c) {
     if (c > 0x10FFFFu || (c >= 0xD800u && c <= 0xDFFFu)) {
-      return ::rust::Char(0xFFFDu);
+      return ::<%- self.namespace %>::Char(0xFFFDu);
     }
-    return ::rust::Char(c);
+    return ::<%- self.namespace %>::Char(c);
   }
 <% } %>
 
@@ -801,15 +801,15 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
     <% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap(); %>
     <% /* do default construction first to ensure allocation */ %>
     inline <%- fn_name %>(<%- splat!(&c.inputs, |n, ty|, "{ty} i{n}") %>) noexcept : <%- fn_name %>() { 
-      ::rust::__zngur_internal_assume_init(*this);
+      ::<%- self.namespace %>::__zngur_internal_assume_init(*this);
       <%- c.rust_link_name %>(
         <% for n in 0..c.inputs.len() { %>
-          ::rust::__zngur_internal_data_ptr(i<%- n %>),
+          ::<%- self.namespace %>::__zngur_internal_data_ptr(i<%- n %>),
         <% } %>
-        ::rust::__zngur_internal_data_ptr(*this)
+        ::<%- self.namespace %>::__zngur_internal_data_ptr(*this)
       );
       <% for n in 0..c.inputs.len() { %>
-        ::rust::__zngur_internal_assume_deinit(i<%- n %>);
+        ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>);
       <% } %>
     }
   <% } %>
@@ -817,23 +817,23 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
   <% let tr = &td.from_trait.as_ref().and_then(|k| self.trait_defs.get(k)); %>
   <% match tr { Some(CppTraitDefinition::Fn { sig }) => { %>
     <% let as_std_function = format!("::std::function< {}({})>", sig.output, sig.inputs.iter().join(", ")); %>
-    <% let ii_names = splat!(&sig.inputs, |n, x|, "::rust::__zngur_internal_move_from_rust< {x} >(i{n})"); %>
+    <% let ii_names = splat!(&sig.inputs, |n, x|, "::{}::__zngur_internal_move_from_rust< {x} >(i{n})", self.namespace); %>
     <% let uint8_t_ix = if sig.inputs.is_empty() { "".to_owned() } else { splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n}") + ", " }; %>
     <% let out_ty = &sig.output; %>
 
     inline <%- name %> <%- name %>::make_box(<%- as_std_function %> f) {
       auto __zngur_data = new <%- as_std_function %>(f);
       <%- name %> o;
-      ::rust::__zngur_internal_assume_init(o);
+      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
       <%- sig.rust_link_name %> (
         reinterpret_cast<uint8_t*>(__zngur_data),
         [](uint8_t *d) { delete reinterpret_cast< <%- as_std_function %>*>(d); },
         [](uint8_t *d, <%- uint8_t_ix %> uint8_t* o) {
           auto dd = reinterpret_cast< <%- as_std_function %> *>(d);
           <%- out_ty %> oo = (*dd)(<%- ii_names %>);
-          ::rust::__zngur_internal_move_to_rust< <%- out_ty %> >(o, oo);
+          ::<%- self.namespace %>::__zngur_internal_move_to_rust< <%- out_ty %> >(o, oo);
         },
-        ::rust::__zngur_internal_data_ptr(o)
+        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
       );
       return o;
     }
@@ -844,11 +844,11 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
       auto __zngur_data = new T(::std::forward<Args>(args)...);
       auto data_as_impl = dynamic_cast< <%- as_ty %>*>(__zngur_data);
       <%- name %> o;
-      ::rust::__zngur_internal_assume_init(o);
+      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
       <%- link_name %> (
         reinterpret_cast<uint8_t*>(data_as_impl),
         [](uint8_t *d) { delete reinterpret_cast< <%- as_ty %>*>(d); },
-        ::rust::__zngur_internal_data_ptr(o)
+        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
       );
       return o;
     }
@@ -862,12 +862,12 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
     <# TODO: Implement this #>
   <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name: _, link_name_ref }) => { %>
     <% for ref_kind in ["Ref", "RefMut"] { %>
-      rust::<%- ref_kind %>< <%- name %> >::<%- ref_kind %>(<%- as_ty %>& args) {
+      <%- self.namespace %>::<%- ref_kind %>< <%- name %> >::<%- ref_kind %>(<%- as_ty %>& args) {
         auto data_as_impl = &args;
-        ::rust::__zngur_internal_assume_init(*this);
+        ::<%- self.namespace %>::__zngur_internal_assume_init(*this);
         <%- link_name_ref %>(
           (uint8_t *)data_as_impl,
-          ::rust::__zngur_internal_data_ptr(*this)
+          ::<%- self.namespace %>::__zngur_internal_data_ptr(*this)
         );
       }
     <% } %>
@@ -883,13 +883,13 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
       <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
     ) noexcept {
       <%- method.sig.output %> o{};
-      <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
+      <% for n in 0..inputs.len() { %> ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
       <%- method.sig.rust_link_name %> (
-        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::rust::__zngur_internal_data_ptr(i{n})") %>,<% } %>
-        ::rust::__zngur_internal_data_ptr(o)
+        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::{}::__zngur_internal_data_ptr(i{n})", &self.namespace) %>,<% } %>
+        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
       );
       <%- self.panic_handler() %>
-      ::rust::__zngur_internal_assume_init(o);
+      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
       return o;
     }
 
@@ -906,7 +906,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
       <% for field_kind in field_kinds { %>
         <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
         template<typename Offset, typename... Offsets>
-        inline <%- output %> rust::<%- field_kind %>< <%- td.ty %>, Offset, Offsets... >::<%- method.name %>(
+        inline <%- output %> <%- self.namespace %>::<%- field_kind %>< <%- td.ty %>, Offset, Offsets... >::<%- method.name %>(
             <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
         ) const noexcept {
           return <%- fn_name %>(
@@ -918,7 +918,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
 
       <% for ref_kind in ref_kinds { %>
         <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
-        inline <%- output %> rust::<%- ref_kind %>< <%- td.ty %> >::<%- method.name %>(
+        inline <%- output %> <%- self.namespace %>::<%- ref_kind %>< <%- td.ty %> >::<%- method.name %>(
             <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
         ) const noexcept {
           return <%- fn_name %>(
@@ -949,7 +949,7 @@ struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
     <% }%>
   <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 
   <% for tr in &td.wellknown_traits { %>
     <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print: _ } = tr { %>
@@ -957,15 +957,15 @@ namespace rust {
         template<>
         struct ZngurPrettyPrinter< <%- td.ty %> > {
           static inline void print( <%- td.ty %> const& t) {
-            ::rust::__zngur_internal_check_init< <%- td.ty %> >(t);
-            <%- pretty_print %>(::rust::__zngur_internal_data_ptr(t));
+            ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
+            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr(t));
           }
         };
 
         template<>
         struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
           static inline void print(Ref< <%- td.ty %> > const& t) {
-            ::rust::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
+            ::<%- self.namespace %>::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
             <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.__zngur_data));
           }
         };
@@ -973,7 +973,7 @@ namespace rust {
         template<>
         struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
           static inline void print(RefMut< <%- td.ty %> > const& t) {
-            ::rust::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
+            ::<%- self.namespace %>::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
             <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.__zngur_data));
           }
         };
@@ -1002,22 +1002,22 @@ namespace rust {
         template<>
         struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
           static inline void print(Ref< <%- td.ty %> > const& t) {
-            ::rust::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
-            <%- pretty_print %>(::rust::__zngur_internal_data_ptr< Ref< <%- td.ty %> > >(t));
+            ::<%- self.namespace %>::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
+            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr< Ref< <%- td.ty %> > >(t));
           }
         };
 
         template<>
         struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
           static inline void print(RefMut< <%- td.ty %> > const& t) {
-            ::rust::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
-            <%- pretty_print %>(::rust::__zngur_internal_data_ptr< RefMut< <%- td.ty %> > >(t));
+            ::<%- self.namespace %>::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
+            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr< RefMut< <%- td.ty %> > >(t));
           }
         };
       <% } %>
     <% } %>
   <% } %>
-} // namespace rust
+} // namespace <%- self.namespace %>
 
 <% } %>
 
@@ -1028,19 +1028,19 @@ namespace rust {
       <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
     ) noexcept {
       <%- output %> o{};
-      <% for n in 0..inputs.len() { %> ::rust::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
+      <% for n in 0..inputs.len() { %> ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
       <%- rust_link_name %> (
-        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::rust::__zngur_internal_data_ptr(i{n})") %>,<% } %>
-        ::rust::__zngur_internal_data_ptr(o)
+        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::{}::__zngur_internal_data_ptr(i{n})", self.namespace) %>,<% } %>
+        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
       );
       <%- self.panic_handler() %>
-      ::rust::__zngur_internal_assume_init(o);
+      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
       return o;
     }
   <%- fd.name.close_namespace() %>
 <% } %>
 
-namespace rust {
+namespace <%- self.namespace %> {
 namespace exported_functions {
 
 <% for func in self.exported_fn_defs { %>
@@ -1052,7 +1052,7 @@ namespace exported_functions {
 } // namespace exported_functions
 
 <% for imp in self.exported_impls { %>
-  <% let x = match &imp.tr { Some(x) => format!("{x}"), None => "::rust::Inherent".to_string() }; %>
+  <% let x = match &imp.tr { Some(x) => format!("{x}"), None => format!("::{}::Inherent", &self.namespace) }; %>
 
   template<>
   class Impl< <%- imp.ty %>, <%- x %> > {
@@ -1065,4 +1065,4 @@ namespace exported_functions {
   };
 <% } %>
 
-} // namespace rust
+} // namespace <%- self.namespace %>
