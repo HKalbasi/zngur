@@ -105,3 +105,5 @@ ifdef
 selectany
 declspec
 elif
+askama
+endfor

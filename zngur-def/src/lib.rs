@@ -75,6 +75,26 @@ pub enum ZngurFieldDataOffset {
     Auto(String),
 }
 
+impl ZngurFieldDataOffset {
+    pub fn is_offset(&self) -> bool {
+        matches!(self, ZngurFieldDataOffset::Offset(_))
+    }
+
+    pub fn as_offset(&self) -> Option<usize> {
+        match self {
+            ZngurFieldDataOffset::Offset(o) => Some(*o),
+            _ => None,
+        }
+    }
+
+    pub fn as_auto(&self) -> Option<&str> {
+        match self {
+            ZngurFieldDataOffset::Auto(s) => Some(s),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ZngurWellknownTrait {
     Debug,

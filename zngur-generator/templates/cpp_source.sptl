@@ -1,46 +1,45 @@
-#include "<%- self.header_file_name %>"
+#include "{{ self.header_file_name }}"
 
 extern "C" {
 
-<% for (_, td) in self.trait_defs { %>
-  <% if let CppTraitDefinition::Fn { .. } = td { %>
-  <% } else if let CppTraitDefinition::Normal { as_ty, methods, link_name: _, link_name_ref: _ } = td { %>
-    <% for method in methods { %>
-      void <%- method.rust_link_name %>(
-        uint8_t* data <% for n in 0..method.inputs.len() { %>, uint8_t* i<%- n %><% } %>, uint8_t* o
+{% for (_, td) in self.trait_defs %}
+  {% if let Some(normal) = td.as_normal() %}
+    {% for method in normal.1 %}
+      void {{ method.rust_link_name }}(
+        uint8_t* data {% for n in 0..method.inputs.len() %}, uint8_t* i{{ n }}{% endfor %}, uint8_t* o
       ) {
-        <%- as_ty %>* data_typed = reinterpret_cast< <%- as_ty %>* >(data);
-        <%- method.output %> oo = data_typed-><%- method.name %>(
-          <%- method.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
+        {{ normal.0 }}* data_typed = reinterpret_cast< {{ normal.0 }}* >(data);
+        {{ method.output }} oo = data_typed->{{ method.name }}(
+          {{ method.render_inputs(self.cpp_namespace) }}
         );
-        ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
+        ::{{ self.cpp_namespace }}::__zngur_internal_move_to_rust(o, oo);
       }
-    <% } %>
-  <% } %>
-<% } %>
+    {% endfor %}
+  {% endif %}
+{% endfor %}
 
-<% for func in self.exported_fn_defs { %>
-  void <%- func.sig.rust_link_name %>(
-    <% for n in 0..func.sig.inputs.len() { %>uint8_t* i<%- n %>, <% } %>uint8_t* o
+{% for func in self.exported_fn_defs %}
+  void {{ func.sig.rust_link_name }}(
+    {% for n in 0..func.sig.inputs.len() %}uint8_t* i{{ n }}, {% endfor %}uint8_t* o
   ) {
-    <%- func.sig.output %> oo = ::<%- self.cpp_namespace %>::exported_functions::<%- func.name %>(
-      <%- func.sig.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
+    {{ func.sig.output }} oo = ::{{ self.cpp_namespace }}::exported_functions::{{ func.name }}(
+      {{ func.sig.render_inputs(self.cpp_namespace) }}
     );
-    ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
+    ::{{ self.cpp_namespace }}::__zngur_internal_move_to_rust(o, oo);
   }
-<% } %>
+{% endfor %}
 
-<% for imp in self.exported_impls { %>
-  <% for (name, sig) in &imp.methods { %>
-    void <%- sig.rust_link_name %>(
-      <% for n in 0..sig.inputs.len() { %>uint8_t* i<%- n %>, <% } %>uint8_t* o
+{% for imp in self.exported_impls %}
+  {% for (name, sig) in imp.methods %}
+    void {{ sig.rust_link_name }}(
+      {% for n in 0..sig.inputs.len() %}uint8_t* i{{ n }}, {% endfor %}uint8_t* o
     ) {
-      <%- sig.output %> oo = ::<%- self.cpp_namespace %>::Impl< <%- imp.ty %>, <%- match &imp.tr { Some(x) => format!("{x}"), None => format!("::{}::Inherent", self.cpp_namespace) } %> >::<%- name %>(
-        <%- sig.inputs.iter().enumerate().map(|(n, ty)| format!("::{}::__zngur_internal_move_from_rust< {ty} >(i{n})", self.cpp_namespace)).join(", ") %>
+      {{ sig.output }} oo = ::{{ self.cpp_namespace }}::Impl< {{ imp.ty }}, {{ imp.render_tr(self.cpp_namespace) }} >::{{ name }}(
+        {{ sig.render_inputs(self.cpp_namespace) }}
       );
-      ::<%- self.cpp_namespace %>::__zngur_internal_move_to_rust(o, oo);
+      ::{{ self.cpp_namespace }}::__zngur_internal_move_to_rust(o, oo);
     }
-  <% } %>
-<% } %>
+  {% endfor %}
+{% endfor %}
 
 } // extern "C"

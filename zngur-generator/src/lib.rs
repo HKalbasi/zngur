@@ -17,8 +17,8 @@ pub mod cpp;
 mod rust;
 mod template;
 
+use askama::Template;
 pub use rust::RustFile;
-use sailfish::Template;
 pub use zngur_parser::{ParseResult, ParsedZngFile, cfg};
 
 pub use zngur_def::*;
