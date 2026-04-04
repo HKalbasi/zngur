@@ -1,5 +1,5 @@
-import extern "receiver.zng";
-import extern "aggregation.zng";
+import "receiver.zng";
+import "aggregation.zng";
 
 type crate::Processor {
     #layout(size = 0, align = 1);

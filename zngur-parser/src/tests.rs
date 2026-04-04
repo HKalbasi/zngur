@@ -271,7 +271,7 @@ fn import_parser_test() {
 
     let parsed = ParsedZngFile::parse_str_with_resolver(
         r#"
-import "./relative/path.zng";
+merge "./relative/path.zng";
 type Example {
     #layout(size = 1, align = 1);
 }
@@ -288,15 +288,15 @@ fn module_import_prohibited() {
 
     check_import_fail(
         r#"
-    import "foo/bar.zng";
+    merge "foo/bar.zng";
     "#,
         expect![[r#"
             Error: Module import is not supported. Use a relative path instead.
                ╭─[test.zng:2:5]
                │
-             2 │     import "foo/bar.zng";
-               │     ──────────┬──────────  
-               │               ╰──────────── Module import is not supported. Use a relative path instead.
+             2 │     merge "foo/bar.zng";
+               │     ──────────┬─────────  
+               │               ╰─────────── Module import is not supported. Use a relative path instead.
             ───╯
         "#]],
         &resolver,
@@ -317,7 +317,7 @@ fn import_has_conflict() {
 
     check_import_fail(
         r#"
-    import "./a.zng";
+    merge "./a.zng";
     type A {
       #layout(size = 2, align = 2);
     }
@@ -340,7 +340,7 @@ fn import_not_found() {
     let resolver = MockFilesystem::new(vec![] as Vec<(&str, &str)>);
     check_import_fail(
         r#"
-    import "./a.zng";
+    merge "./a.zng";
     "#,
         expect![[r#"
             Error: Import path not found: ./a.zng
@@ -358,7 +358,7 @@ fn import_has_mismatched_method_signature() {
 
     check_import_fail(
         r#"
-  import "./a.zng";
+  merge "./a.zng";
   type A {
     #layout(size = 1, align = 1);
     fn foo(i64) -> i64;
@@ -389,7 +389,7 @@ fn import_has_mismatched_field() {
 
     check_import_fail(
         r#"
-  import "./a.zng";
+  merge "./a.zng";
   type A {
     #layout(size = 1, align = 1);
     field x (offset = 0, type = i64);
@@ -422,7 +422,7 @@ fn convert_panic_to_exception_in_imported_file_fails() {
 
     check_import_fail(
         r#"
-import "./imported.zng";
+merge "./imported.zng";
 type B {
     #layout(size = 1, align = 1);
 }
@@ -485,7 +485,7 @@ fn processed_files_with_import() {
 
     let parsed = ParsedZngFile::parse_str_with_resolver(
         r#"
-import "./imported.zng";
+merge "./imported.zng";
 type Main {
     #layout(size = 1, align = 1);
 }
@@ -509,18 +509,18 @@ fn processed_files_with_nested_imports() {
     let resolver = MockFilesystem::new(vec![
         (
             "./a.zng",
-            r#"import "./b.zng"; type A { #layout(size = 1, align = 1); }"#,
+            r#"merge "./b.zng"; type A { #layout(size = 1, align = 1); }"#,
         ),
         (
             "./b.zng",
-            r#"import "./c.zng"; type B { #layout(size = 1, align = 1); }"#,
+            r#"merge "./c.zng"; type B { #layout(size = 1, align = 1); }"#,
         ),
         ("./c.zng", "type C { #layout(size = 1, align = 1); }"),
     ]);
 
     let parsed = ParsedZngFile::parse_str_with_resolver(
         r#"
-import "./a.zng";
+merge "./a.zng";
 type Main {
     #layout(size = 1, align = 1);
 }
@@ -916,7 +916,7 @@ fn cfg_match_unstable() {
 fn module_import_parser_test() {
     let parsed = crate::ParsedZngFile::parse_str(
         r#"
-import extern "module.zng";
+import "module.zng";
 "#,
         crate::cfg::NullCfg,
     );

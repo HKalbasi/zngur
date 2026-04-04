@@ -1226,6 +1226,7 @@ enum Token<'a> {
     KwExtern,
     KwImpl,
     KwImport,
+    KwMerge,
     KwIf,
     KwElse,
     KwMatch,
@@ -1252,6 +1253,7 @@ impl<'a> Token<'a> {
             "extern" => Token::KwExtern,
             "impl" => Token::KwImpl,
             "import" => Token::KwImport,
+            "merge" => Token::KwMerge,
             "if" => Token::KwIf,
             "else" => Token::KwElse,
             "match" => Token::KwMatch,
@@ -1302,6 +1304,7 @@ impl Display for Token<'_> {
             Token::KwExtern => write!(f, "extern"),
             Token::KwImpl => write!(f, "impl"),
             Token::KwImport => write!(f, "import"),
+            Token::KwMerge => write!(f, "merge"),
             Token::KwIf => write!(f, "if"),
             Token::KwElse => write!(f, "else"),
             Token::KwMatch => write!(f, "match"),
@@ -1888,7 +1891,7 @@ fn item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra
 
 fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone
 {
-    just(Token::KwImport)
+    just(Token::KwMerge)
         .ignore_then(select! {
             Token::Str(path) => path,
         })
@@ -1905,7 +1908,6 @@ fn import_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngPars
 fn module_import_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::KwImport)
-        .ignore_then(just(Token::KwExtern))
         .ignore_then(select! { Token::Str(path) => path })
         .then_ignore(just(Token::Semicolon))
         .map_with(|path, extra| ParsedItem::ModuleImport {
