@@ -1,6 +1,6 @@
-# Import
+# Merging (originally called Import)
 
-The `import` directive allows you to include type definitions and other declarations
+The `merge` directive allows you to include type definitions and other declarations
 from other `.zng` files into your main specification.
 Types, traits, and modules can appear multiple times across the transitive set of imported files,
 and their content is merged together.
@@ -8,14 +8,14 @@ and their content is merged together.
 ## Syntax
 
 ```zng
-import "./path/to/file.zng";
+merge "./path/to/file.zng";
 ```
 
 ## Path Resolution
 
-Import paths are resolved relative to the directory containing the current `.zng` file:
+Merge paths are resolved relative to the directory containing the current `.zng` file:
 
-- `import "./types.zng";`
+- `merge "./types.zng";`
 
 At this time, absolute paths are not supported.
 Importing paths without a leading specifier (e.g. `import "foo/bar.zng";`)
@@ -26,14 +26,14 @@ which is not necessarily the top-level `.zng` file passed to `zngur` on the comm
 
 ## Behavior
 
-When an import statement is processed:
+When a merge statement is processed:
 
 1. The parser reads and parses the imported file
 2. All declarations from the imported file are *merged* into the current specification
 3. Imported content becomes available as if it were defined in the importing file
-4. Import processing happens recursively - imported files can themselves contain import statements
+4. Merge processing happens recursively - imported files can themselves contain merge statements
 
-## Merging
+## Merging Algorithm
 
 Zngur's merge algorithm attempts to compute the union of each set of declarations
 which share an identity (e.g. every `type crate::Inventory { ... }` across all imported files).
@@ -52,8 +52,8 @@ This is an application-level decision that should not be determined by dependent
 **main.zng:**
 
 ```zng
-import "./core_types.zng";
-import "./iterators.zng";
+merge "./core_types.zng";
+merge "./iterators.zng";
 
 // May only appear in the top-level file.
 #convert_panic_to_exception
@@ -108,27 +108,27 @@ Notice that `iterators.zng` is able to "reopen" the `::std::vec::Vec<i32>` speci
 and extend it with a single function, `into_iter`.
 It does not need to respecify the `#layout` because that is already declared in `core_types.zng`.
 
-# Extern Import
+# Import
 
-On top of `zngur`s `import` syntax which enables better file organization,
+On top of `zngur`s `merge` syntax which enables better file organization,
 there's a different flavour of imports that enables zngur bridges to be split
 across multiple compilation units (i.e. Rust crate and C++ static libraries).
 
 ## Syntax
 
 ```zng
-import extern "./path/to/module.zng";
+import "./path/to/module.zng";
 ```
 
 ## Path Resolution
 
-Path resolution is identical to regular `import`s.
+Path resolution is identical to regular `merge`s.
 
 ## Behavior
 
-The direct implication of an `extern` import is that the generated `.h` will add
+The direct implication of an `import` is that the generated `.h` will add
 an `#include "./path/to/module.zng.h"` (A follow up feature may allow this path
-to be defined per module). This enables you to use the generated types from the
+to be user-defined). This enables you to use the generated types from the
 external module without regenerating them in this zngur module.
 
 ## Example
@@ -136,7 +136,7 @@ external module without regenerating them in this zngur module.
 **main.zng:**
 
 ```zng
-import extern "./my_types.zng";
+import "./my_types.zng";
 
 // May only appear in the top-level file per module. Both these files are top level modules.
 #convert_panic_to_exception
