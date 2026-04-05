@@ -57,6 +57,14 @@
 
 namespace {{ self.cpp_namespace }} {
 
+  inline void* __zng_memcpy( void* dest, const void* src, std::size_t count ){
+    if (count > 0) {
+		return memcpy(dest, src, count);
+	}
+	return dest;
+  }
+
+
   template<typename T>
   struct __zngur_internal {
     static inline uint8_t* data_ptr(const T& t) noexcept;
@@ -88,7 +96,7 @@ namespace {{ self.cpp_namespace }} {
 
   template<typename T>
   inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
-    memcpy(dst, ::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
+    __zng_memcpy(dst, ::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
     ::{{ self.cpp_namespace }}::__zngur_internal_assume_deinit(t);
   }
 
@@ -96,7 +104,7 @@ namespace {{ self.cpp_namespace }} {
   inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
     T t;
     ::{{ self.cpp_namespace }}::__zngur_internal_assume_init(t);
-    memcpy(::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), src, ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
+    __zng_memcpy(::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), src, ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
     return t;
   }
 
@@ -270,10 +278,10 @@ namespace {{ self.cpp_namespace }} {
       DataType __zngur_data;
       Raw() {}
       Raw(Ref<T> value) {
-          memcpy(&__zngur_data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
       }
       Raw(RefMut<T> value) {
-          memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
       }
       Raw(DataType data) : __zngur_data(data) {
       }
@@ -282,7 +290,7 @@ namespace {{ self.cpp_namespace }} {
       }
       Ref<T> read_ref() {
           Ref<T> value;
-          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
+          __zng_memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
           __zngur_internal_assume_init<Ref<T>>(value);
           return value;
       }
@@ -293,7 +301,7 @@ namespace {{ self.cpp_namespace }} {
       DataType __zngur_data;
       RawMut() {}
       RawMut(RefMut<T> value) {
-          memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
       }
       RawMut(DataType data) : __zngur_data(data) {
       }
@@ -302,24 +310,24 @@ namespace {{ self.cpp_namespace }} {
       }
       T read() {
           T value;
-          memcpy(__zngur_internal_data_ptr<T>(value), __zngur_data, __zngur_internal_size_of<T>());
+          __zng_memcpy(__zngur_internal_data_ptr<T>(value), __zngur_data, __zngur_internal_size_of<T>());
           __zngur_internal_assume_init<T>(value);
           return value;
       }
       Ref<T> read_ref() {
           Ref<T> value;
-          memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
+          __zng_memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
           __zngur_internal_assume_init<Ref<T>>(value);
           return value;
       }
       RefMut<T> read_mut() {
           RefMut<T> value;
-          memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &__zngur_data, __zngur_internal_size_of<RefMut<T>>());
+          __zng_memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &__zngur_data, __zngur_internal_size_of<RefMut<T>>());
           __zngur_internal_assume_init<RefMut<T>>(value);
           return value;
       }
       void write(T value) {
-          memcpy(__zngur_data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
+          __zng_memcpy(__zngur_data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
           __zngur_internal_assume_deinit<T>(value);
       }
   };
