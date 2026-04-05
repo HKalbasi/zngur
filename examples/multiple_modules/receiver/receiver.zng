@@ -1,4 +1,4 @@
-import extern "packet.zng";
+import "packet.zng";
 
 type crate::Receiver {
     #layout(size = 8, align = 8); // count: u64

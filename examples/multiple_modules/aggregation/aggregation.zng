@@ -1,4 +1,4 @@
-import extern "packet.zng";
+import "packet.zng";
 
 #cpp_additional_includes "
 #include <stats.h>

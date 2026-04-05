@@ -1,6 +1,6 @@
 // Bar module - exports Option<String> APIs for C++ usage
 
-import "./primitives.zng";
+merge "./primitives.zng";
 
 mod ::std {
     mod string {

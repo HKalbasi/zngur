@@ -1,6 +1,6 @@
 // Foo module - exports Vec<i32> APIs for C++ usage
 
-import "./primitives.zng";
+merge "./primitives.zng";
 
 mod ::std {
     mod vec {
