@@ -19,6 +19,7 @@ macro_rules! splat {
     // Closure-style with custom variable names
     ($inputs:expr, |$n:ident, $el:ident|, $pattern:literal $(, $format_vars:expr)* $(,)?) => {{
         use itertools::Itertools;
+        #[allow(unused_variables)]
         $inputs
             .into_iter()
             .enumerate()
@@ -28,6 +29,7 @@ macro_rules! splat {
 
     ($inputs:expr, |$n:ident, _|, $pattern:literal, $($format_vars:expr,)* $(,)?) => {{
       use itertools::Itertools;
+      #[allow(unused_variables)]
       $inputs
           .into_iter()
           .enumerate()
@@ -473,11 +475,7 @@ impl<'a> CppHeaderTemplate<'a> {
 
             for (name, sig) in &imp.methods {
                 let inputs = &sig.inputs;
-                let splat_inputs = inputs
-                    .iter()
-                    .enumerate()
-                    .map(|(n, ty)| format!("{ty} i{n}"))
-                    .join(", ");
+                let splat_inputs = inputs.iter().map(|ty| format!("{ty}")).join(", ");
 
                 s.push_str(&format!(
                     r#"
