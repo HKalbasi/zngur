@@ -1,4 +1,4 @@
-<%# #language:cpp %>
+{# #language:cpp #}
 
 #pragma once
 
@@ -12,237 +12,231 @@
 #include <math.h>
 #include <type_traits>
 
-<% if !self.zng_header_in_place { %>
+{% if !self.zng_header_in_place %}
 #include <zngur.h>
-<% } else { %>
-<%- self.render_zng_header() %>
-<% } %>
+{% else %}
+{{ self.render_zng_header() }}
+{% endif %}
 
-<%- self.additional_includes %>
+{{ self.additional_includes }}
 
-<% for def in self.rust_cfg_defines { %>
-#define <%- def %>
-<% } %>
+{% for def in self.rust_cfg_defines %}
+#define {{ def }}
+{% endfor %}
 
 extern "C" {
-  <% for f in self.fn_deps { %>
-    void <%- f.sig.rust_link_name %> (
-      <% for n in 0..f.sig.inputs.len() { %>
-        uint8_t* i<%- n %>,
-      <% } %>
+  {% for f in self.fn_deps %}
+    void {{ f.sig.rust_link_name }} (
+      {% for n in 0..f.sig.inputs.len() %}
+        uint8_t* i{{ n }},
+      {% endfor %}
       uint8_t* o
     ) noexcept ;
-  <% } %>
+  {% endfor %}
 
-  <% for td in self.type_defs { %>
-    <% for method in &td.methods { %>
-      void <%- method.sig.rust_link_name %> (
-        <% for n in 0..method.sig.inputs.len() { %>
-          uint8_t* i<%- n %>,
-        <% } %>
+  {% for td in self.type_defs %}
+    {% for method in td.methods %}
+      void {{ method.sig.rust_link_name }} (
+        {% for n in 0..method.sig.inputs.len() %}
+          uint8_t* i{{ n }},
+        {% endfor %}
         uint8_t* o
       ) noexcept ;
-    <% } %>
+    {% endfor %}
 
-    <% for constructor in &td.constructors { %>
-      void <%- constructor.rust_link_name %> (
-        <% for n in 0..constructor.inputs.len() { %>
-          uint8_t* i<%- n %>,
-        <% } %>
+    {% for constructor in td.constructors %}
+      void {{ constructor.rust_link_name }} (
+        {% for n in 0..constructor.inputs.len() %}
+          uint8_t* i{{ n }},
+        {% endfor %}
         uint8_t* o
       ) noexcept ;
-    <% } %>
+    {% endfor %}
 
-    <% if let Some(cpp_value) = &td.cpp_value { %>
-      ::<%- self.namespace %>::ZngurCppOpaqueOwnedObject* <%- cpp_value.0 %>(uint8_t*);
-    <% } %>
+    {% if let Some(cpp_value) = td.cpp_value %}
+      ::{{ self.namespace }}::ZngurCppOpaqueOwnedObject* {{ cpp_value.0 }}(uint8_t*);
+    {% endif %}
 
-    <% if let CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } = &td.layout { %>
-      size_t <%- size_fn %>();
-      uint8_t* <%- alloc_fn %>();
-      void <%- free_fn %>(uint8_t*);
-    <% } %>
+    {% if !td.layout.is_stack_allocated() && !td.layout.is_only_by_ref() %}
+      size_t {{ td.layout.size_fn() }}();
+      uint8_t* {{ td.layout.alloc_fn() }}();
+      void {{ td.layout.free_fn() }}(uint8_t*);
+    {% endif %}
 
-    <% for field in &td.fields {%>
-      <% if let ZngurFieldDataOffset::Auto(field_offset_const_name) = &field.offset { %>
-      extern const uint8_t <%- field_offset_const_name %>;
-      <% } %>
-    <% } %>
+    {% for field in td.fields %}
+      {% if let ZngurFieldDataOffset::Auto(field_offset_const_name) = field.offset %}
+      extern const uint8_t {{ field_offset_const_name }};
+      {% endif %}
+    {% endfor %}
 
-    <% for tr in &td.wellknown_traits { %>
-      <% /* TODO: switch to match. */ %>
-      <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print } = tr { %>
-        void <%- pretty_print %>(uint8_t*);
-        void <%- debug_print %>(uint8_t*);
-      <% } else if let ZngurWellknownTraitData::Drop { drop_in_place } = tr { %>
-        void <%- drop_in_place %>(uint8_t*);
-      <% } else if let ZngurWellknownTraitData::Unsized | ZngurWellknownTraitData::Copy = tr { %>
-        <% /* No output for Unsized and Copy traits */ %>
-      <% } %>
-    <% } %>
+    {% for tr in td.wellknown_traits %}
+      {#  TODO: switch to match.  #}
+      {% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print } = tr %}
+        void {{ pretty_print }}(uint8_t*);
+        void {{ debug_print }}(uint8_t*);
+      {% else if let ZngurWellknownTraitData::Drop { drop_in_place } = tr %}
+        void {{ drop_in_place }}(uint8_t*);
+      {% endif %}
+    {% endfor %}
 
-    <% for (_, td) in self.trait_defs { %>
-      <% if let CppTraitDefinition::Fn { sig } = td { %>
-        void <%- sig.rust_link_name %>(uint8_t* __zngur_data, void destructor(uint8_t *),
+    {% for (_, td) in self.trait_defs %}
+      {% if let Some(sig) = td.as_fn() %}
+        void {{ sig.rust_link_name }}(uint8_t* __zngur_data, void destructor(uint8_t *),
                                        void call(uint8_t *,
-                                          <% for n in 0..sig.inputs.len() { %> uint8_t *i<%- n %>, <% } %>uint8_t *o),
+                                          {% for n in 0..sig.inputs.len() %} uint8_t *i{{ n }}, {% endfor %}uint8_t *o),
                                        uint8_t *o
         );
-      <% } else if let CppTraitDefinition::Normal { link_name, link_name_ref, .. } = td { %>
-        void <%- link_name %>(uint8_t *__zngur_data, void destructor(uint8_t *), uint8_t *o);
-        void <%- link_name_ref %>(uint8_t *__zngur_data, uint8_t *o);
-      <% } %>
-    <% } %>
+      {% else if let Some(normal) = td.as_normal() %}
+        void {{ normal.2 }}(uint8_t *__zngur_data, void destructor(uint8_t *), uint8_t *o);
+        void {{ normal.3 }}(uint8_t *__zngur_data, uint8_t *o);
+      {% endif %}
+    {% endfor %}
 
   // end self.type_defs
-  <% } %>
+  {% endfor %}
 
 } // extern "C"
 
-<% for td in self.type_defs { %>
-  <%- td.ty.header() %>
-<% } %>
+{% for td in self.type_defs %}
+  {{ td.ty.header() }}
+{% endfor %}
 
-<% for imp in self.exported_impls { %>
-  <%- imp.ty.header() %>
-  <% if let Some(tr) = &imp.tr { %>
-    <%- tr.header() %>
-  <% } %>
-<% } %>
+{% for imp in self.exported_impls %}
+  {{ imp.ty.header() }}
+  {% if let Some(tr) = imp.tr %}
+    {{ tr.header() }}
+  {% endif %}
+{% endfor %}
 
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 
-<% for td in self.type_defs {
-    if td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized) { %>
-        template<>
-        struct zngur_is_unsized< <%- td.ty %> > : ::std::true_type {};
-<%  } 
-} %>
+{% for td in self.type_defs %}
+  {% if td.has_unsized() %}
+    template<>
+    struct zngur_is_unsized< {{ td.ty }} > : ::std::true_type {};
+  {% endif %}
+{% endfor %}
 
 }
 
-<% for (_, td) in self.trait_defs { %>
-  <% if let CppTraitDefinition::Normal { as_ty, methods, .. } = td { %>
-    <%- as_ty.path.open_namespace() %>
-    <%- as_ty.specialization_decl() %> {
+{% for (_, td) in self.trait_defs %}
+  {% if let Some(normal) = td.as_normal() %}
+    {{ normal.0.path.open_namespace() }}
+    {{ normal.0.specialization_decl() }} {
       public:
-        virtual ~<%- as_ty.path.name() %>() {};
-        <% for method in methods { %>
-          virtual <%- method.output %> <%- method.name %> (
-            <%- splat!(&method.inputs, |n, x|, "{x} i{n}") %>
+        virtual ~{{ normal.0.path.name() }}() {};
+        {% for method in normal.1 %}
+          virtual {{ method.output }} {{ method.name }} (
+            {{ splat!(&method.inputs, |n, x|, "{x} i{n}") }}
           ) = 0;
-        <% } %>
+        {% endfor %}
       };
-    <%- as_ty.path.close_namespace() %>
-  <% } %>
-<% } %>
+    {{ normal.0.path.close_namespace() }}
+  {% endif %}
+{% endfor %}
 
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 
 // Field specializations templates 
 // (declared before types so fields instantiate the correct template)
 
-<% for td in self.type_defs { %>
+{% for td in self.type_defs %}
 
-<% for field_kind in &["FieldOwned", "FieldRef", "FieldRefMut"] { %>
+{% for field_kind in ["FieldOwned", "FieldRef", "FieldRefMut"] %}
   
   template<typename Offset, typename... Offsets>
-  struct <%- field_kind %>< <%- td.ty %>, Offset, Offsets...> {
+  struct {{ field_kind }}< {{ td.ty }}, Offset, Offsets...> {
 
-    <% if !td.fields.is_empty() { %>
+    {% if !td.fields.is_empty() %}
     union {
-    <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::<%- self.namespace %>::<%- field_kind %><
-        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
-      <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >,
-      <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >,
-      <% } } %>
+    {% for (index, field) in td.fields.iter().enumerate() %}
+      ::{{ self.namespace }}::{{ field_kind }}<
+        {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+      {% if let Some(offset) = field.offset.as_offset() %}
+        ::{{ self.namespace }}::FieldStaticOffset< {{ td.ty }}, {{ offset }} >,
+      {% else %}
+        ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}, {{ index }} >,
+      {% endif %}
         Offset,
         Offsets...
-      > <%- cpp_handle_field_name(&field.name) %>;
-    <% } %>
+      > {{ self.cpp_handle_field_name(field.name) }};
+    {% endfor %}
     };
-    <% } %>
+    {% endif %}
 
-    <% for method in &td.methods { %>
-      <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
-        <% if !(m == Mutability::Mut && *field_kind == "FieldRef") { %>
-          <%- method.sig.output %> <%- method.name %>(
-            <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
+    {% for method in td.methods %}
+      {% if method.is_valid_field_method(field_kind) %}
+          {{ method.sig.output }} {{ method.name }}(
+            {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
           ) const noexcept ;
-        <% } %>
-      <% } %>
-    <% } %>
+      {% endif %}
+    {% endfor %}
 
-  }; // struct <%- field_kind %>< <%- td.ty %>, Offset, Offsets... >
-<% } /* for field_kind in &[...] */ %>
+  }; // struct {{ field_kind }}< {{ td.ty }}, Offset, Offsets... >
+{% endfor %}
 
-<% } /* for td in self.type_defs */ %>
+{% endfor %}
 
-} // namespace <%- self.namespace %>
+} // namespace {{ self.namespace }}
 
-<% for td in self.type_defs { %>
-  <% let is_copy = td.wellknown_traits.contains(&ZngurWellknownTraitData::Copy); %>
-  <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
-  <% let name = td.ty.path.name(); %>
+{% for td in self.type_defs %}
+  {% let is_copy = td.has_copy() %}
+  {% let is_unsized = td.has_unsized() %}
+  {% let name = td.ty.path.name() %}
 
-  namespace <%- self.namespace %> {
+  namespace {{ self.namespace }} {
     template<>
-    struct __zngur_internal< <%- td.ty %> > {
-      static inline uint8_t* data_ptr(const <%- td.ty %>& t) noexcept ;
-      static inline void check_init(const <%- td.ty %>& t) noexcept ;
-      static inline void assume_init(<%- td.ty %>& t) noexcept ;
-      static inline void assume_deinit(<%- td.ty %>& t) noexcept ;
+    struct __zngur_internal< {{ td.ty }} > {
+      static inline uint8_t* data_ptr(const {{ td.ty }}& t) noexcept ;
+      static inline void check_init(const {{ td.ty }}& t) noexcept ;
+      static inline void assume_init({{ td.ty }}& t) noexcept ;
+      static inline void assume_deinit({{ td.ty }}& t) noexcept ;
       static inline size_t size_of() noexcept ;
     };
   }
 
-  <%- td.ty.path.open_namespace() %>
-    <%- td.ty.specialization_decl() %> {
+  {{ td.ty.path.open_namespace() }}
+    {{ td.ty.specialization_decl() }} {
       public:
-    <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
-        <%- name %>() = delete;
+    {% if td.layout.is_only_by_ref() %}
+        {{ name }}() = delete;
 
-          <% if !td.fields.is_empty() { %>
+          {% if !td.fields.is_empty() %}
           union {
-          <% } %>
-    <% } CppLayoutPolicy::StackAllocated { size, align } => { %>
-        union alignas(<%- align %>) {
-          alignas(<%- align %>) mutable ::std::array< ::uint8_t, <%- size %>> __zngur_data;
-        <% for (index, field) in td.fields.iter().enumerate() { %>
-          ::<%- self.namespace %>::FieldOwned<
-            <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
-          <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-            ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
-          <% } ZngurFieldDataOffset::Auto(_) => { %>
-            ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
-          <% } } %>
-          > <%- cpp_handle_field_name(&field.name) %>;
-        <% } %>
+          {% endif %}
+    {% else if td.layout.is_stack_allocated() %}
+        union alignas({{ td.layout.stack_align() }}) {
+          alignas({{ td.layout.stack_align() }}) mutable ::std::array< ::uint8_t, {{ td.layout.stack_size() }}> __zngur_data;
+        {% for (index, field) in td.fields.iter().enumerate() %}
+          ::{{ self.namespace }}::FieldOwned<
+            {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+          {% if let Some(offset) = field.offset.as_offset() %}
+            ::{{ self.namespace }}::FieldStaticOffset< {{ td.ty }}, {{ offset }} >
+          {% else %}
+            ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}, {{ index }} >
+          {% endif %}
+          > {{ self.cpp_handle_field_name(field.name) }};
+        {% endfor %}
         };
-    <% } CppLayoutPolicy::HeapAllocated { .. } => { %>
+    {% else %}
       union {
         ::uint8_t* __zngur_data;
-      <% for (index, field) in td.fields.iter().enumerate() { %>
-        ::<%- self.namespace %>::FieldOwned<
-          <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
-        <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-          ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
-        <% } ZngurFieldDataOffset::Auto(_) => { %>
-          ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
-        <% } } %>
-        > <%- cpp_handle_field_name(&field.name) %>;
-      <% } %>
+      {% for (index, field) in td.fields.iter().enumerate() %}
+        ::{{ self.namespace }}::FieldOwned<
+          {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+        {% if let Some(offset) = field.offset.as_offset() %}
+          ::{{ self.namespace }}::FieldStaticOffset< {{ td.ty }}, {{ offset }} >
+        {% else %}
+          ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}, {{ index }} >
+        {% endif %}
+        > {{ self.cpp_handle_field_name(field.name) }};
+      {% endfor %}
       };
-    <% }
-    } %>
+    {% endif %}
 
-    <% match td.layout { CppLayoutPolicy::OnlyByRef => { %>
-    <% } CppLayoutPolicy::HeapAllocated { .. } | CppLayoutPolicy::StackAllocated { .. } => { %>
+    {% if !td.layout.is_only_by_ref() %}
 
-    <% if td.ty.path.to_string() == format!("::{}::Bool", self.namespace) { %>
+    {% if td.ty.path.to_string() == format!("::{}::Bool", self.namespace) %}
       public:
         operator bool() {
           return __zngur_data[0];
@@ -250,9 +244,9 @@ namespace <%- self.namespace %> {
         Bool(bool b) {
           __zngur_data[0] = b;
         }
-    <% } %>
+    {% endif %}
 
-    <% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) { %>
+    {% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) %}
       public:
         operator char32_t() const {
           return *reinterpret_cast<const char32_t*>(__zngur_data.data());
@@ -260,216 +254,190 @@ namespace <%- self.namespace %> {
         Char(char32_t c) {
           *reinterpret_cast<char32_t*>(__zngur_data.data()) = c;
         }
-    <% } %>
+    {% endif %}
 
-    <% if !is_copy { %>
+    {% if !is_copy %}
       bool drop_flag;
-    <% } %>
+    {% endif %}
 
-    <% let (alloc_heap, free_heap, copy_data) = match &td.layout {
-      CppLayoutPolicy::StackAllocated { .. } => (
-        "".to_owned(),
-        "".to_owned(),
-        "this->__zngur_data = other.__zngur_data;".to_owned(),
-      ),
-      CppLayoutPolicy::HeapAllocated { size_fn, alloc_fn, free_fn } => (
-        format!("__zngur_data = {}();", alloc_fn),
-        format!("{}(__zngur_data);", free_fn),
-        format!("memcpy(this->__zngur_data, other.__zngur_data, {}());", size_fn),
-      ),
-      CppLayoutPolicy::OnlyByRef => unreachable!(),
-    }; %>
+    {% let alloc_heap = td.layout.alloc_heap() %}
+    {% let free_heap = td.layout.free_heap() %}
+    {% let copy_data = td.layout.copy_data() %}
 
     public:
-      <% if is_copy { %>
-        <%- name %>() { <%- alloc_heap %> }
-        ~<%- name %>() { <%- free_heap %> }
-        <%- name %>(const <%- name %>& other) {
-          <%- alloc_heap %>
-          <%- copy_data %>
+      {% if is_copy %}
+        {{ name }}() { {{ alloc_heap }} }
+        ~{{ name }}() { {{ free_heap }} }
+        {{ name }}(const {{ name }}& other) {
+          {{ alloc_heap }}
+          {{ copy_data }}
         }
-        <%- name %>& operator=(const <%- name %>& other) {
-          <%- copy_data %>
+        {{ name }}& operator=(const {{ name }}& other) {
+          {{ copy_data }}
           return *this;
         }
-        <%- name %>(<%- name %>&& other) {
-          <%- alloc_heap %>
-          <%- copy_data %>
+        {{ name }}({{ name }}&& other) {
+          {{ alloc_heap }}
+          {{ copy_data }}
         }
-        <%- name %>& operator=(<%- name %>&& other) {
-          <%- copy_data %>
+        {{ name }}& operator=({{ name }}&& other) {
+          {{ copy_data }}
           return *this;
         }
-      <% } else { /* !is_copy */ %>
-        <% let drop_in_place = td.wellknown_traits.iter().find_map(|x| match x {
-          ZngurWellknownTraitData::Drop { drop_in_place } => Some(drop_in_place),
-          _ => None,
-        }).unwrap(); %>
+      {% else %}
+        {% let drop_in_place = td.drop_in_place() %}
 
-        <%- name %>() : drop_flag(false) { <%- alloc_heap %> }
-        ~<%- name %>() {
+        {{ name }}() : drop_flag(false) { {{ alloc_heap }} }
+        ~{{ name }}() {
           if (drop_flag) {
-            <%- drop_in_place %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this));
+            {{ drop_in_place }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this));
           }
-          <%- free_heap %>
+          {{ free_heap }}
         }
-        <%- name %>(const <%- name %>& other) = delete;
-        <%- name %>& operator=(const <%- name %>& other) = delete;
-        <%- name %>(<%- name %>&& other) : drop_flag(false) {
-          <%- alloc_heap %>
+        {{ name }}(const {{ name }}& other) = delete;
+        {{ name }}& operator=(const {{ name }}& other) = delete;
+        {{ name }}({{ name }}&& other) : drop_flag(false) {
+          {{ alloc_heap }}
           *this = ::std::move(other);
         }
-        <%- name %>& operator=(<%- name %>&& other) {
+        {{ name }}& operator=({{ name }}&& other) {
           if (this != &other) {
             if (drop_flag) {
-              <%- drop_in_place %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this));
+              {{ drop_in_place }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this));
             }
             this->drop_flag = other.drop_flag;
-            <%- copy_data %>
+            {{ copy_data }}
             other.drop_flag = false;
           }
           return *this;
         }
-      <% } %>
+      {% endif %}
 
-      <% match &td.from_trait { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-        static inline <%- name %> make_box(
-          ::std::function< <%- output.into_cpp(self.namespace, self.crate_name) %> (<%- inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ") %>) > f
-        );
-      <% } Some(RustTrait::Normal{..}) => { %>
-        template<typename T, typename... Args>
-        static inline <%- name %> make_box(Args&&... args);
-      <% } None => { %>
-      <% }
-      } %>
+      {{ td.render_make_box(name, self.namespace, self.crate_name) }}
 
-      <% if let Some(cpp_value) = &td.cpp_value { %>
-          inline <%- cpp_value.1 %>& cpp() {
-              return (*<%- cpp_value.0 %>(::<%- self.namespace %>::__zngur_internal_data_ptr(*this))).as_cpp< <%- cpp_value.1 %> >();
+      {% if let Some(cpp_value) = td.cpp_value %}
+          inline {{ cpp_value.1 }}& cpp() {
+              return (*{{ cpp_value.0 }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this))).as_cpp< {{ cpp_value.1 }} >();
           }
-      <% } %>
+      {% endif %}
 
-    <% }
-    } %>
+    {% endif %}
 
-    <% for method in &td.methods { %>
-        static <%- method.sig.output %> <%- method.name %>(
-          <%- splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") %>
+    {% for method in td.methods %}
+        static {{ method.sig.output }} {{ method.name }}(
+          {{ splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") }}
         ) noexcept ;
-        <% if method.kind != ZngurMethodReceiver::Static { %>
-            <%- method.sig.output %> <%- method.name %>(
-              <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
+        {% if method.kind != ZngurMethodReceiver::Static %}
+            {{ method.sig.output }} {{ method.name }}(
+              {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
             )
-            <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept ;
-        <% } %>
-    <% } %>
+            {% if method.is_ref_not_mut() %} const {% endif %} noexcept ;
+        {% endif %}
+    {% endfor %}
 
-    <% for constructor in &td.constructors { %>
-      <%- td.ty.path.0.last().unwrap() %>(
-        <%- splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") %>
+    {% for constructor in td.constructors %}
+      {{ td.ty.path.0.last().unwrap() }}(
+        {{ splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") }}
       ) noexcept ;
-    <% } %>
+    {% endfor %}
 
-  }; // <%- td.ty.specialization_decl() %>
+  }; // {{ td.ty.specialization_decl() }}
 
-<%- td.ty.path.close_namespace() %>
+{{ td.ty.path.close_namespace() }}
 
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 
-<% match &td.layout { CppLayoutPolicy::StackAllocated { size, align: _ } => { %>
-  inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
-      return <%- size %>;
+{% if td.layout.is_stack_allocated() %}
+  inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
+      return {{ td.layout.stack_size() }};
   }
-<% } CppLayoutPolicy::HeapAllocated { size_fn, .. } => { %>
-  inline size_t __zngur_internal< <%- td.ty %> >::size_of() noexcept {
-      return <%- size_fn %>();
+{% else if !td.layout.is_only_by_ref() %}
+  inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
+      return {{ td.layout.size_fn() }}();
   }
 
   template <>
-  struct zngur_heap_allocated< <%- td.ty %> > : ::std::true_type {};
-<% } CppLayoutPolicy::OnlyByRef => { %>
-  <% /* OnlyByRef types don't need these template specializations */ %>
-<% }
-} %>
+  struct zngur_heap_allocated< {{ td.ty }} > : ::std::true_type {};
+{% endif %}
 
-<% if td.layout != CppLayoutPolicy::OnlyByRef { %>
-  <% if is_copy { %>
-    inline void __zngur_internal< <%- td.ty %> >::check_init(const <%- td.ty %>&) noexcept {}
-    inline void __zngur_internal< <%- td.ty %> >::assume_init(<%- td.ty %>&) noexcept {}
-    inline void __zngur_internal< <%- td.ty %> >::assume_deinit(<%- td.ty %>&) noexcept {}
-  <% } else { %>
-    inline void __zngur_internal< <%- td.ty %> >::check_init(const <%- td.ty %>& t) noexcept {
+{% if !td.layout.is_only_by_ref() %}
+  {% if is_copy %}
+    inline void __zngur_internal< {{ td.ty }} >::check_init(const {{ td.ty }}&) noexcept {}
+    inline void __zngur_internal< {{ td.ty }} >::assume_init({{ td.ty }}&) noexcept {}
+    inline void __zngur_internal< {{ td.ty }} >::assume_deinit({{ td.ty }}&) noexcept {}
+  {% else %}
+    inline void __zngur_internal< {{ td.ty }} >::check_init(const {{ td.ty }}& t) noexcept {
         if (!t.drop_flag) {
-            ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type <%- td.ty %>" << ::std::endl;
+            ::std::cerr << "Use of uninitialized or moved Zngur Rust object with type {{ td.ty }}" << ::std::endl;
             while (true) raise(SIGSEGV);
         }
     }
 
-    inline void __zngur_internal< <%- td.ty %> >::assume_init(<%- td.ty %>& t) noexcept {
+    inline void __zngur_internal< {{ td.ty }} >::assume_init({{ td.ty }}& t) noexcept {
         t.drop_flag = true;
     }
 
-    inline void __zngur_internal< <%- td.ty %> >::assume_deinit(<%- td.ty %>& t) noexcept {
-        ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
+    inline void __zngur_internal< {{ td.ty }} >::assume_deinit({{ td.ty }}& t) noexcept {
+        ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
         t.drop_flag = false;
     }
-  <% } %>
+  {% endif %}
 
-  inline uint8_t* __zngur_internal< <%- td.ty %> >::data_ptr(<%- td.ty %> const & t) noexcept {
-    <% if let CppLayoutPolicy::HeapAllocated {..} = td.layout { %>
+  inline uint8_t* __zngur_internal< {{ td.ty }} >::data_ptr({{ td.ty }} const & t) noexcept {
+    {% if !td.layout.is_stack_allocated() %}
       return const_cast<uint8_t*>(t.__zngur_data);
-    <% } else { %>
+    {% else %}
       return const_cast<uint8_t*>(t.__zngur_data.data());
-    <% } %>
+    {% endif %}
   }
 
-<% } %>
+{% endif %}
 
-<% for (index, field) in td.fields.iter().enumerate() { %>
-  <% if let ZngurFieldDataOffset::Auto(field_offset_const_name) = &field.offset { %>
+{% for (index, field) in td.fields.iter().enumerate() %}
+  {% if let ZngurFieldDataOffset::Auto(field_offset_const_name) = field.offset %}
   template <>
-  struct FieldAutoOffset< <%- td.ty %>, <%- index %> > {
-    static constexpr size_t offset() noexcept { return <%- field_offset_const_name %>; }
+  struct FieldAutoOffset< {{ td.ty }}, {{ index }} > {
+    static constexpr size_t offset() noexcept { return {{ field_offset_const_name }}; }
   };
-  <% } %>
-<% } %>
+  {% endif %}
+{% endfor %}
 
-} // namespace <%- self.namespace %>
+} // namespace {{ self.namespace }}
 
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 
   template<>
-  struct RefMut< <%- td.ty %> > {
+  struct RefMut< {{ td.ty }} > {
   public:
     RefMut() {
-      __zngur_data = <% if is_unsized { %> {0, 0} <% } else { %> 0 <% } %>;
+      __zngur_data = {% if is_unsized %} {0, 0} {% else %} 0 {% endif %};
     }
 
     union {
-      <% if is_unsized { %>::std::array<size_t, 2> <% } else { %>size_t<% } %> __zngur_data;
+      {% if is_unsized %}::std::array<size_t, 2> {% else %}size_t{% endif %} __zngur_data;
 
-    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-    <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::<%- self.namespace %>::FieldRefMut<
-        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
-      <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %>>
-      <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %>>
-      <% } } %>
-      > <%- cpp_handle_field_name(&field.name) %>;
-    <% } %>
-    <% } %>
+    {% if !is_unsized && !td.layout.is_only_by_ref() %}
+    {% for (index, field) in td.fields.iter().enumerate() %}
+      ::{{ self.namespace }}::FieldRefMut<
+        {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+      {% if let Some(offset) = field.offset.as_offset() %}
+        ::{{ self.namespace }}::FieldStaticOffset< {{ td.ty }}, {{ offset }}>
+      {% else %}
+        ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}, {{ index }}>
+      {% endif %}
+      > {{ self.cpp_handle_field_name(field.name) }};
+    {% endfor %}
+    {% endif %}
     };
 
-    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-      RefMut(const <%- td.ty %>& t) {
-        ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
+    {% if !is_unsized && !td.layout.is_only_by_ref() %}
+      RefMut(const {{ td.ty }}& t) {
+        ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
         __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
       }
-    <% } %>
+    {% endif %}
 
-    <% if !is_unsized { %>
+    {% if !is_unsized %}
       // construct a ref from a FieldOwned if it's offset can be calculated at
       // compile time
       template <
@@ -478,7 +446,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      RefMut(const FieldOwned< <%- td.ty %>, Offset, Offsets... >& f) {
+      RefMut(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
           constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           if (heap_allocated) {
@@ -497,7 +465,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      RefMut(const FieldOwned< <%- td.ty %>, Offset, Offsets... >& f) {
+      RefMut(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           if (heap_allocated) {
@@ -516,7 +484,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      RefMut(const FieldRefMut< <%- td.ty %>, Offset, Offsets...>& f) {
+      RefMut(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
           constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
@@ -529,103 +497,95 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      RefMut(const FieldRefMut< <%- td.ty %>, Offset, Offsets...>& f) {
+      RefMut(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
-    <% } %>
+    {% endif %}
 
-    <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
-      inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
-      <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-        <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
-        inline RefMut(<%- tr %>& arg);
-      <% } None => { %>
-      <% }
-    } %>
+    {{ td.render_make_box_ref(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    <% if let Some(cpp_value) = &td.cpp_value { %>
-      inline <%- cpp_value.1 %>& cpp() {
-          return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< <%- cpp_value.1 %> >();
+    {% if let Some(cpp_value) = td.cpp_value %}
+      inline {{ cpp_value.1 }}& cpp() {
+          return (*{{ cpp_value.0 }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_value.1 }} >();
       }
-    <% } %>
+    {% endif %}
 
-    <% if let Some(cpp_ref) = &td.cpp_ref { %>
-      inline <%- cpp_ref.0 %>& cpp() {
-          return *reinterpret_cast< <%- cpp_ref.0 %>* >(__zngur_data);
+    {% if let Some(cpp_ref) = td.cpp_ref %}
+      inline {{ cpp_ref.0 }}& cpp() {
+          return *reinterpret_cast< {{ cpp_ref.0 }}* >(__zngur_data);
       }
-      inline RefMut(const <%- cpp_ref.0 %>& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
-    <% } %>
+      inline RefMut(const {{ cpp_ref.0 }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
+    {% endif %}
 
-    <% for method in &td.methods { %>
-      <% if let ZngurMethodReceiver::Ref(_) = method.kind { %>
-        <%- method.sig.output %> <%- method.name %>(
-          <%- splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
+    {% for method in td.methods %}
+      {% if let ZngurMethodReceiver::Ref(_) = method.kind %}
+        {{ method.sig.output }} {{ method.name }}(
+          {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
         ) const noexcept ;
-      <% } %>
-    <% } %>
+      {% endif %}
+    {% endfor %}
 
-  }; // struct RefMut< <%- td.ty %> >
+  }; // struct RefMut< {{ td.ty }} >
 
   template<>
-  struct __zngur_internal< RefMut < <%- td.ty %> > > {
-    static inline uint8_t* data_ptr(const RefMut< <%- td.ty %> >& t) noexcept {
+  struct __zngur_internal< RefMut < {{ td.ty }} > > {
+    static inline uint8_t* data_ptr(const RefMut< {{ td.ty }} >& t) noexcept {
         return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
     }
-    static inline void assume_init(RefMut< <%- td.ty %> >&) noexcept {}
-    static inline void check_init(const RefMut< <%- td.ty %> >&) noexcept {}
-    static inline void assume_deinit(RefMut< <%- td.ty %> >&) noexcept {}
+    static inline void assume_init(RefMut< {{ td.ty }} >&) noexcept {}
+    static inline void check_init(const RefMut< {{ td.ty }} >&) noexcept {}
+    static inline void assume_deinit(RefMut< {{ td.ty }} >&) noexcept {}
     static inline size_t size_of() noexcept {
-        return <% if is_unsized { %>16<% } else { %>8<% } %>;
+        return {% if is_unsized %}16{% else %}8{% endif %};
     }
   };
 
-} // namespace <%- self.namespace %>
+} // namespace {{ self.namespace }}
 
 // Ref specialization
-<% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) { %>
-    auto operator""_rs(const char* input, size_t len) -> ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str>;
-<% } %>
+{% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) %}
+    auto operator""_rs(const char* input, size_t len) -> ::{{ self.namespace }}::Ref<::{{ self.namespace }}::Str>;
+{% endif %}
 
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 
   template<>
-  struct Ref< <%- td.ty %> > {
+  struct Ref< {{ td.ty }} > {
   public:
     Ref() {
-      __zngur_data = <% if is_unsized { %> {0, 0} <% } else { %> 0 <% } %>;
+      __zngur_data = {% if is_unsized %} {0, 0} {% else %} 0 {% endif %};
     }
 
     union {
-      <% if is_unsized { %>::std::array<size_t, 2><% } else { %>size_t<% } %> __zngur_data;
+      {% if is_unsized %}::std::array<size_t, 2>{% else %}size_t{% endif %} __zngur_data;
 
-    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-    <% for (index, field) in td.fields.iter().enumerate() { %>
-      ::<%- self.namespace %>::FieldRef<
-        <%- field.ty.into_cpp(self.namespace, self.crate_name) %>,
-      <% match &field.offset { ZngurFieldDataOffset::Offset(offset) => { %>
-        ::<%- self.namespace %>::FieldStaticOffset< <%- td.ty %>, <%- offset %> >
-      <% } ZngurFieldDataOffset::Auto(_) => { %>
-        ::<%- self.namespace %>::FieldAutoOffset< <%- td.ty %>, <%- index %> >
-      <% } } %>
-      > <%- cpp_handle_field_name(&field.name) %>;
-    <% } %>
-    <% } %>
+    {% if !is_unsized && !td.layout.is_only_by_ref() %}
+    {% for (index, field) in td.fields.iter().enumerate() %}
+      ::{{ self.namespace }}::FieldRef<
+        {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+      {% if let Some(offset) = field.offset.as_offset() %}
+        ::{{ self.namespace }}::FieldStaticOffset< {{ td.ty }}, {{ offset }} >
+      {% else %}
+        ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}, {{ index }} >
+      {% endif %}
+      > {{ self.cpp_handle_field_name(field.name) }};
+    {% endfor %}
+    {% endif %}
     };
 
-    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) { %>
-    Ref(const <%- td.ty %>& t) {
-      ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
+    {% if !is_unsized && !td.layout.is_only_by_ref() %}
+    Ref(const {{ td.ty }}& t) {
+      ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
       __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
     }
-    <% } %>
+    {% endif %}
 
-      Ref(RefMut< <%- td.ty %> > rm) {
+      Ref(RefMut< {{ td.ty }} > rm) {
           __zngur_data = rm.__zngur_data;
       }
 
-    <% if !is_unsized { %>
+    {% if !is_unsized %}
       // construct a ref from a FieldOwned if it's offset can be calculated at
       // compile time
       template <
@@ -634,7 +594,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldOwned< <%- td.ty %>, Offset, Offsets... >& f) {
+      Ref(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
           constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           if (heap_allocated) {
@@ -652,7 +612,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldOwned< <%- td.ty %>, Offset, Offsets... >& f) {
+      Ref(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           if (heap_allocated) {
@@ -670,7 +630,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldRef< <%- td.ty %>, Offset, Offsets...>& f) {
+      Ref(const FieldRef< {{ td.ty }}, Offset, Offsets...>& f) {
           constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
@@ -683,7 +643,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldRef< <%- td.ty %>, Offset, Offsets...>& f) {
+      Ref(const FieldRef< {{ td.ty }}, Offset, Offsets...>& f) {
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
@@ -696,7 +656,7 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldRefMut< <%- td.ty %>, Offset, Offsets...>& f) {
+      Ref(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
           constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
@@ -709,360 +669,192 @@ namespace <%- self.namespace %> {
           typename ::std::enable_if<
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
-      Ref(const FieldRefMut< <%- td.ty %>, Offset, Offsets...>& f) {
+      Ref(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
-    <% } %>
+    {% endif %}
 
-    <% match &td.from_trait_ref { Some(RustTrait::Fn { inputs, output, .. }) => { %>
-      <% let as_std_function = format!("::std::function< {}({})>", output.into_cpp(self.namespace, self.crate_name), inputs.iter().map(|x| x.into_cpp(self.namespace, self.crate_name)).join(", ")); %>
-      inline <%- td.ty.path.name() %>(<%- as_std_function %> f);
-    <% } Some(tr @ RustTrait::Normal { .. }) => { %>
-      <% let tr = tr.into_cpp(self.namespace, self.crate_name); %>
-      inline Ref(<%- tr %>& arg);
-    <% } None => { %>
-    <% }
-    } %>
+    {{ td.render_make_box_ref_only(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    <% if let Some(cpp_value) = &td.cpp_value { %>
-      inline <%- cpp_value.1 %>& cpp() {
-        return (*<%- cpp_value.0 %>(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< <%- cpp_value.1 %> >();
+    {% if let Some(cpp_value) = td.cpp_value %}
+      inline {{ cpp_value.1 }}& cpp() {
+        return (*{{ cpp_value.0 }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_value.1 }} >();
       }
-    <% } %>
+    {% endif %}
 
-    <% if let Some(cpp_ref) = &td.cpp_ref { %>
-      inline <%- cpp_ref.0 %>& cpp() {
-        return *reinterpret_cast< <%- cpp_ref.0 %>* >(__zngur_data);
+    {% if let Some(cpp_ref) = td.cpp_ref %}
+      inline {{ cpp_ref.0 }}& cpp() {
+        return *reinterpret_cast< {{ cpp_ref.0 }}* >(__zngur_data);
       }
-      inline Ref(const <%- cpp_ref.0 %>& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
-    <% } %>
+      inline Ref(const {{ cpp_ref.0 }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
+    {% endif %}
 
-    <% for method in &td.methods { %>
-      <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
-        <% if m != Mutability::Mut { %>
-          <%- method.sig.output %> <%- method.name %>(<%- method.sig.inputs.iter().skip(1).enumerate().map(|(n, ty)| format!("{ty} i{n}")).join(", ") %>) const noexcept ;
-        <% } %>
-      <% } %>
-    <% } %>
+    {% for method in td.methods %}
+      {% if method.is_ref_not_mut() %}
+        {{ method.sig.output }} {{ method.name }}({{ method.render_sig_inputs_skip_one() }}) const noexcept ;
+      {% endif %}
+    {% endfor %}
 
-    <% if td.ty.path.to_string() == format!("::{}::Str", &self.namespace) { %>
-      friend auto ::operator""_rs(const char* input, size_t len) -> ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str>;
-    <% } %>
+    {% if td.ty.path.to_string() == format!("::{}::Str", &self.namespace) %}
+      friend auto ::operator""_rs(const char* input, size_t len) -> ::{{ self.namespace }}::Ref<::{{ self.namespace }}::Str>;
+    {% endif %}
 };
 
-<% for ref_kind in ["Ref", "Raw", "RawMut"] { %>
+{% for ref_kind in ["Ref", "Raw", "RawMut"] %}
 
 template<>
-struct __zngur_internal< <%- ref_kind %> < <%- td.ty %> > > {
-  static inline uint8_t* data_ptr(const <%- ref_kind %> < <%- td.ty %> >& t) noexcept {
+struct __zngur_internal< {{ ref_kind }} < {{ td.ty }} > > {
+  static inline uint8_t* data_ptr(const {{ ref_kind }} < {{ td.ty }} >& t) noexcept {
       return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
   }
-  static inline void assume_init(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
-  static inline void check_init(const <%- ref_kind %> < <%- td.ty %> >&) noexcept {}
-  static inline void assume_deinit(<%- ref_kind %> < <%- td.ty %> >&) noexcept {}
+  static inline void assume_init({{ ref_kind }} < {{ td.ty }} >&) noexcept {}
+  static inline void check_init(const {{ ref_kind }} < {{ td.ty }} >&) noexcept {}
+  static inline void assume_deinit({{ ref_kind }} < {{ td.ty }} >&) noexcept {}
   static inline size_t size_of() noexcept {
-      return <% if is_unsized { %>16<% } else { %>8<% } %>;
+      return {% if is_unsized %}16{% else %}8{% endif %};
   }
 };
 
-<% } %>
+{% endfor %}
 
-} // namespace <%- self.namespace %>
+} // namespace {{ self.namespace }}
 
-<% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) { %>
-  inline ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str> operator""_rs(const char* input, size_t len) {
-    ::<%- self.namespace %>::Ref<::<%- self.namespace %>::Str> o;
+{% if td.ty.path.to_string() == format!("::{}::Str", self.namespace) %}
+  inline ::{{ self.namespace }}::Ref<::{{ self.namespace }}::Str> operator""_rs(const char* input, size_t len) {
+    ::{{ self.namespace }}::Ref<::{{ self.namespace }}::Str> o;
     o.__zngur_data[0] = reinterpret_cast<size_t>(input);
     o.__zngur_data[1] = len;
     return o;
   }
-<% } %>
+{% endif %}
 
-<% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) { %>
-  inline ::<%- self.namespace %>::Char operator""_rs(char32_t c) {
+{% if td.ty.path.to_string() == format!("::{}::Char", self.namespace) %}
+  inline ::{{ self.namespace }}::Char operator""_rs(char32_t c) {
     if (c > 0x10FFFFu || (c >= 0xD800u && c <= 0xDFFFu)) {
-      return ::<%- self.namespace %>::Char(0xFFFDu);
+      return ::{{ self.namespace }}::Char(0xFFFDu);
     }
-    return ::<%- self.namespace %>::Char(c);
+    return ::{{ self.namespace }}::Char(c);
   }
-<% } %>
+{% endif %}
 
 
-<% } /* for td in self.type_defs */ %>
+{% endfor %}
 
 
-<% for td in self.type_defs { %>
+{% for td in self.type_defs %}
 
-  <% let cpp_type = td.ty.to_string(); %>
-  <% let name = cpp_type.strip_prefix("::").unwrap(); %>
+  {% let cpp_type = td.ty.to_string() %}
+  {% let name = cpp_type.strip_prefix("::").unwrap() %}
 
-  <% for c in &td.constructors { %>
-    <% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap(); %>
-    <% /* do default construction first to ensure allocation */ %>
-    inline <%- fn_name %>(<%- splat!(&c.inputs, |n, ty|, "{ty} i{n}") %>) noexcept : <%- fn_name %>() { 
-      ::<%- self.namespace %>::__zngur_internal_assume_init(*this);
-      <%- c.rust_link_name %>(
-        <% for n in 0..c.inputs.len() { %>
-          ::<%- self.namespace %>::__zngur_internal_data_ptr(i<%- n %>),
-        <% } %>
-        ::<%- self.namespace %>::__zngur_internal_data_ptr(*this)
+  {% for c in td.constructors %}
+    {% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap() %}
+    {#  do default construction first to ensure allocation  #}
+    inline {{ fn_name }}({{ splat!(&c.inputs, |n, ty|, "{ty} i{n}") }}) noexcept : {{ fn_name }}() { 
+      ::{{ self.namespace }}::__zngur_internal_assume_init(*this);
+      {{ c.rust_link_name }}(
+        {% for n in 0..c.inputs.len() %}
+          ::{{ self.namespace }}::__zngur_internal_data_ptr(i{{ n }}),
+        {% endfor %}
+        ::{{ self.namespace }}::__zngur_internal_data_ptr(*this)
       );
-      <% for n in 0..c.inputs.len() { %>
-        ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>);
-      <% } %>
+      {% for n in 0..c.inputs.len() %}
+        ::{{ self.namespace }}::__zngur_internal_assume_deinit(i{{ n }});
+      {% endfor %}
     }
-  <% } %>
+  {% endfor %}
 
-  <% let tr = &td.from_trait.as_ref().and_then(|k| self.trait_defs.get(k)); %>
-  <% match tr { Some(CppTraitDefinition::Fn { sig }) => { %>
-    <% let as_std_function = format!("::std::function< {}({})>", sig.output, sig.inputs.iter().join(", ")); %>
-    <% let ii_names = splat!(&sig.inputs, |n, x|, "::{}::__zngur_internal_move_from_rust< {x} >(i{n})", self.namespace); %>
-    <% let uint8_t_ix = if sig.inputs.is_empty() { "".to_owned() } else { splat!(&sig.inputs, |n, _ty|, "uint8_t* i{n}") + ", " }; %>
-    <% let out_ty = &sig.output; %>
+  {{ self.render_from_trait(td) }}
+  {{ self.render_from_trait_ref(td) }}
 
-    inline <%- name %> <%- name %>::make_box(<%- as_std_function %> f) {
-      auto __zngur_data = new <%- as_std_function %>(f);
-      <%- name %> o;
-      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
-      <%- sig.rust_link_name %> (
-        reinterpret_cast<uint8_t*>(__zngur_data),
-        [](uint8_t *d) { delete reinterpret_cast< <%- as_std_function %>*>(d); },
-        [](uint8_t *d, <%- uint8_t_ix %> uint8_t* o) {
-          auto dd = reinterpret_cast< <%- as_std_function %> *>(d);
-          <%- out_ty %> oo = (*dd)(<%- ii_names %>);
-          ::<%- self.namespace %>::__zngur_internal_move_to_rust< <%- out_ty %> >(o, oo);
-        },
-        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
-      );
-      return o;
-    }
+  {{ self.render_type_methods(td) }}
 
-  <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name, link_name_ref: _ }) => { %>
-    template <typename T, typename... Args>
-    <%- name %> <%- name %>::make_box(Args&&... args) {
-      auto __zngur_data = new T(::std::forward<Args>(args)...);
-      auto data_as_impl = dynamic_cast< <%- as_ty %>*>(__zngur_data);
-      <%- name %> o;
-      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
-      <%- link_name %> (
-        reinterpret_cast<uint8_t*>(data_as_impl),
-        [](uint8_t *d) { delete reinterpret_cast< <%- as_ty %>*>(d); },
-        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
-      );
-      return o;
-    }
 
-  <% } None => { %>
-  <% }
-  } %>
+namespace {{ self.namespace }} {
 
-  <% let tr = &td.from_trait_ref.as_ref().and_then(|k| self.trait_defs.get(k)); %>
-  <% match tr { Some(CppTraitDefinition::Fn { .. }) => { %>
-    <# TODO: Implement this #>
-  <% } Some(CppTraitDefinition::Normal { as_ty, methods: _, link_name: _, link_name_ref }) => { %>
-    <% for ref_kind in ["Ref", "RefMut"] { %>
-      <%- self.namespace %>::<%- ref_kind %>< <%- name %> >::<%- ref_kind %>(<%- as_ty %>& args) {
-        auto data_as_impl = &args;
-        ::<%- self.namespace %>::__zngur_internal_assume_init(*this);
-        <%- link_name_ref %>(
-          (uint8_t *)data_as_impl,
-          ::<%- self.namespace %>::__zngur_internal_data_ptr(*this)
-        );
-      }
-    <% } %>
-  <% } None => { %>
-  <% }
-  } %>
+  {% for tr in td.wellknown_traits %}
+    {% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print: _ } = tr %}
+      {% if !td.has_unsized() %}
+        template<>
+        struct ZngurPrettyPrinter< {{ td.ty }} > {
+          static inline void print( {{ td.ty }} const& t) {
+            ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
+            {{ pretty_print }}(::{{ self.namespace }}::__zngur_internal_data_ptr(t));
+          }
+        };
 
-  <% let is_unsized = td.wellknown_traits.contains(&ZngurWellknownTraitData::Unsized); %>
-  <% for method in &td.methods { %>
-    <% let fn_name = name.to_owned() + "::" + &method.name; %>
-    <% let inputs = &method.sig.inputs; %>
-    inline <%- method.sig.output %> <%- fn_name %> (
-      <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
-    ) noexcept {
-      <%- method.sig.output %> o{};
-      <% for n in 0..inputs.len() { %> ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
-      <%- method.sig.rust_link_name %> (
-        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::{}::__zngur_internal_data_ptr(i{n})", &self.namespace) %>,<% } %>
-        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
-      );
-      <%- self.panic_handler() %>
-      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
-      return o;
-    }
+        template<>
+        struct ZngurPrettyPrinter< Ref< {{ td.ty }} > > {
+          static inline void print(Ref< {{ td.ty }} > const& t) {
+            ::{{ self.namespace }}::__zngur_internal_check_init< Ref< {{ td.ty }} > >(t);
+            {{ pretty_print }}(reinterpret_cast<uint8_t*>(t.__zngur_data));
+          }
+        };
 
-    <% if let ZngurMethodReceiver::Ref(m) = method.kind { %>
-      <% let ref_kinds: &[&str] = match m {
-        Mutability::Mut => &["RefMut"],
-        Mutability::Not => &["Ref", "RefMut"],
-      }; %>
-      <% let field_kinds: &[&str] = match m {
-        Mutability::Mut => &["FieldOwned", "FieldRefMut"],
-        Mutability::Not => &["FieldOwned", "FieldRefMut", "FieldRef"],
-      }; %>
+        template<>
+        struct ZngurPrettyPrinter< RefMut< {{ td.ty }} > > {
+          static inline void print(RefMut< {{ td.ty }} > const& t) {
+            ::{{ self.namespace }}::__zngur_internal_check_init< RefMut< {{ td.ty }} > >(t);
+            {{ pretty_print }}(reinterpret_cast<uint8_t*>(t.__zngur_data));
+          }
+        };
 
-      <% for field_kind in field_kinds { %>
-        <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
         template<typename Offset, typename... Offsets>
-        inline <%- output %> <%- self.namespace %>::<%- field_kind %>< <%- td.ty %>, Offset, Offsets... >::<%- method.name %>(
-            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
-        ) const noexcept {
-          return <%- fn_name %>(
-            *this
-            <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
-          );
-        }
-      <% } %>
+        struct ZngurPrettyPrinter< FieldOwned< {{ td.ty }}, Offset, Offsets... > > {
+          static inline void print(FieldOwned< {{ td.ty }}, Offset, Offsets... > const& t) {
+            ZngurPrettyPrinter< Ref< {{ td.ty }} > >::print(t);
+          }
+        };
 
-      <% for ref_kind in ref_kinds { %>
-        <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
-        inline <%- output %> <%- self.namespace %>::<%- ref_kind %>< <%- td.ty %> >::<%- method.name %>(
-            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
-        ) const noexcept {
-          return <%- fn_name %>(
-            *this
-            <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
-          );
-        }
-      <% } %>
+        template<typename Offset, typename... Offsets>
+        struct ZngurPrettyPrinter< FieldRef< {{ td.ty }}, Offset, Offsets... > > {
+          static inline void print(FieldRef< {{ td.ty }}, Offset, Offsets... > const& t) {
+            ZngurPrettyPrinter< Ref< {{ td.ty }} > >::print(t);
+          }
+        };
 
-    <% } %>
-
-    <% if !is_unsized && !matches!(td.layout, CppLayoutPolicy::OnlyByRef) && method.kind != ZngurMethodReceiver::Static { %>
-      <% let CppFnSig { rust_link_name: _, inputs, output } = &method.sig; %>
-      <% let this_arg = match method.kind {
-        ZngurMethodReceiver::Ref(_) => "*this",
-        ZngurMethodReceiver::Move => "::std::move(*this)",
-        ZngurMethodReceiver::Static => unreachable!(),
-      }; %>
-
-      inline <%- output %> <%- fn_name %>(
-            <%- splat!(inputs.iter().skip(1), |n, ty|, "{ty} i{n}") %>
-      ) <% if method.kind == ZngurMethodReceiver::Ref(Mutability::Not) { %> const <% } %> noexcept {
-        return <%- fn_name %>(
-          <%- this_arg %>
-          <% for n in 0..(inputs.len() - 1) { %> , ::std::move(i<%- n %>) <% } %>
-        );
-      }
-    <% }%>
-  <% } %>
-
-namespace <%- self.namespace %> {
-
-  <% for tr in &td.wellknown_traits { %>
-    <% if let ZngurWellknownTraitData::Debug { pretty_print, debug_print: _ } = tr { %>
-      <% if !is_unsized { %>
+        template<typename Offset, typename... Offsets>
+        struct ZngurPrettyPrinter< FieldRefMut< {{ td.ty }}, Offset, Offsets... > > {
+          static inline void print(FieldRefMut< {{ td.ty }}, Offset, Offsets... > const& t) {
+            ZngurPrettyPrinter< Ref< {{ td.ty }} > >::print(t);
+          }
+        };
+      {% else %}
         template<>
-        struct ZngurPrettyPrinter< <%- td.ty %> > {
-          static inline void print( <%- td.ty %> const& t) {
-            ::<%- self.namespace %>::__zngur_internal_check_init< <%- td.ty %> >(t);
-            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr(t));
+        struct ZngurPrettyPrinter< Ref< {{ td.ty }} > > {
+          static inline void print(Ref< {{ td.ty }} > const& t) {
+            ::{{ self.namespace }}::__zngur_internal_check_init< Ref< {{ td.ty }} > >(t);
+            {{ pretty_print }}(::{{ self.namespace }}::__zngur_internal_data_ptr< Ref< {{ td.ty }} > >(t));
           }
         };
 
         template<>
-        struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
-          static inline void print(Ref< <%- td.ty %> > const& t) {
-            ::<%- self.namespace %>::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
-            <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.__zngur_data));
+        struct ZngurPrettyPrinter< RefMut< {{ td.ty }} > > {
+          static inline void print(RefMut< {{ td.ty }} > const& t) {
+            ::{{ self.namespace }}::__zngur_internal_check_init< RefMut< {{ td.ty }} > >(t);
+            {{ pretty_print }}(::{{ self.namespace }}::__zngur_internal_data_ptr< RefMut< {{ td.ty }} > >(t));
           }
         };
+      {% endif %}
+    {% endif %}
+  {% endfor %}
+} // namespace {{ self.namespace }}
 
-        template<>
-        struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
-          static inline void print(RefMut< <%- td.ty %> > const& t) {
-            ::<%- self.namespace %>::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
-            <%- pretty_print %>(reinterpret_cast<uint8_t*>(t.__zngur_data));
-          }
-        };
+{% endfor %}
 
-        template<typename... Offsets>
-        struct ZngurPrettyPrinter< FieldOwned< <%- td.ty %>, Offsets... > > {
-          static inline void print(FieldOwned< <%- td.ty %>, Offsets... > const& t) {
-            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
-          }
-        };
+  {{ self.render_fn_deps() }}
 
-        template<typename... Offsets>
-        struct ZngurPrettyPrinter< FieldRef< <%- td.ty %>, Offsets... > > {
-          static inline void print(FieldRef< <%- td.ty %>, Offsets... > const& t) {
-            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
-          }
-        };
-
-        template<typename... Offsets>
-        struct ZngurPrettyPrinter< FieldRefMut< <%- td.ty %>, Offsets... > > {
-          static inline void print(FieldRefMut< <%- td.ty %>, Offsets... > const& t) {
-            ZngurPrettyPrinter< Ref< <%- td.ty %> > >::print(t);
-          }
-        };
-      <% } else { %>
-        template<>
-        struct ZngurPrettyPrinter< Ref< <%- td.ty %> > > {
-          static inline void print(Ref< <%- td.ty %> > const& t) {
-            ::<%- self.namespace %>::__zngur_internal_check_init< Ref< <%- td.ty %> > >(t);
-            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr< Ref< <%- td.ty %> > >(t));
-          }
-        };
-
-        template<>
-        struct ZngurPrettyPrinter< RefMut< <%- td.ty %> > > {
-          static inline void print(RefMut< <%- td.ty %> > const& t) {
-            ::<%- self.namespace %>::__zngur_internal_check_init< RefMut< <%- td.ty %> > >(t);
-            <%- pretty_print %>(::<%- self.namespace %>::__zngur_internal_data_ptr< RefMut< <%- td.ty %> > >(t));
-          }
-        };
-      <% } %>
-    <% } %>
-  <% } %>
-} // namespace <%- self.namespace %>
-
-<% } %>
-
-<% for fd in self.fn_deps { %>
-  <%- fd.name.open_namespace() %>
-    <% let CppFnSig { rust_link_name, inputs, output } = &fd.sig; %>
-    inline <%- output %> <%- fd.name.name() %>(
-      <%- splat!(inputs, |n, ty|, "{ty} i{n}") %>
-    ) noexcept {
-      <%- output %> o{};
-      <% for n in 0..inputs.len() { %> ::<%- self.namespace %>::__zngur_internal_assume_deinit(i<%- n %>); <% } %>
-      <%- rust_link_name %> (
-        <% if !inputs.is_empty() { %><%- splat!(inputs, |n, _ty|, "::{}::__zngur_internal_data_ptr(i{n})", self.namespace) %>,<% } %>
-        ::<%- self.namespace %>::__zngur_internal_data_ptr(o)
-      );
-      <%- self.panic_handler() %>
-      ::<%- self.namespace %>::__zngur_internal_assume_init(o);
-      return o;
-    }
-  <%- fd.name.close_namespace() %>
-<% } %>
-
-namespace <%- self.namespace %> {
+namespace {{ self.namespace }} {
 namespace exported_functions {
 
-<% for func in self.exported_fn_defs { %>
-  <%- func.sig.output %> <%- func.name %>(
-    <%- splat!(&func.sig.inputs, |n, ty|, "{ty} i{n}") %>
+{% for func in self.exported_fn_defs %}
+  {{ func.sig.output }} {{ func.name }}(
+    {{ splat!(&func.sig.inputs, |n, ty|, "{ty} i{n}") }}
   );
-<% } %>
+{% endfor %}
 
 } // namespace exported_functions
 
-<% for imp in self.exported_impls { %>
-  <% let x = match &imp.tr { Some(x) => format!("{x}"), None => format!("::{}::Inherent", &self.namespace) }; %>
+  {{ self.render_exported_impls() }}
 
-  template<>
-  class Impl< <%- imp.ty %>, <%- x %> > {
-    public:
-      <% for (name, sig) in &imp.methods { %>
-        static <%- sig.output %> <%- name %>(
-          <%- splat!(&sig.inputs, |n, ty|, "{ty} i{n}") %>
-        );
-      <% } %>
-  };
-<% } %>
-
-} // namespace <%- self.namespace %>
+} // namespace {{ self.namespace }}

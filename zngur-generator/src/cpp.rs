@@ -11,7 +11,7 @@ use crate::{
     ZngurWellknownTraitData,
     template::{CppHeaderTemplate, CppSourceTemplate},
 };
-use sailfish::Template;
+use askama::Template;
 
 #[derive(Debug)]
 pub struct CppPath(pub Vec<String>);
@@ -94,19 +94,6 @@ impl Display for CppPath {
 pub struct CppType {
     pub path: CppPath,
     pub generic_args: Vec<CppType>,
-}
-
-impl sailfish::runtime::Render for CppType {
-    fn render(
-        &self,
-        b: &mut sailfish::runtime::Buffer,
-    ) -> std::result::Result<(), sailfish::runtime::RenderError> {
-        write!(b, "{}", self.path)?;
-        if !self.generic_args.is_empty() {
-            write!(b, "< {} >", self.generic_args.iter().join(", "))?;
-        }
-        Ok(())
-    }
 }
 
 impl CppType {
@@ -261,11 +248,41 @@ pub struct CppTraitMethod {
     pub output: CppType,
 }
 
+impl CppTraitMethod {
+    pub fn render_inputs(&self, namespace: &str) -> String {
+        self.inputs
+            .iter()
+            .enumerate()
+            .map(|(n, ty)| {
+                format!(
+                    "::{}::__zngur_internal_move_from_rust< {ty} >(i{n})",
+                    namespace
+                )
+            })
+            .join(", ")
+    }
+}
+
 #[derive(Debug)]
 pub struct CppFnSig {
     pub rust_link_name: String,
     pub inputs: Vec<CppType>,
     pub output: CppType,
+}
+
+impl CppFnSig {
+    pub fn render_inputs(&self, namespace: &str) -> String {
+        self.inputs
+            .iter()
+            .enumerate()
+            .map(|(n, ty)| {
+                format!(
+                    "::{}::__zngur_internal_move_from_rust< {ty} >(i{n})",
+                    namespace
+                )
+            })
+            .join(", ")
+    }
 }
 
 pub struct CppFnDefinition {
@@ -284,11 +301,52 @@ pub struct CppExportedImplDefinition {
     pub methods: Vec<(String, CppFnSig)>,
 }
 
+impl CppExportedImplDefinition {
+    pub fn render_tr(&self, namespace: &str) -> String {
+        match &self.tr {
+            Some(x) => format!("{x}"),
+            None => format!("::{}::Inherent", namespace),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CppMethod {
     pub name: String,
     pub kind: ZngurMethodReceiver,
     pub sig: CppFnSig,
+}
+
+impl CppMethod {
+    pub fn is_valid_field_method(&self, field_kind: &str) -> bool {
+        if let zngur_def::ZngurMethodReceiver::Ref(m) = &self.kind {
+            !(*m == zngur_def::Mutability::Mut && field_kind == "FieldRef")
+        } else {
+            false
+        }
+    }
+
+    pub fn is_ref_not_mut(&self) -> bool {
+        matches!(
+            self.kind,
+            zngur_def::ZngurMethodReceiver::Ref(zngur_def::Mutability::Not)
+        )
+    }
+
+    pub fn fn_name(&self, type_name: &str) -> String {
+        format!("{}::{}", type_name, self.name)
+    }
+
+    pub fn render_sig_inputs_skip_one(&self) -> String {
+        use itertools::Itertools;
+        self.sig
+            .inputs
+            .iter()
+            .skip(1)
+            .enumerate()
+            .map(|(n, ty)| format!("{ty} i{n}"))
+            .join(", ")
+    }
 }
 
 #[derive(Debug)]
@@ -302,6 +360,34 @@ pub enum CppTraitDefinition {
         link_name: String,
         link_name_ref: String,
     },
+}
+
+impl CppTraitDefinition {
+    pub fn is_normal(&self) -> bool {
+        matches!(self, CppTraitDefinition::Normal { .. })
+    }
+
+    pub fn as_normal(&self) -> Option<(&CppType, &[CppTraitMethod], &str, &str)> {
+        if let CppTraitDefinition::Normal {
+            as_ty,
+            methods,
+            link_name,
+            link_name_ref,
+        } = self
+        {
+            Some((as_ty, methods, link_name, link_name_ref))
+        } else {
+            None
+        }
+    }
+
+    pub fn as_fn(&self) -> Option<&CppFnSig> {
+        if let CppTraitDefinition::Fn { sig } = self {
+            Some(sig)
+        } else {
+            None
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -318,6 +404,83 @@ pub enum CppLayoutPolicy {
     OnlyByRef,
 }
 
+impl CppLayoutPolicy {
+    pub fn is_only_by_ref(&self) -> bool {
+        matches!(self, CppLayoutPolicy::OnlyByRef)
+    }
+
+    pub fn is_stack_allocated(&self) -> bool {
+        matches!(self, CppLayoutPolicy::StackAllocated { .. })
+    }
+
+    pub fn stack_size(&self) -> usize {
+        if let CppLayoutPolicy::StackAllocated { size, .. } = self {
+            *size
+        } else {
+            0
+        }
+    }
+
+    pub fn stack_align(&self) -> usize {
+        if let CppLayoutPolicy::StackAllocated { align, .. } = self {
+            *align
+        } else {
+            1
+        }
+    }
+
+    pub fn alloc_heap(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { alloc_fn, .. } = self {
+            format!("__zngur_data = {}();", alloc_fn)
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn free_heap(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { free_fn, .. } = self {
+            format!("{}(__zngur_data);", free_fn)
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn copy_data(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { size_fn, .. } = self {
+            format!(
+                "memcpy(this->__zngur_data, other.__zngur_data, {}());",
+                size_fn
+            )
+        } else {
+            "this->__zngur_data = other.__zngur_data;".to_owned()
+        }
+    }
+
+    pub fn size_fn(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { size_fn, .. } = self {
+            size_fn.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn alloc_fn(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { alloc_fn, .. } = self {
+            alloc_fn.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+
+    pub fn free_fn(&self) -> String {
+        if let CppLayoutPolicy::HeapAllocated { free_fn, .. } = self {
+            free_fn.clone()
+        } else {
+            "".to_owned()
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct CppTypeDefinition {
     pub ty: CppType,
@@ -330,6 +493,110 @@ pub struct CppTypeDefinition {
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
     pub cpp_value: Option<CppValue>,
     pub cpp_ref: Option<CppRef>,
+}
+
+impl CppTypeDefinition {
+    pub fn has_unsized(&self) -> bool {
+        self.wellknown_traits
+            .iter()
+            .any(|t| matches!(t, ZngurWellknownTraitData::Unsized))
+    }
+
+    pub fn has_copy(&self) -> bool {
+        self.wellknown_traits
+            .iter()
+            .any(|t| matches!(t, ZngurWellknownTraitData::Copy))
+    }
+
+    pub fn drop_in_place(&self) -> String {
+        self.wellknown_traits
+            .iter()
+            .find_map(|t| {
+                if let ZngurWellknownTraitData::Drop { drop_in_place } = t {
+                    Some(drop_in_place.clone())
+                } else {
+                    None
+                }
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn render_make_box(&self, name: &str, namespace: &str, crate_name: &str) -> String {
+        use crate::rust::IntoCpp;
+        use itertools::Itertools;
+        match &self.from_trait {
+            Some(RustTrait::Fn { inputs, output, .. }) => {
+                let out_ty = output.into_cpp(namespace, crate_name);
+                let in_tys = inputs
+                    .iter()
+                    .map(|x| x.into_cpp(namespace, crate_name))
+                    .join(", ");
+                format!(
+                    "static inline {} make_box(::std::function<{} ({})> f);",
+                    name, out_ty, in_tys
+                )
+            }
+            Some(RustTrait::Normal(_)) => {
+                format!(
+                    "template<typename T, typename... Args>\nstatic inline {} make_box(Args&&... args);",
+                    name
+                )
+            }
+            None => "".to_owned(),
+        }
+    }
+
+    pub fn render_make_box_ref(&self, name: &str, namespace: &str, crate_name: &str) -> String {
+        use crate::rust::IntoCpp;
+        use itertools::Itertools;
+        match &self.from_trait_ref {
+            Some(RustTrait::Fn { inputs, output, .. }) => {
+                let out_ty = output.into_cpp(namespace, crate_name);
+                let in_tys = inputs
+                    .iter()
+                    .map(|x| x.into_cpp(namespace, crate_name))
+                    .join(", ");
+                format!(
+                    "inline {}(::std::function<{} ({})> f);",
+                    name, out_ty, in_tys
+                )
+            }
+            Some(tr @ RustTrait::Normal(_)) => {
+                format!(
+                    "inline RefMut({}& arg);",
+                    tr.into_cpp(namespace, crate_name)
+                )
+            }
+            None => "".to_owned(),
+        }
+    }
+
+    pub fn render_make_box_ref_only(
+        &self,
+        name: &str,
+        namespace: &str,
+        crate_name: &str,
+    ) -> String {
+        use crate::rust::IntoCpp;
+        use itertools::Itertools;
+        match &self.from_trait_ref {
+            Some(RustTrait::Fn { inputs, output, .. }) => {
+                let out_ty = output.into_cpp(namespace, crate_name);
+                let in_tys = inputs
+                    .iter()
+                    .map(|x| x.into_cpp(namespace, crate_name))
+                    .join(", ");
+                format!(
+                    "inline {}(::std::function<{} ({})> f);",
+                    name, out_ty, in_tys
+                )
+            }
+            Some(tr @ RustTrait::Normal(_)) => {
+                format!("inline Ref({}& arg);", tr.into_cpp(namespace, crate_name))
+            }
+            None => "".to_owned(),
+        }
+    }
 }
 
 impl Default for CppTypeDefinition {
