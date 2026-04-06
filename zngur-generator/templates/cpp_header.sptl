@@ -28,7 +28,7 @@ extern "C" {
   {% for f in self.fn_deps %}
     void {{ f.sig.rust_link_name }} (
       {% for n in 0..f.sig.inputs.len() %}
-        uint8_t* i{{ n }},
+        uint8_t*,
       {% endfor %}
       uint8_t* o
     ) noexcept ;
@@ -38,7 +38,7 @@ extern "C" {
     {% for method in td.methods %}
       void {{ method.sig.rust_link_name }} (
         {% for n in 0..method.sig.inputs.len() %}
-          uint8_t* i{{ n }},
+          uint8_t*,
         {% endfor %}
         uint8_t* o
       ) noexcept ;
@@ -47,7 +47,7 @@ extern "C" {
     {% for constructor in td.constructors %}
       void {{ constructor.rust_link_name }} (
         {% for n in 0..constructor.inputs.len() %}
-          uint8_t* i{{ n }},
+          uint8_t*,
         {% endfor %}
         uint8_t* o
       ) noexcept ;
@@ -83,7 +83,7 @@ extern "C" {
       {% if let Some(sig) = td.as_fn() %}
         void {{ sig.rust_link_name }}(uint8_t* __zngur_data, void destructor(uint8_t *),
                                        void call(uint8_t *,
-                                          {% for n in 0..sig.inputs.len() %} uint8_t *i{{ n }}, {% endfor %}uint8_t *o),
+                                          {% for n in 0..sig.inputs.len() %} uint8_t *, {% endfor %}uint8_t *o),
                                        uint8_t *o
         );
       {% else if let Some(normal) = td.as_normal() %}
@@ -127,7 +127,7 @@ namespace {{ self.namespace }} {
         virtual ~{{ normal.0.path.name() }}() {};
         {% for method in normal.1 %}
           virtual {{ method.output }} {{ method.name }} (
-            {{ splat!(&method.inputs, |n, x|, "{x} i{n}") }}
+            {{ splat!(&method.inputs, |n, x|, "{x}") }}
           ) = 0;
         {% endfor %}
       };
@@ -167,7 +167,7 @@ namespace {{ self.namespace }} {
     {% for method in td.methods %}
       {% if method.is_valid_field_method(field_kind) %}
           {{ method.sig.output }} {{ method.name }}(
-            {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
+            {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty}") }}
           ) const noexcept ;
       {% endif %}
     {% endfor %}
@@ -325,11 +325,11 @@ namespace {{ self.namespace }} {
 
     {% for method in td.methods %}
         static {{ method.sig.output }} {{ method.name }}(
-          {{ splat!(&method.sig.inputs, |n, ty|, "{ty} i{n}") }}
+          {{ splat!(&method.sig.inputs, |n, ty|, "{ty}") }}
         ) noexcept ;
         {% if method.kind != ZngurMethodReceiver::Static %}
             {{ method.sig.output }} {{ method.name }}(
-              {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
+              {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty}") }}
             )
             {% if method.is_ref_not_mut() %} const {% endif %} noexcept ;
         {% endif %}
@@ -337,7 +337,7 @@ namespace {{ self.namespace }} {
 
     {% for constructor in td.constructors %}
       {{ td.ty.path.0.last().unwrap() }}(
-        {{ splat!(&constructor.inputs, |n, ty|, "{ty} i{n}") }}
+        {{ splat!(&constructor.inputs, |n, ty|, "{ty}") }}
       ) noexcept ;
     {% endfor %}
 
@@ -521,7 +521,7 @@ namespace {{ self.namespace }} {
     {% for method in td.methods %}
       {% if let ZngurMethodReceiver::Ref(_) = method.kind %}
         {{ method.sig.output }} {{ method.name }}(
-          {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty} i{n}") }}
+          {{ splat!(method.sig.inputs.iter().skip(1), |n, ty|, "{ty}") }}
         ) const noexcept ;
       {% endif %}
     {% endfor %}
@@ -849,7 +849,7 @@ namespace exported_functions {
 
 {% for func in self.exported_fn_defs %}
   {{ func.sig.output }} {{ func.name }}(
-    {{ splat!(&func.sig.inputs, |n, ty|, "{ty} i{n}") }}
+    {{ splat!(&func.sig.inputs, |n, ty|, "{ty}") }}
   );
 {% endfor %}
 
