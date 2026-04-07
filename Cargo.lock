@@ -4,7 +4,7 @@ version = 4
 
 [[package]]
 name = "aggregation"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "packet",
 ]
@@ -166,7 +166,7 @@ dependencies = [
 
 [[package]]
 name = "benchmark"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -469,15 +469,15 @@ dependencies = [
 
 [[package]]
 name = "example-char"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-conditional"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-cxx_demo"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -486,7 +486,7 @@ dependencies = [
 
 [[package]]
 name = "example-cxx_demo_split"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -495,15 +495,15 @@ dependencies = [
 
 [[package]]
 name = "example-impl-trait"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-memory_management"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-multiple-modules"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "aggregation",
  "packet",
@@ -513,48 +513,48 @@ dependencies = [
 
 [[package]]
 name = "example-raw-pointer"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-rayon"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "example-rayon_split"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "rayon",
 ]
 
 [[package]]
 name = "example-regression-test1"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-rustyline"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "rustyline",
 ]
 
 [[package]]
 name = "example-simple"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-simple-import"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-tutorial"
-version = "0.8.0"
+version = "0.9.0"
 
 [[package]]
 name = "example-tutorial_cpp"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "build-rs",
  "cc",
@@ -849,7 +849,7 @@ checksum = "d6790f58c7ff633d8771f42965289203411a5e5c68388703c06e14f24770b41e"
 
 [[package]]
 name = "packet"
-version = "0.1.0"
+version = "0.9.0"
 
 [[package]]
 name = "percent-encoding"
@@ -896,7 +896,7 @@ dependencies = [
 
 [[package]]
 name = "processor"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "aggregation",
  "receiver",
@@ -953,7 +953,7 @@ dependencies = [
 
 [[package]]
 name = "receiver"
-version = "0.1.0"
+version = "0.9.0"
 dependencies = [
  "packet",
 ]
@@ -1500,7 +1500,7 @@ checksum = "32ac00cd3f8ec9c1d33fb3e7958a82df6989c42d747bd326c822b1d625283547"
 
 [[package]]
 name = "xtask"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1541,14 +1541,14 @@ checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
 name = "zngur"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "zngur-generator",
 ]
 
 [[package]]
 name = "zngur-autozng"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1556,7 +1556,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-cli"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "clap",
  "zngur",
@@ -1564,7 +1564,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-def"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "indexmap",
  "itertools 0.11.0",
@@ -1572,7 +1572,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-generator"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "askama",
  "hex",
@@ -1585,7 +1585,7 @@ dependencies = [
 
 [[package]]
 name = "zngur-parser"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "ariadne",
  "chumsky",
