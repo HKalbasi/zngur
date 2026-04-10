@@ -71,7 +71,7 @@ type ZngParserExtra<'a> =
 type BoxedZngParser<'a, Item> = chumsky::Boxed<'a, 'a, ParserInput<'a>, Item, ZngParserExtra<'a>>;
 
 /// Effective trait alias for verbose chumsky Parser Trait
-trait ZngParser<'a, Item>: Parser<'a, ParserInput<'a>, Item, ZngParserExtra<'a>> + Clone {}
+pub(crate) trait ZngParser<'a, Item>: Parser<'a, ParserInput<'a>, Item, ZngParserExtra<'a>> + Clone {}
 impl<'a, T, Item> ZngParser<'a, Item> for T where
     T: Parser<'a, ParserInput<'a>, Item, ZngParserExtra<'a>> + Clone
 {
