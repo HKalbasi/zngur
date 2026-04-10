@@ -55,6 +55,24 @@ jobs:
         if: matrix.cpp_compiler == 'g++'
         run: cargo xtask ci
 
+  build-nightly:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+    env:
+      CXX: g++
+    steps:
+      - uses: actions/checkout@v3
+      - uses: jdx/mise-action@v3
+      - name: Install Rust nightly
+        run: |
+          rustup toolchain install nightly
+          rustup default nightly
+          rustup target add wasm32-wasip1
+          rustup component add rustfmt
+      - name: Run CI (g++ nightly)
+        run: cargo xtask ci
+
   build-win:
     runs-on: windows-2022
     steps:

@@ -10,7 +10,7 @@ pub trait Matchable: core::fmt::Debug + Clone + PartialEq + Eq {
 }
 
 /// a type that can be matched against a Pattern
-pub trait MatchableParse<'src>: Matchable {
+pub(crate) trait MatchableParse<'src>: Matchable {
     /// return a parser for the item as it would appear in an `#if` or `#match` statement
     fn parser() -> impl ZngParser<'src, Self>;
 
@@ -28,7 +28,7 @@ pub trait MatchPattern: core::fmt::Debug + Clone + PartialEq + Eq {
 }
 
 /// a Pattern that can be matched against
-pub trait MatchPatternParse<'src>: MatchPattern {
+pub(crate) trait MatchPatternParse<'src>: MatchPattern {
     /// return a parser for for the pattern
     fn parser() -> impl ZngParser<'src, Self>;
 }
