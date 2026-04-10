@@ -95,6 +95,17 @@ extern "C" {
   // end self.type_defs
   {% endfor %}
 
+  {% for imp in self.exported_impls %}
+    {% for (name, sig) in imp.methods %}
+      void {{ sig.rust_link_name }} (
+        {% for n in 0..sig.inputs.len() %}
+          uint8_t*,
+        {% endfor %}
+        uint8_t* o
+      ) noexcept ;
+    {% endfor %}
+  {% endfor %}
+
 } // extern "C"
 
 {% for td in self.type_defs %}
@@ -106,6 +117,11 @@ extern "C" {
   {% if let Some(tr) = imp.tr %}
     {{ tr.header() }}
   {% endif %}
+{% endfor %}
+
+{% for imp in self.extend_impls %}
+  {{ imp.ty.header() }}
+  {{ imp.extends.header() }}
 {% endfor %}
 
 namespace {{ self.namespace }} {
@@ -192,6 +208,7 @@ namespace {{ self.namespace }} {
       static inline void assume_init({{ td.ty }}& t) noexcept ;
       static inline void assume_deinit({{ td.ty }}& t) noexcept ;
       static inline size_t size_of() noexcept ;
+      static inline size_t align_of() noexcept ;
     };
   }
 
@@ -350,6 +367,10 @@ namespace {{ self.namespace }} {
 {% if td.layout.is_stack_allocated() %}
   inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
       return {{ td.layout.stack_size() }};
+  }
+
+  inline size_t __zngur_internal< {{ td.ty }} >::align_of() noexcept {
+      return {{ td.layout.stack_align() }};
   }
 {% else if !td.layout.is_only_by_ref() %}
   inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
@@ -856,5 +877,14 @@ namespace exported_functions {
 } // namespace exported_functions
 
   {{ self.render_exported_impls() }}
+  {{ self.render_extend_impls() }}
+
+{% for imp in self.extend_impls %}
+    {% let base_cpp_name = format!("::{}", imp.extends.path.0.last().unwrap()) %}
+    template<>
+    inline {{ base_cpp_name }}* upcast<{{ base_cpp_name }}, {{ imp.ty }}>(Raw<{{ imp.ty }}> r) {
+        return reinterpret_cast<{{ base_cpp_name }}*>(r.__zngur_data);
+    }
+{% endfor %}
 
 } // namespace {{ self.namespace }}

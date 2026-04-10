@@ -1,5 +1,6 @@
 use cpp::CppExportedFnDefinition;
 use cpp::CppExportedImplDefinition;
+use cpp::CppExtendImplDefinition;
 use cpp::CppFile;
 use cpp::CppFnDefinition;
 use cpp::CppFnSig;
@@ -291,6 +292,26 @@ impl ZngurGenerator {
                 },
             });
         }
+        let mut seen_extends = ::std::collections::HashSet::new();
+        for impl_block in zng.extern_cpp_extend_impls {
+            let base = &impl_block.extends;
+            if seen_extends.insert(base.to_string()) {
+                rust_file.text.push_str(&format!(
+                    "#[allow(non_camel_case_types)]\npub struct {};\n",
+                    base.path.last().unwrap()
+                ));
+            }
+
+            rust_file.add_extend_cpp_impl(&impl_block.ty, &impl_block.extends);
+            let owner_mangled = rust_file.mangle_name(&impl_block.ty.to_string());
+            let base_mangled = rust_file.mangle_name(&base.to_string());
+            cpp_file.extend_impls.push(CppExtendImplDefinition {
+                ty: impl_block.ty.into_cpp(default_ns, &sanitized_crate_name),
+                extends: base.into_cpp(default_ns, &sanitized_crate_name),
+                vtable_getter: format!("{owner_mangled}_{base_mangled}_get_vtable"),
+                destructor_name: format!("{owner_mangled}_{base_mangled}_destructor"),
+            });
+        }
         for impl_block in zng.extern_cpp_impls {
             let rust_link_names = rust_file.add_extern_cpp_impl(
                 &impl_block.ty,
@@ -325,6 +346,9 @@ impl ZngurGenerator {
             });
         }
         let (h, cpp) = cpp_file.render(default_ns, &sanitized_crate_name);
+        rust_file
+            .text
+            .push_str("\n}\n#[allow(unused_imports)]\npub use zngur_generated::*;\n");
         (rust_file.text, h, cpp)
     }
 }

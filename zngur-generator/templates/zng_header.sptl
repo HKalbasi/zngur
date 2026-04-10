@@ -72,6 +72,7 @@ namespace {{ self.cpp_namespace }} {
     static void assume_deinit(T& t) noexcept ;
     static inline void check_init(const T&) noexcept;
     static inline size_t size_of() noexcept ;
+    static inline size_t align_of() noexcept ;
   };
 
   template<typename T>
@@ -137,6 +138,10 @@ namespace {{ self.cpp_namespace }} {
 
   template<typename T>
   struct RefMut;
+
+  struct CppVirtDispatch {
+      const void* ptr;
+  };
 
 
   // offset encoded in type
@@ -266,6 +271,14 @@ namespace {{ self.cpp_namespace }} {
   RefMut(const FieldRefMut<T, Offset, Offsets...> &f) -> RefMut<T>;
 #endif
 
+  template<typename T> struct Raw;
+
+  template<typename Base, typename T>
+  Base* upcast(Raw<T> r) = delete;
+
+  template<typename T>
+  inline T* upcast(Raw<T> r);
+
   template<typename T>
   struct zngur_is_unsized : ::std::false_type {};
   struct zngur_fat_pointer {
@@ -293,6 +306,11 @@ namespace {{ self.cpp_namespace }} {
           __zng_memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
           __zngur_internal_assume_init<Ref<T>>(value);
           return value;
+      }
+
+      template<typename Base>
+      inline Base* upcast() {
+          return ::rust::upcast<Base, T>(*this);
       }
   };
   template<typename T>
@@ -329,6 +347,11 @@ namespace {{ self.cpp_namespace }} {
       void write(T value) {
           __zng_memcpy(__zngur_data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
           __zngur_internal_assume_deinit<T>(value);
+      }
+
+      template<typename Base>
+      inline Base* upcast() {
+          return ::rust::upcast<Base, T>(Raw<T>(__zngur_data));
       }
   };
   template<typename... T>
@@ -478,6 +501,34 @@ namespace {{ self.cpp_namespace }} {
 
   template<typename Type, typename Trait = Inherent>
   class Impl;
+
+  template<typename Inner, typename Base>
+  class ImplBase : public Base {
+  public:
+      Ref<Inner> downcast_ref() {
+          size_t ptr_size = sizeof(void*);
+          size_t align = __zngur_internal<Inner>::align_of();
+          size_t offset = (ptr_size + align - 1) & ~(align - 1);
+          Ref<Inner> r;
+          r.__zngur_data = reinterpret_cast<size_t>(reinterpret_cast<char*>(this) + offset);
+          return r;
+      }
+      
+      RefMut<Inner> downcast_ref_mut() {
+          size_t ptr_size = sizeof(void*);
+          size_t align = __zngur_internal<Inner>::align_of();
+          size_t offset = (ptr_size + align - 1) & ~(align - 1);
+          RefMut<Inner> r;
+          r.__zngur_data = reinterpret_cast<size_t>(reinterpret_cast<char*>(this) + offset);
+          return r;
+      }
+  };
+
+
+  template<typename T>
+  inline T* upcast(Raw<T> r) {
+      return reinterpret_cast<T*>(r.__zngur_data);
+  }
 
   template<typename T>
   T&& zngur_dbg_impl(const char* file_name, int line_number, const char* exp, T&& input) {
@@ -783,6 +834,8 @@ namespace {{ self.cpp_namespace }} {
       return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
 
+
+
   private:
     size_t __zngur_data;
     friend ::{{ self.cpp_namespace }}::__zngur_internal<Ref< {{ ty }} > >;
@@ -869,6 +922,8 @@ namespace {{ self.cpp_namespace }} {
     {{ ty }} const& operator*() const {
         return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
+
+
   private:
     size_t __zngur_data;
     friend ::{{ self.cpp_namespace }}::__zngur_internal<RefMut< {{ ty }} > >;

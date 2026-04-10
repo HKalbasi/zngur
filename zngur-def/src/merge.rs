@@ -1,7 +1,7 @@
 use crate::{
     AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, LayoutPolicy, ZngurConstructor,
-    ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethodDetails, ZngurSpec,
-    ZngurTrait, ZngurType,
+    ZngurExternCppExtendImpl, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
+    ZngurMethodDetails, ZngurSpec, ZngurTrait, ZngurType,
 };
 
 /// Trait for types with a partial union operation.
@@ -270,6 +270,13 @@ impl Merge<ZngurSpec> for ZngurExternCppImpl {
     /// Merges an extern C++ implementation into a specification's C++ implementation list.
     fn merge(self, into: &mut ZngurSpec) -> MergeResult {
         push_unique(self, &mut into.extern_cpp_impls);
+        Ok(())
+    }
+}
+
+impl Merge<ZngurSpec> for ZngurExternCppExtendImpl {
+    fn merge(self, into: &mut ZngurSpec) -> MergeResult {
+        push_unique(self, &mut into.extern_cpp_extend_impls);
         Ok(())
     }
 }

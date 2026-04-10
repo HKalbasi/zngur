@@ -301,6 +301,13 @@ pub struct CppExportedImplDefinition {
     pub methods: Vec<(String, CppFnSig)>,
 }
 
+pub struct CppExtendImplDefinition {
+    pub ty: CppType,
+    pub extends: CppType,
+    pub vtable_getter: String,
+    pub destructor_name: String,
+}
+
 impl CppExportedImplDefinition {
     pub fn render_tr(&self, namespace: &str) -> String {
         match &self.tr {
@@ -624,6 +631,7 @@ pub struct CppFile {
     pub fn_defs: Vec<CppFnDefinition>,
     pub exported_fn_defs: Vec<CppExportedFnDefinition>,
     pub exported_impls: Vec<CppExportedImplDefinition>,
+    pub extend_impls: Vec<CppExtendImplDefinition>,
     pub additional_includes: String,
     pub panic_to_exception: bool,
     pub rust_cfg_defines: Vec<String>,
@@ -644,6 +652,7 @@ impl CppFile {
             type_defs: &self.type_defs,
             trait_defs: &self.trait_defs,
             exported_impls: &self.exported_impls,
+            extend_impls: &self.extend_impls,
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
             zng_header_in_place: self.zng_header_in_place,
@@ -665,6 +674,7 @@ impl CppFile {
             trait_defs: &self.trait_defs,
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
+            extend_impls: &self.extend_impls,
             cpp_namespace: namespace,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();

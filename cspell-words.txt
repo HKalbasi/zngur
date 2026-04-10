@@ -107,3 +107,8 @@ declspec
 elif
 askama
 endfor
+vtable
+Virt
+vptr
+iface
+stdc

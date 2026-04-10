@@ -49,6 +49,12 @@ pub struct ZngurExternCppImpl {
     pub methods: Vec<ZngurMethod>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ZngurExternCppExtendImpl {
+    pub ty: RustType,
+    pub extends: RustPathAndGenerics,
+}
+
 #[derive(Debug, PartialEq, Eq)]
 pub struct ZngurConstructor {
     pub name: Option<String>,
@@ -188,6 +194,7 @@ pub struct ZngurSpec {
     pub funcs: Vec<ZngurFn>,
     pub extern_cpp_funcs: Vec<ZngurExternCppFn>,
     pub extern_cpp_impls: Vec<ZngurExternCppImpl>,
+    pub extern_cpp_extend_impls: Vec<ZngurExternCppExtendImpl>,
     pub additional_includes: AdditionalIncludes,
     pub convert_panic_to_exception: ConvertPanicToException,
     pub cpp_include_header_name: String,
@@ -259,8 +266,10 @@ impl Display for RustPathAndGenerics {
             generics,
             named_generics,
         } = self;
-        for p in path {
-            if p != "crate" {
+        for (i, p) in path.iter().enumerate() {
+            if i > 0 {
+                write!(f, "::")?;
+            } else if path.len() > 1 && p != "crate" {
                 write!(f, "::")?;
             }
             write!(f, "{p}")?;
