@@ -1,0 +1,25 @@
+#cpp_additional_includes "
+#include <task.h>
+#include <impls.h>
+"
+
+extern "C++" {
+    type Task;
+    fn poll(*const Task);
+    impl crate::RustTask extends Task;
+}
+
+type ::core::task::Poll<()> {
+    #layout(size = 1, align = 1);
+    constructor Ready(());
+    constructor Pending;
+}
+
+type crate::RustTask {
+    #layout(size = 16, align = 8);
+    fn poll(&mut self) -> ::core::task::Poll<()>;
+}
+
+mod crate {
+    fn test_inheritance();
+}

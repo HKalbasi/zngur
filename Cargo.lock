@@ -476,6 +476,10 @@ name = "example-conditional"
 version = "0.9.0"
 
 [[package]]
+name = "example-cpp-inheritance"
+version = "0.9.0"
+
+[[package]]
 name = "example-cxx_demo"
 version = "0.9.0"
 dependencies = [

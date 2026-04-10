@@ -30,16 +30,24 @@ extern "C" {
 {% endfor %}
 
 {% for imp in self.exported_impls %}
-  {% for (name, sig) in imp.methods %}
-    void {{ sig.rust_link_name }}(
-      {% for n in 0..sig.inputs.len() %}uint8_t* i{{ n }}, {% endfor %}uint8_t* o
-    ) {
-      {{ sig.output }} oo = ::{{ self.cpp_namespace }}::Impl< {{ imp.ty }}, {{ imp.render_tr(self.cpp_namespace) }} >::{{ name }}(
-        {{ sig.render_inputs(self.cpp_namespace) }}
-      );
-      ::{{ self.cpp_namespace }}::__zngur_internal_move_to_rust(o, oo);
+    {% for (name, sig) in imp.methods %}
+      void {{ sig.rust_link_name }}(
+        {% for n in 0..sig.inputs.len() %}uint8_t* i{{ n }}, {% endfor %}uint8_t* o
+      ) noexcept {
+        {{ sig.output }} oo = ::{{ self.cpp_namespace }}::Impl< {{ imp.ty }}, {{ imp.render_tr(self.cpp_namespace) }} >::{{ name }}(
+          {{ sig.render_inputs(self.cpp_namespace) }}
+        );
+        ::{{ self.cpp_namespace }}::__zngur_internal_move_to_rust(o, oo);
+      }
+    {% endfor %}
+{% endfor %}
+
+{% for imp in self.extend_impls %}
+    {% let base_cpp_name = format!("::{}", imp.extends.path.0.last().unwrap()) %}
+    ::rust::CppVirtDispatch {{ imp.vtable_getter }}() {
+        static ::rust::Impl< {{ imp.ty }}, {{ base_cpp_name }} > dummy;
+        return { *reinterpret_cast<const void**>(&dummy) };
     }
-  {% endfor %}
 {% endfor %}
 
 } // extern "C"

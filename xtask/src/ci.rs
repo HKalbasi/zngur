@@ -27,6 +27,10 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
             .unwrap_or_default()
             .to_str()
             .ok_or(anyhow::anyhow!("Non utf8 example name?"))?;
+        let path = examples_dir.join(example);
+        if !path.is_dir() {
+            continue;
+        }
         println!("Building and testing {example}");
         sh.change_dir(example);
         println!("Working in {}", sh.current_dir().display());

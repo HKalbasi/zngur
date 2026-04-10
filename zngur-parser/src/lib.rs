@@ -10,9 +10,9 @@ use itertools::{Either, Itertools};
 use zngur_def::{
     AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
     MergeFailure, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait,
-    RustType, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
-    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType,
-    ZngurWellknownTrait,
+    RustType, ZngurConstructor, ZngurExternCppExtendImpl, ZngurExternCppFn, ZngurExternCppImpl,
+    ZngurField, ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec,
+    ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -286,11 +286,16 @@ enum ProcessedItem<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedExternCppItem<'a> {
+    Type(Spanned<ParsedRustType<'a>>),
     Function(Spanned<ParsedMethod<'a>>),
     Impl {
         tr: Option<ParsedRustTrait<'a>>,
         ty: Spanned<ParsedRustType<'a>>,
         methods: Vec<ParsedMethod<'a>>,
+    },
+    ImplExtends {
+        ty: Spanned<ParsedRustType<'a>>,
+        extends: ParsedRustPathAndGenerics<'a>,
     },
 }
 
@@ -654,6 +659,25 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
             ProcessedItem::ExternCpp(items) => {
                 for item in items {
                     match item {
+                        ParsedExternCppItem::Type(ty) => {
+                            let span = ty.span;
+                            let ty = ty.inner.to_zngur(scope);
+                            checked_merge(
+                                ZngurType {
+                                    ty,
+                                    layout: LayoutPolicy::OnlyByRef,
+                                    methods: vec![],
+                                    wellknown_traits: vec![],
+                                    constructors: vec![],
+                                    fields: vec![],
+                                    cpp_value: None,
+                                    cpp_ref: None,
+                                },
+                                r,
+                                span,
+                                ctx,
+                            );
+                        }
                         ParsedExternCppItem::Function(method) => {
                             let span = method.span;
                             let method = method.inner.to_zngur(scope);
@@ -677,6 +701,17 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                                         .into_iter()
                                         .map(|x| x.to_zngur(scope))
                                         .collect(),
+                                },
+                                r,
+                                ty.span,
+                                ctx,
+                            );
+                        }
+                        ParsedExternCppItem::ImplExtends { ty, extends } => {
+                            checked_merge(
+                                ZngurExternCppExtendImpl {
+                                    ty: ty.inner.to_zngur(scope),
+                                    extends: extends.to_zngur(scope),
                                 },
                                 r,
                                 ty.span,
@@ -1646,6 +1681,7 @@ fn inner_type_item<'a>()
     let trait_item = select! {
         Token::Ident("Debug") => ZngurWellknownTrait::Debug,
         Token::Ident("Copy") => ZngurWellknownTrait::Copy,
+        Token::Ident("Drop") => ZngurWellknownTrait::Drop,
     }
     .or(just(Token::Question)
         .then(just(Token::Ident("Sized")))
@@ -1811,6 +1847,16 @@ fn extern_cpp_item<'a>()
     let function = spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedExternCppItem::Function);
+    let type_decl = just(Token::KwType)
+        .ignore_then(spanned(rust_type()))
+        .then_ignore(just(Token::Semicolon))
+        .map(ParsedExternCppItem::Type);
+    let extends_impl = just(Token::KwImpl)
+        .ignore_then(spanned(rust_type()))
+        .then_ignore(just(Token::Ident("extends")))
+        .then(rust_path_and_generics(rust_type()))
+        .then_ignore(just(Token::Semicolon))
+        .map(|(ty, extends)| ParsedExternCppItem::ImplExtends { ty, extends });
     let impl_block = just(Token::KwImpl)
         .ignore_then(
             rust_trait(rust_type())
@@ -1830,8 +1876,7 @@ fn extern_cpp_item<'a>()
     just(Token::KwExtern)
         .then(just(Token::Str("C++")))
         .ignore_then(
-            function
-                .or(impl_block)
+            choice((type_decl, function, extends_impl, impl_block))
                 .repeated()
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))

@@ -159,9 +159,12 @@ pub struct RustFile {
 impl RustFile {
     pub fn new(mangling_base: &str) -> Self {
         Self {
-            text: r#"
+            text: r#"#[rustfmt::skip]
 #[allow(dead_code)]
-mod zngur_types {
+#[allow(non_snake_case)]
+#[allow(unused_imports)]
+pub mod zngur_generated {
+    pub mod zngur_types {
     pub struct ZngurCppOpaqueBorrowedObject(());
 
     #[repr(C)]
@@ -188,12 +191,55 @@ mod zngur_types {
             (self.destructor)(self.data)
         }
     }
+
+    #[repr(transparent)]
+    #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+    pub struct CppVirtDispatch {
+        pub ptr: *const (),
+    }
+
+    #[repr(C)]
+    pub struct CppInherit<CppClass, T: ?Sized> {
+        pub vtable: CppVirtDispatch,
+        pub _phantom: std::marker::PhantomData<CppClass>,
+        pub inner: T,
+    }
+
+    pub trait HasCppVtable<CppClass> {
+        fn get_vtable() -> CppVirtDispatch;
+    }
+
+    impl<CppClass, T> CppInherit<CppClass, T> {
+        pub fn new(inner: T) -> Self where T: HasCppVtable<CppClass> {
+            Self {
+                vtable: T::get_vtable(),
+                _phantom: std::marker::PhantomData,
+                inner,
+            }
+        }
+    }
+
+    impl<CppClass, T: ?Sized> CppInherit<CppClass, T> {
+        pub fn as_cpp_ptr(&self) -> *const CppClass {
+            self as *const Self as *const CppClass
+        }
+
+        pub fn as_cpp_mut_ptr(&mut self) -> *mut CppClass {
+            self as *mut Self as *mut CppClass
+        }
+    }
 }
 
 #[allow(unused_imports)]
 pub use zngur_types::ZngurCppOpaqueOwnedObject;
 #[allow(unused_imports)]
 pub use zngur_types::ZngurCppOpaqueBorrowedObject;
+#[allow(unused_imports)]
+pub use zngur_types::CppVirtDispatch;
+#[allow(unused_imports)]
+pub use zngur_types::CppInherit;
+#[allow(unused_imports)]
+pub use zngur_types::HasCppVtable;
 
 macro_rules! __zngur_str_as_array {
     ($s:expr) => {{
@@ -466,7 +512,7 @@ pub struct ConstructorMangledNames {
 }
 
 impl RustFile {
-    fn mangle_name(&self, name: &str) -> String {
+    pub fn mangle_name(&self, name: &str) -> String {
         mangle_name(name, &self.mangling_base)
     }
 
@@ -882,8 +928,37 @@ pub static {mn}: usize = ::std::mem::offset_of!({owner}, {name});
             self.call_cpp_function(&format!("{mn}("), method.inputs.len() + input_offset);
             wln!(self, "}} }}");
         }
-        w!(self, r#"}}"#);
+        wln!(self, r#"}}"#);
         mangled_names
+    }
+
+    pub fn add_extend_cpp_impl(&mut self, owner: &RustType, base: &RustPathAndGenerics) {
+        let owner_mangled = self.mangle_name(&owner.to_string());
+        let base_mangled = self.mangle_name(&base.to_string());
+        let vtable_getter = format!("{owner_mangled}_{base_mangled}_get_vtable");
+        let destructor_name = format!("{owner_mangled}_{base_mangled}_destructor");
+        wln!(
+            self,
+            r#"
+unsafe extern "C" {{
+    fn {vtable_getter}() -> CppVirtDispatch;
+}}
+
+impl HasCppVtable<{base}> for {owner} {{
+    fn get_vtable() -> CppVirtDispatch {{
+        unsafe {{ {vtable_getter}() }}
+    }}
+}}
+
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {destructor_name}(ptr: *mut u8) {{
+    unsafe {{
+        std::ptr::drop_in_place(ptr as *mut CppInherit<{base}, {owner}>);
+    }}
+}}
+"#
+        );
     }
 
     pub fn add_extern_cpp_function(

@@ -1,6 +1,6 @@
 use crate::cpp::{
-    CppExportedFnDefinition, CppExportedImplDefinition, CppFnDefinition, CppTraitDefinition,
-    CppTypeDefinition,
+    CppExportedFnDefinition, CppExportedImplDefinition, CppExtendImplDefinition, CppFnDefinition,
+    CppTraitDefinition, CppTypeDefinition,
 };
 use askama::Template;
 use indexmap::IndexMap;
@@ -52,6 +52,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) extend_impls: &'a Vec<CppExtendImplDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) rust_cfg_defines: &'a Vec<String>,
     pub(crate) zng_header_in_place: bool,
@@ -475,7 +476,6 @@ impl<'a> CppHeaderTemplate<'a> {
 
             for (name, sig) in &imp.methods {
                 let inputs = &sig.inputs;
-                let splat_inputs = inputs.iter().map(|ty| format!("{ty}")).join(", ");
 
                 s.push_str(&format!(
                     r#"
@@ -485,11 +485,29 @@ impl<'a> CppHeaderTemplate<'a> {
 "#,
                     out = sig.output,
                     name = name,
-                    splat_inputs = splat_inputs
+                    splat_inputs = inputs
+                        .iter()
+                        .enumerate()
+                        .map(|(n, ty)| format!("{ty} i{n}"))
+                        .join(", ")
                 ));
             }
 
             s.push_str("  };\n");
+        }
+        s
+    }
+
+    pub fn render_extend_impls(&self) -> String {
+        let mut s = String::new();
+        for imp in self.extend_impls {
+            s.push_str(&format!(
+                r#"
+  extern "C" ::{ns}::CppVirtDispatch {vtable_getter}();
+"#,
+                ns = self.namespace,
+                vtable_getter = imp.vtable_getter
+            ));
         }
         s
     }
@@ -547,5 +565,6 @@ pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
+    pub(crate) extend_impls: &'a Vec<CppExtendImplDefinition>,
     pub(crate) cpp_namespace: &'a str,
 }
