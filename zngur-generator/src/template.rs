@@ -477,6 +477,31 @@ impl<'a> CppHeaderTemplate<'a> {
                 let inputs = &sig.inputs;
                 let splat_inputs = inputs.iter().map(|ty| format!("{ty}")).join(", ");
 
+                if name == "constructor"
+                    && sig.inputs.len() == 1
+                    && sig.output.to_string() == "::rust::Unit"
+                {
+                    let td = self.type_defs.iter().find(|td| td.ty == imp.ty);
+                    if let Some(td) = td {
+                        if let Some(cpp_stack_owned) = &td.cpp_stack_owned {
+                            s.push_str(&format!(
+                                r#"
+        static ::{namespace}::Unit constructor(
+          ::{namespace}::Ref< {ty} > self
+        ) {{
+            new (&self.cpp()) {cpp_type}();
+            return {{}};
+        }}
+"#,
+                                namespace = self.namespace,
+                                ty = imp.ty,
+                                cpp_type = cpp_stack_owned.cpp_type
+                            ));
+                            continue;
+                        }
+                    }
+                }
+
                 s.push_str(&format!(
                     r#"
         static {out} {name}(
@@ -487,6 +512,25 @@ impl<'a> CppHeaderTemplate<'a> {
                     name = name,
                     splat_inputs = splat_inputs
                 ));
+            }
+
+            let has_constructor = imp.methods.iter().any(|(name, _)| name == "constructor");
+            if !has_constructor {
+                let is_cpp_stack_owned = self
+                    .type_defs
+                    .iter()
+                    .any(|td| td.ty == imp.ty && td.cpp_stack_owned.is_some());
+                if is_cpp_stack_owned {
+                    s.push_str(&format!(
+                        r#"
+        static ::{namespace}::Unit constructor(
+          ::{namespace}::Ref< {ty} > self
+        );
+"#,
+                        namespace = self.namespace,
+                        ty = imp.ty
+                    ));
+                }
             }
 
             s.push_str("  };\n");
@@ -507,6 +551,7 @@ impl ZngHeaderTemplate {
     pub fn is_ref_kind_ref(&self, ref_kind: &str) -> bool {
         ref_kind == "Ref"
     }
+
     pub fn is_size_t(&self, ty: &str) -> bool {
         ty == "::size_t"
     }
@@ -544,6 +589,7 @@ impl ZngHeaderTemplate {
 #[template(path = "cpp_source.sptl", escape = "none")]
 pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) header_file_name: &'a String,
+    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
