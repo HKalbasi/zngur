@@ -192,6 +192,7 @@ namespace {{ self.namespace }} {
       static inline void assume_init({{ td.ty }}& t) noexcept ;
       static inline void assume_deinit({{ td.ty }}& t) noexcept ;
       static inline size_t size_of() noexcept ;
+      static inline size_t align_of() noexcept ;
     };
   }
 
@@ -366,6 +367,9 @@ namespace {{ self.namespace }} {
 {% if td.layout.is_stack_allocated() %}
   inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
       return {{ td.layout.stack_size() }};
+  }
+  inline size_t __zngur_internal< {{ td.ty }} >::align_of() noexcept {
+      return {{ td.layout.stack_align() }};
   }
 {% else if !td.layout.is_only_by_ref() %}
   inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
@@ -561,6 +565,9 @@ namespace {{ self.namespace }} {
     static inline size_t size_of() noexcept {
         return {% if is_unsized %}16{% else %}8{% endif %};
     }
+    static inline size_t align_of() noexcept {
+        return 8;
+    }
   };
 
 } // namespace {{ self.namespace }}
@@ -744,6 +751,9 @@ struct __zngur_internal< {{ ref_kind }} < {{ td.ty }} > > {
   static inline void assume_deinit({{ ref_kind }} < {{ td.ty }} >&) noexcept {}
   static inline size_t size_of() noexcept {
       return {% if is_unsized %}16{% else %}8{% endif %};
+  }
+  static inline size_t align_of() noexcept {
+      return 8;
   }
 };
 
