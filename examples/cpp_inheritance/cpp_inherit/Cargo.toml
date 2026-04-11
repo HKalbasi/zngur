@@ -1,0 +1,10 @@
+[package]
+name = "cpp_inherit"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[dependencies]
+znglib = { path = "../../../zngur-lib" }
