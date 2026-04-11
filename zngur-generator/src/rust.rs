@@ -905,6 +905,7 @@ unsafe extern "C" {{ fn {mangled_name}("#
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 pub fn {rust_name}("#
         );
         for (n, ty) in inputs.iter().enumerate() {

@@ -141,6 +141,13 @@ pub struct CppValue(pub String, pub String);
 #[derive(Debug, PartialEq, Eq)]
 pub struct CppRef(pub String);
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct CppStackOwned {
+    pub cpp_type: String,
+    pub size: usize,
+    pub align: usize,
+}
+
 impl Display for CppRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -157,6 +164,7 @@ pub struct ZngurType {
     pub fields: Vec<ZngurField>,
     pub cpp_value: Option<CppValue>,
     pub cpp_ref: Option<CppRef>,
+    pub cpp_stack_owned: Option<CppStackOwned>,
 }
 
 #[derive(Debug)]

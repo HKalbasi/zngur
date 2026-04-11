@@ -1,0 +1,6 @@
+Hello from Rust
+Constructed CppType 10 20
+Rust got CppType
+CppType 10 20
+Rust dropping CppType
+Destructed CppType 10 20

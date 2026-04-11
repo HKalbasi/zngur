@@ -549,6 +549,15 @@ name = "example-simple-import"
 version = "0.9.0"
 
 [[package]]
+name = "example-stack-owned"
+version = "0.9.0"
+dependencies = [
+ "build-rs",
+ "cc",
+ "zngur",
+]
+
+[[package]]
 name = "example-tutorial"
 version = "0.9.0"
 
