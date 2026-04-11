@@ -153,6 +153,10 @@ namespace {{ self.cpp_namespace }} {
   template <typename T>
   struct zngur_heap_allocated : ::std::false_type {};
 
+  // specialize to opt-in to stack-owned C++ types
+  template <typename T>
+  struct is_trivially_relocatable : ::std::false_type {};
+
   namespace zngur_detail {
     // std::conjunction analog for c++11 support
     template <typename... Conds>

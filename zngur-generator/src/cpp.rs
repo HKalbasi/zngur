@@ -5,7 +5,7 @@ use std::{
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use zngur_def::{CppRef, CppValue, RustTrait, ZngurFieldData, ZngurMethodReceiver};
+use zngur_def::{CppRef, CppStackOwned, CppValue, RustTrait, ZngurFieldData, ZngurMethodReceiver};
 
 use crate::{
     ZngurWellknownTraitData,
@@ -493,9 +493,22 @@ pub struct CppTypeDefinition {
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
     pub cpp_value: Option<CppValue>,
     pub cpp_ref: Option<CppRef>,
+    pub cpp_stack_owned: Option<CppStackOwned>,
 }
 
 impl CppTypeDefinition {
+    pub fn rust_short_name(&self) -> String {
+        self.ty.to_string().split("::").last().unwrap().to_string()
+    }
+
+    pub fn cpp_short_name(&self) -> String {
+        if let Some(c) = &self.cpp_stack_owned {
+            c.cpp_type.split("::").last().unwrap().to_string()
+        } else {
+            "".to_string()
+        }
+    }
+
     pub fn has_unsized(&self) -> bool {
         self.wellknown_traits
             .iter()
@@ -612,6 +625,7 @@ impl Default for CppTypeDefinition {
             from_trait_ref: None,
             cpp_value: None,
             cpp_ref: None,
+            cpp_stack_owned: None,
         }
     }
 }
@@ -662,6 +676,7 @@ impl CppFile {
     ) -> std::fmt::Result {
         let template = CppSourceTemplate {
             header_file_name: &self.header_file_name,
+            type_defs: &self.type_defs,
             trait_defs: &self.trait_defs,
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
