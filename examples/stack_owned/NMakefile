@@ -1,0 +1,6 @@
+a.exe: src/main.rs build.rs main.zng impls.cpp
+	cargo build
+	copy ..\..\target\debug\example-stack-owned.exe a.exe
+
+clean:
+	- del /f /q a.exe actual_output.txt generated.h generated.cpp src\generated.rs 2>nul

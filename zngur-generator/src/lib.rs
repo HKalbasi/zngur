@@ -81,6 +81,7 @@ impl ZngurGenerator {
                         .unwrap_or_default()
                 )
             }));
+        let mut cpp_mod_content = String::new();
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
@@ -98,6 +99,36 @@ impl ZngurGenerator {
             }
             if is_copy {
                 rust_file.add_static_is_copy_assert(&ty);
+            }
+            if let Some(cpp_stack_owned) = &ty_def.cpp_stack_owned {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                let destructor_name = format!("_zngur_crate_{type_name}_destructor");
+                let mangled_name = rust_file.add_extern_cpp_function(
+                    &destructor_name,
+                    &[RustType::Ref(Mutability::Mut, Box::new(ty.clone()))],
+                    &RustType::Tuple(vec![]),
+                );
+                let size = cpp_stack_owned.size;
+                let align = cpp_stack_owned.align;
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    #[repr(C)]
+    #[repr(align({align}))]
+    pub struct {type_name}(pub [u8; {size}]);
+
+    impl Drop for {type_name} {{
+        fn drop(&mut self) {{
+            unsafe {{
+                unsafe extern "C" {{
+                    fn {mangled_name}(i0: *mut u8, o: *mut u8);
+                }}
+                let mut dummy = ();
+                {mangled_name}(self.0.as_mut_ptr(), &mut dummy as *mut () as *mut u8);
+            }}
+        }}
+    }}
+"#
+                ));
             }
             let mut cpp_methods = vec![];
             let mut constructors = vec![];
@@ -223,6 +254,7 @@ impl ZngurGenerator {
                     cpp_value
                 }),
                 cpp_ref: ty_def.cpp_ref,
+                cpp_stack_owned: ty_def.cpp_stack_owned,
                 from_trait: if let RustType::Boxed(b) = &ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
                         if let RustTrait::Fn {
@@ -259,6 +291,15 @@ impl ZngurGenerator {
                     None
                 },
             });
+        }
+        if !cpp_mod_content.is_empty() {
+            rust_file.text.push_str(&format!(
+                r#"
+pub mod cpp {{
+{cpp_mod_content}
+}}
+"#
+            ));
         }
         for func in zng.funcs {
             let sig = rust_file.add_function(

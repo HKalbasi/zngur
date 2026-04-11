@@ -544,6 +544,7 @@ impl ZngHeaderTemplate {
 #[template(path = "cpp_source.sptl", escape = "none")]
 pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) header_file_name: &'a String,
+    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,

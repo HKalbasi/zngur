@@ -8,11 +8,11 @@ use chumsky::prelude::*;
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, Import, LayoutPolicy, Merge,
-    MergeFailure, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait,
-    RustType, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
-    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType,
-    ZngurWellknownTrait,
+    AdditionalIncludes, ConvertPanicToException, CppRef, CppStackOwned, CppValue, Import,
+    LayoutPolicy, Merge, MergeFailure, ModuleImport, Mutability, PrimitiveRustType,
+    RustPathAndGenerics, RustTrait, RustType, ZngurConstructor, ZngurExternCppFn,
+    ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver,
+    ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -334,6 +334,10 @@ enum ParsedTypeItem<'a> {
     CppRef {
         cpp_type: &'a str,
     },
+    CppStackOwned {
+        cpp_type: &'a str,
+        props: Vec<(Spanned<&'a str>, usize)>,
+    },
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, NItems>),
 }
 
@@ -423,52 +427,60 @@ impl ProcessedItem<'_> {
                 let mut layout_span = None;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
+                let mut cpp_stack_owned = None;
                 let mut to_process = items;
                 to_process.reverse(); // create a stack of items to process
+                let check_size_align = |props: Vec<(Spanned<&str>, usize)>| {
+                    let mut size = None;
+                    let mut align = None;
+                    let mut errors = vec![];
+                    for (key, value) in props {
+                        match key.inner {
+                            "size" => size = Some(value),
+                            "align" => align = Some(value),
+                            _ => errors.push(("Unknown property", key.span)),
+                        }
+                    }
+                    if size.is_none() {
+                        errors.push(("Size is not declared for this type", ty.span));
+                    }
+                    if align.is_none() {
+                        errors.push(("Align is not declared for this type", ty.span));
+                    }
+                    if errors.is_empty() {
+                        Ok((size.unwrap(), align.unwrap()))
+                    } else {
+                        Err(errors)
+                    }
+                };
                 while let Some(item) = to_process.pop() {
                     let item_span = item.span;
                     let item = item.inner;
                     match item {
                         ParsedTypeItem::Layout(span, p) => {
-                            let mut check_size_align = |props: Vec<(Spanned<&str>, usize)>| {
-                                let mut size = None;
-                                let mut align = None;
-                                for (key, value) in props {
-                                    match key.inner {
-                                        "size" => size = Some(value),
-                                        "align" => align = Some(value),
-                                        _ => ctx.add_error_str("Unknown property", key.span),
-                                    }
-                                }
-                                let Some(size) = size else {
-                                    ctx.add_error_str(
-                                        "Size is not declared for this type",
-                                        ty.span,
-                                    );
-                                    return None;
-                                };
-                                let Some(align) = align else {
-                                    ctx.add_error_str(
-                                        "Align is not declared for this type",
-                                        ty.span,
-                                    );
-                                    return None;
-                                };
-                                Some((size, align))
-                            };
                             layout = Some(match p {
                                 ParsedLayoutPolicy::StackAllocated(p) => {
-                                    let Some((size, align)) = check_size_align(p) else {
-                                        continue;
-                                    };
-                                    LayoutPolicy::StackAllocated { size, align }
+                                    match check_size_align(p) {
+                                        Ok((size, align)) => {
+                                            LayoutPolicy::StackAllocated { size, align }
+                                        }
+                                        Err(errs) => {
+                                            for (msg, span) in errs {
+                                                ctx.add_error_str(msg, span);
+                                            }
+                                            continue;
+                                        }
+                                    }
                                 }
-                                ParsedLayoutPolicy::Conservative(p) => {
-                                    let Some((size, align)) = check_size_align(p) else {
+                                ParsedLayoutPolicy::Conservative(p) => match check_size_align(p) {
+                                    Ok((size, align)) => LayoutPolicy::Conservative { size, align },
+                                    Err(errs) => {
+                                        for (msg, span) in errs {
+                                            ctx.add_error_str(msg, span);
+                                        }
                                         continue;
-                                    };
-                                    LayoutPolicy::Conservative { size, align }
-                                }
+                                    }
+                                },
                                 ParsedLayoutPolicy::HeapAllocated => LayoutPolicy::HeapAllocated,
                                 ParsedLayoutPolicy::OnlyByRef => LayoutPolicy::OnlyByRef,
                             });
@@ -547,6 +559,23 @@ impl ProcessedItem<'_> {
                             }
                             cpp_ref = Some(CppRef(cpp_type.to_owned()));
                         }
+                        ParsedTypeItem::CppStackOwned { cpp_type, props } => {
+                            let (size, align) = match check_size_align(props) {
+                                Ok(x) => x,
+                                Err(errs) => {
+                                    for (msg, span) in errs {
+                                        ctx.add_error_str(msg, span);
+                                    }
+                                    continue;
+                                }
+                            };
+                            cpp_stack_owned = Some(CppStackOwned {
+                                cpp_type: cpp_type.to_owned(),
+                                size,
+                                align,
+                            });
+                            layout = Some(LayoutPolicy::StackAllocated { size, align });
+                        }
                         ParsedTypeItem::MatchOnCfg(match_) => {
                             let result = match_.eval(ctx);
                             if let Some(result) = result {
@@ -610,6 +639,7 @@ impl ProcessedItem<'_> {
                             fields,
                             cpp_value,
                             cpp_ref,
+                            cpp_stack_owned,
                         },
                         r,
                         ty.span,
@@ -1633,6 +1663,7 @@ fn inner_type_item<'a>()
         .or(just([Token::Sharp, Token::Ident("layout_conservative")])
             .ignore_then(
                 property_item
+                    .clone()
                     .separated_by(just(Token::Comma))
                     .collect::<Vec<_>>()
                     .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
@@ -1724,6 +1755,19 @@ fn inner_type_item<'a>()
             Token::Str(c) => c,
         })
         .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
+    let cpp_stack_owned = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_stack_owned")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
+        .then(
+            property_item
+                .clone()
+                .separated_by(just(Token::Comma))
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+        )
+        .map(|(cpp_type, props)| ParsedTypeItem::CppStackOwned { cpp_type, props });
     recursive(|item| {
         let inner_item = choice((
             layout,
@@ -1732,6 +1776,7 @@ fn inner_type_item<'a>()
             field,
             cpp_value,
             cpp_ref,
+            cpp_stack_owned,
             method()
                 .then(
                     just(Token::KwUse)
