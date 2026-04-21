@@ -107,3 +107,7 @@ declspec
 elif
 askama
 endfor
+znglib
+VTABLE
+uintptr
+stdc
