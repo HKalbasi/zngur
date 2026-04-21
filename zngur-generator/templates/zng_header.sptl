@@ -57,7 +57,7 @@
 
 namespace {{ self.cpp_namespace }} {
 
-  inline void* __zng_memcpy( void* dest, const void* src, std::size_t count ){
+  inline void* __zng_memcpy( void* dest, const void* src, ::std::size_t count ){
     if (count > 0) {
 		return memcpy(dest, src, count);
 	}
@@ -174,23 +174,23 @@ namespace {{ self.cpp_namespace }} {
   struct is_trivially_relocatable<T, typename std::enable_if<std::is_trivially_copyable<T>::value>::type> : std::true_type {};
 
   namespace zngur_detail {
-    // std::conjunction analog for c++11 support
+    // ::std::conjunction analog for c++11 support
     template <typename... Conds>
-    struct conjunction : std::true_type {};
+    struct conjunction : ::std::true_type {};
 
     template <typename Cond, typename... Conds>
     struct conjunction<Cond, Conds...>
-        : std::conditional<Cond::value, conjunction<Conds...>,
-                          std::false_type>::type {};
+        : ::std::conditional<Cond::value, conjunction<Conds...>,
+                          ::std::false_type>::type {};
 
     // Offset can be computed at compile time
     template <typename...>
-    struct is_static_offset : std::false_type {};
+    struct is_static_offset : ::std::false_type {};
 
     // a static offset not behind a pointer can be computed
     template <typename Parent, size_t OFFSET>
     struct is_static_offset<FieldStaticOffset<Parent, OFFSET>>
-        : std::true_type {};
+        : ::std::true_type {};
 
     // All offsets can be compile time computed
     template <typename First, typename... Rest>
