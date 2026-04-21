@@ -521,7 +521,44 @@ namespace {{ self.namespace }} {
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
+
+       static RefMut< {{ td.ty }} > FromAddr(uintptr_t addr) {
+         RefMut< {{ td.ty }} > r;
+         r.__zngur_data = addr;
+         return r;
+       }
+    {% else %}
+      uintptr_t Metadata() const {
+          return __zngur_data[1];
+      }
+
+      static RefMut< {{ td.ty }} > FromAddrAndMetadata(uintptr_t addr, uintptr_t metadata) {
+        RefMut< {{ td.ty }} > r;
+        r.__zngur_data = { addr, metadata };
+        return r;
+      }
     {% endif %}
+
+      uintptr_t Addr() const {
+        return {% if is_unsized %} __zngur_data[0] {% else %} __zngur_data {% endif %};
+      }
+
+      Raw< {{ td.ty }} > AsRaw() const {
+        {% if is_unsized %}
+        return Raw< {{ td.ty }} >(zngur_fat_pointer{reinterpret_cast<uint8_t*>(__zngur_data[0]), __zngur_data[1]});
+        {% else %}
+        return Raw< {{ td.ty }} >(reinterpret_cast<uint8_t*>(__zngur_data));
+        {% endif %}
+      }
+      RawMut< {{ td.ty }} > AsRawMut() const {
+        {% if is_unsized %}
+        return RawMut< {{ td.ty }} >(zngur_fat_pointer{reinterpret_cast<uint8_t*>(__zngur_data[0]), __zngur_data[1]});
+        {% else %}
+        return RawMut< {{ td.ty }} >(reinterpret_cast<uint8_t*>(__zngur_data));
+        {% endif %}
+      }
+
+      Ref< {{ td.ty }} > AsRef() const;
 
     {{ td.render_make_box_ref(td.ty.path.name(), self.namespace, self.crate_name) }}
 
@@ -563,10 +600,10 @@ namespace {{ self.namespace }} {
     static inline void check_init(const RefMut< {{ td.ty }} >&) noexcept {}
     static inline void assume_deinit(RefMut< {{ td.ty }} >&) noexcept {}
     static inline size_t size_of() noexcept {
-        return {% if is_unsized %}16{% else %}8{% endif %};
+        return {% if is_unsized %}2 * sizeof(uintptr_t){% else %}sizeof(uintptr_t){% endif %};
     }
     static inline size_t align_of() noexcept {
-        return 8;
+        return alignof(uintptr_t);
     }
   };
 
@@ -702,7 +739,44 @@ namespace {{ self.namespace }} {
           size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
+
+      static Ref< {{ td.ty }} > FromAddr(uintptr_t addr) {
+          Ref< {{ td.ty }} > r;
+          r.__zngur_data = addr;
+          return r;
+      }
+    {% else %}
+      uintptr_t Metadata() const {
+          return __zngur_data[1];
+      }
+
+      static Ref< {{ td.ty }} > FromAddrAndMetadata(uintptr_t addr, uintptr_t metadata) {
+        Ref< {{ td.ty }} > r;
+        r.__zngur_data = { addr, metadata };
+        return r;
+      }
     {% endif %}
+
+      uintptr_t Addr() const {
+          return {% if is_unsized %} __zngur_data[0] {% else %} __zngur_data {% endif %};
+      }
+      Raw< {{ td.ty }} > AsRaw() const {
+          {% if is_unsized %}
+          return Raw< {{ td.ty }} >(zngur_fat_pointer{reinterpret_cast<uint8_t*>(__zngur_data[0]), __zngur_data[1]});
+          {% else %}
+          return Raw< {{ td.ty }} >(reinterpret_cast<uint8_t*>(__zngur_data));
+          {% endif %}
+      }
+
+      RawMut< {{ td.ty }} > AsRawMut() const {
+        {% if is_unsized %}
+        return RawMut< {{ td.ty }} >(zngur_fat_pointer{reinterpret_cast<uint8_t*>(__zngur_data[0]), __zngur_data[1]});
+        {% else %}
+        return RawMut< {{ td.ty }} >(reinterpret_cast<uint8_t*>(__zngur_data));
+        {% endif %}
+      }
+
+      RefMut< {{ td.ty }} > AsRefMut() const;
 
     {{ td.render_make_box_ref_only(td.ty.path.name(), self.namespace, self.crate_name) }}
 
@@ -750,10 +824,10 @@ struct __zngur_internal< {{ ref_kind }} < {{ td.ty }} > > {
   static inline void check_init(const {{ ref_kind }} < {{ td.ty }} >&) noexcept {}
   static inline void assume_deinit({{ ref_kind }} < {{ td.ty }} >&) noexcept {}
   static inline size_t size_of() noexcept {
-      return {% if is_unsized %}16{% else %}8{% endif %};
+      return {% if is_unsized %}2 * sizeof(uintptr_t){% else %}sizeof(uintptr_t){% endif %};
   }
   static inline size_t align_of() noexcept {
-      return 8;
+      return alignof(uintptr_t);
   }
 };
 
@@ -879,6 +953,21 @@ namespace {{ self.namespace }} {
       {% endif %}
     {% endif %}
   {% endfor %}
+
+  inline Ref< {{ td.ty }} > RefMut< {{ td.ty }} >::AsRef() const {
+      {% if td.has_unsized() %}
+      return Ref< {{ td.ty }} >::FromAddrAndMetadata(Addr(), Metadata());
+      {% else %}
+      return Ref< {{ td.ty }} >::FromAddr(Addr());
+      {% endif %}
+  }
+      inline RefMut< {{ td.ty }} > Ref< {{ td.ty }} >::AsRefMut() const {
+      {% if td.has_unsized() %}
+      return RefMut< {{ td.ty }} >::FromAddrAndMetadata(Addr(), Metadata());
+      {% else %}
+      return RefMut< {{ td.ty }} >::FromAddr(Addr());
+      {% endif %}
+  }
 } // namespace {{ self.namespace }}
 
 {% endfor %}

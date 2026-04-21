@@ -131,6 +131,10 @@ void test_refref() {
   zngur_dbg(strvec);
   zngur_dbg(strvec.get(0));
   zngur_dbg(strvec.get(2));
+  // Verify we can get the top level address of a double reference type
+  // NOTE: We don't print it since it isn't stable for a diff test
+  strvec.get(0).unwrap().Addr();
+  strvec.get(2).unwrap().Addr();
   zngur_dbg(*strvec.get(1).unwrap());
   *strvec.get_mut(1).unwrap() = "flip flop"_rs;
   zngur_dbg(strvec);
