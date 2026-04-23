@@ -327,6 +327,11 @@ namespace {{ self.namespace }} {
               {% endif %}
               *reinterpret_cast<::{{ self.namespace }}::ZngurCppOpaqueOwnedObject*>(::{{ self.namespace }}::__zngur_internal_data_ptr(*this)) = ::std::move(o);
           }
+
+          template<typename... Args>
+          static inline {{ name }} build(Args&&... args) {
+              return {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject::build< {{ cpp_value.1 }} >(::std::forward<Args>(args)...));
+          }
       {% endif %}
 
       {% if let Some(cpp_stack_owned) = td.cpp_stack_owned %}
@@ -342,6 +347,14 @@ namespace {{ self.namespace }} {
           }
           inline {{ cpp_stack_owned.cpp_type }}&& cpp() && {
               return ::std::move(*reinterpret_cast< {{ cpp_stack_owned.cpp_type }}* >(__zngur_data.data()));
+          }
+
+          template<typename... Args>
+          static inline {{ name }} build(Args&&... args) {
+              {{ name }} w;
+              new (&w.cpp()) {{ cpp_stack_owned.cpp_type }}(::std::forward<Args>(args)...);
+              ::{{ self.namespace }}::__zngur_internal< {{ name }} >::assume_init(w);
+              return w;
           }
       {% endif %}
 

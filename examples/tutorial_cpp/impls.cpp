@@ -11,8 +11,7 @@ rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
 }
 
 Inventory rust::Impl<Inventory>::new_empty(uint32_t space) {
-  return Inventory(
-      rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Inventory>(space));
+  return Inventory::build(space);
 }
 
 rust::Unit rust::Impl<Inventory>::add_banana(RefMut<Inventory> self,
@@ -27,11 +26,10 @@ rust::Unit rust::Impl<Inventory>::add_item(RefMut<Inventory> self, Item item) {
 }
 
 Item rust::Impl<Item>::new_(Ref<rust::Str> name, uint32_t size) {
-  return Item(rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Item>(
-      cpp_inventory::Item{
-          .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
-                                name.len()),
-          .size = size}));
+  return Item::build(cpp_inventory::Item{
+      .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
+                            name.len()),
+      .size = size});
 }
 
 rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(

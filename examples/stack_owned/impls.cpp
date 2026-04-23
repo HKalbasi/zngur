@@ -8,10 +8,7 @@ namespace rust {
 
 rust::crate::MyCppWrapper
 Impl<rust::crate::MyCppWrapper>::custom_constructor(int32_t x, int32_t y) {
-  rust::crate::MyCppWrapper wrapper;
-  new (&wrapper.cpp()) CppType(x, y);
-  zngur_assume_init(wrapper);
-  return wrapper;
+  return rust::crate::MyCppWrapper::build(x, y);
 }
 
 rust::Unit
