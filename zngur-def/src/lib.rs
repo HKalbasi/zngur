@@ -233,7 +233,6 @@ pub enum PrimitiveRustType {
     Bool,
     Char,
     Str,
-    ZngurCppOpaqueOwnedObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -318,9 +317,6 @@ impl Display for RustType {
                 PrimitiveRustType::Bool => write!(f, "bool"),
                 PrimitiveRustType::Char => write!(f, "char"),
                 PrimitiveRustType::Str => write!(f, "str"),
-                PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
-                    write!(f, "ZngurCppOpaqueOwnedObject")
-                }
             },
             RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
             RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),

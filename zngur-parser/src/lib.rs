@@ -1429,7 +1429,6 @@ fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngPars
         Token::Ident("bool") => PrimitiveRustType::Bool,
         Token::Ident("str") => PrimitiveRustType::Str,
         Token::Ident("char") => PrimitiveRustType::Char,
-        Token::Ident("ZngurCppOpaqueOwnedObject") => PrimitiveRustType::ZngurCppOpaqueOwnedObject,
         Token::Ident("usize") => PrimitiveRustType::Usize,
         Token::Ident(c) if as_scalar(c, 'u').is_some() => PrimitiveRustType::Uint(as_scalar(c, 'u').unwrap()),
         Token::Ident(c) if as_scalar(c, 'i').is_some() => PrimitiveRustType::Int(as_scalar(c, 'i').unwrap()),

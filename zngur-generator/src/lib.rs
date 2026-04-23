@@ -168,6 +168,32 @@ impl ZngurGenerator {
                     ));
                 }
             }
+            if ty_def.cpp_value.is_some() {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    #[repr(C)]
+    pub struct {type_name} {{
+        pub(crate) data: *mut u8,
+        pub(crate) destructor: extern "C" fn(*mut u8),
+    }}
+
+    impl Drop for {type_name} {{
+        fn drop(&mut self) {{
+            (self.destructor)(self.data)
+        }}
+    }}
+"#
+                ));
+            }
+            if ty_def.cpp_ref.is_some() {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    pub struct {type_name}(());
+"#
+                ));
+            }
             let mut cpp_methods = vec![];
             let mut constructors = vec![];
             let mut fields = vec![];
@@ -288,7 +314,7 @@ impl ZngurGenerator {
                 methods: cpp_methods,
                 wellknown_traits,
                 cpp_value: ty_def.cpp_value.map(|mut cpp_value| {
-                    cpp_value.0 = rust_file.add_cpp_value_bridge(&ty, &cpp_value.0);
+                    cpp_value.0 = rust_file.add_cpp_value_bridge(&ty);
                     cpp_value
                 }),
                 cpp_ref: ty_def.cpp_ref,

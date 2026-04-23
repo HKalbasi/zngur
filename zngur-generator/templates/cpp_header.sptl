@@ -320,6 +320,13 @@ namespace {{ self.namespace }} {
           inline {{ cpp_value.1 }}& cpp() {
               return (*{{ cpp_value.0 }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this))).as_cpp< {{ cpp_value.1 }} >();
           }
+
+          inline {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject&& o) noexcept {
+              {% if !is_copy %}
+              this->drop_flag = true;
+              {% endif %}
+              *reinterpret_cast<::{{ self.namespace }}::ZngurCppOpaqueOwnedObject*>(::{{ self.namespace }}::__zngur_internal_data_ptr(*this)) = ::std::move(o);
+          }
       {% endif %}
 
       {% if let Some(cpp_stack_owned) = td.cpp_stack_owned %}
