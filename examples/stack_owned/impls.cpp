@@ -6,6 +6,12 @@
 
 namespace rust {
 
+Unit Impl<crate::MyCppWrapper>::constructor(
+    RefMut<crate::MyCppWrapper> wrapper) {
+  new (&wrapper.cpp()) CppType();
+  return {};
+}
+
 rust::crate::MyCppWrapper
 Impl<rust::crate::MyCppWrapper>::custom_constructor(int32_t x, int32_t y) {
   return rust::crate::MyCppWrapper::build(x, y);

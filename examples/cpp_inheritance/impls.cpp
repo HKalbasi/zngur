@@ -1,9 +1,21 @@
 #include "impls.h"
 #include "generated.h"
 #include "task.h"
+#include "zngur.h"
 #include <new>
 
 namespace rust {
+
+Unit Impl<crate::Dispatcher>::constructor(
+    RefMut<crate::Dispatcher> dispatcher) {
+  new (&dispatcher.cpp()) task::Dispatcher();
+  return {};
+}
+
+Unit Impl<crate::CppTask>::constructor(RefMut<crate::CppTask> dispatcher) {
+  new (&dispatcher.cpp()) task::CppTaskForRust();
+  return {};
+}
 
 ::rust::Unit Impl<rust::crate::Dispatcher>::run_task(
     ::rust::Ref<rust::crate::Dispatcher> self,

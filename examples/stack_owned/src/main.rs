@@ -2,7 +2,15 @@
 mod generated;
 
 pub use generated::cpp::MyCppWrapper;
-use znglib::ZngCppStackObject;
+use znglib::{ZngCppDefaultConstruct, ZngCppStackObject};
+
+// SAFETY: Constructor calls the actual C++ constructor. Object is initialized
+// after calling `.construct()`
+unsafe impl ZngCppDefaultConstruct for MyCppWrapper {
+    unsafe fn construct(&mut self) {
+        self.constructor();
+    }
+}
 
 fn main() {
     let c = MyCppWrapper::new();

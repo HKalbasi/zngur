@@ -8,11 +8,26 @@ use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
 use cpp_inherit::CppInherit;
-use znglib::ZngCppStackObject as _;
+use znglib::{ZngCppDefaultConstruct, ZngCppStackObject as _};
 
 use crate::generated::cpp::{CppTask, Dispatcher};
 
 pub struct RustTask<'a>(pub Pin<&'a mut dyn Future<Output = ()>>);
+
+// SAFETY: C++ object will be initialized after calling .construct().
+unsafe impl ZngCppDefaultConstruct for CppTask {
+    unsafe fn construct(&mut self) {
+        self.constructor();
+    }
+}
+
+// SAFETY: C++ object will be initialized after calling .construct().
+unsafe impl ZngCppDefaultConstruct for Dispatcher {
+    unsafe fn construct(&mut self) {
+        // SAFETY: Object is uninitialized at the time we call the constructor.
+        self.constructor();
+    }
+}
 
 impl<'a> RustTask<'a> {
     pub fn poll(&mut self) -> Poll<()> {

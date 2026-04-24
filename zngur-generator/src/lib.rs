@@ -110,16 +110,6 @@ impl ZngurGenerator {
                 );
                 let size = cpp_stack_owned.size;
                 let align = cpp_stack_owned.align;
-                let has_default_constructor = zng.extern_cpp_impls.iter().any(|impl_block| {
-                    impl_block.ty == ty_def.ty
-                        && impl_block.tr.is_none()
-                        && impl_block.methods.iter().any(|m| {
-                            m.name == "constructor"
-                                && m.receiver == ZngurMethodReceiver::Ref(Mutability::Mut)
-                                && m.inputs.is_empty()
-                                && m.output == RustType::UNIT
-                        })
-                });
                 cpp_mod_content.push_str(&format!(
                     r#"
     #[repr(C)]
@@ -155,18 +145,6 @@ impl ZngurGenerator {
     }}
 "#
                 ));
-
-                if has_default_constructor {
-                    cpp_mod_content.push_str(&format!(
-                        r#"
-    unsafe impl ::znglib::ZngCppDefaultConstruct for {type_name} {{
-        unsafe fn construct(&mut self) {{
-            self.constructor();
-        }}
-    }} 
-"#
-                    ));
-                }
             }
             if ty_def.cpp_value.is_some() {
                 let type_name = ty.to_string().split("::").last().unwrap().to_string();
