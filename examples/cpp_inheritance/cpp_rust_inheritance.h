@@ -15,15 +15,11 @@ private:
 };
 
 template <typename T> RawMut<T> as_rust_ptr_mut(T *t) {
-  return RawMut<T>::FromAddr(reinterpret_cast<uintptr_t>(t));
+  return RawMut<T>::from_raw_parts(reinterpret_cast<uintptr_t>(t));
 }
 
 template <typename T> T *from_rust_ptr(RawMut<T> t) {
-  return reinterpret_cast<T *>(t.Addr());
-}
-
-template <typename T> RefMut<T> to_rust_ref_mut(RawMut<T> t) {
-  return t.AsRefMut();
+  return reinterpret_cast<T *>(t.addr());
 }
 
 template <typename CppBase, typename RustDerived>

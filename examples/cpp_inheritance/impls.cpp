@@ -35,7 +35,7 @@ task::Poll task::CppTaskForRust::poll() {
   ::rust::RawMut<::rust::crate::RustTask> rust_future =
       Inheritance::get_rust(this);
   ::rust::RefMut<::rust::crate::RustTask> ref_mut =
-      ::rust::to_rust_ref_mut(rust_future);
+      rust_future.as_mut_unchecked();
   ::rust::core::task::Poll<::rust::Unit> result =
       ::rust::crate::RustTask::poll(ref_mut);
   return result.is_ready() ? task::Poll::kReady : task::Poll::kPending;
