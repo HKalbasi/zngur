@@ -1,7 +1,7 @@
 use crate::{
-    AdditionalIncludes, ConvertPanicToException, CppRef, CppValue, LayoutPolicy, ZngurConstructor,
-    ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethodDetails, ZngurSpec,
-    ZngurTrait, ZngurType,
+    AdditionalIncludes, ConvertPanicToException, CppRef, CppStackOwned, CppValue, LayoutPolicy,
+    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
+    ZngurMethodDetails, ZngurSpec, ZngurTrait, ZngurType,
 };
 
 /// Trait for types with a partial union operation.
@@ -146,6 +146,7 @@ impl Merge for ZngurType {
 
         self.cpp_value.merge(&mut into.cpp_value)?;
         self.cpp_ref.merge(&mut into.cpp_ref)?;
+        self.cpp_stack_owned.merge(&mut into.cpp_stack_owned)?;
 
         inplace_union(self.wellknown_traits, &mut into.wellknown_traits);
         merge_by_identity(self.methods, &mut into.methods, |a, b| {
@@ -199,6 +200,17 @@ impl Merge for CppRef {
     fn merge(self, into: &mut Self) -> MergeResult {
         if self != *into {
             return Err(MergeFailure::Conflict("Cpp ref mismatch".to_string()));
+        }
+        Ok(())
+    }
+}
+
+impl Merge for CppStackOwned {
+    fn merge(self, into: &mut Self) -> MergeResult {
+        if self != *into {
+            return Err(MergeFailure::Conflict(
+                "Cpp stack owned mismatch".to_string(),
+            ));
         }
         Ok(())
     }

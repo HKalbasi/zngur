@@ -37,25 +37,25 @@ int main()
     s2.push(4);
     zngur_dbg(s2);
 
-    zngur_dbg(ss_ptr.read_ref());
-    auto s3_ref_mut = ss_ptr.offset(2).read_mut();
+    zngur_dbg(ss_ptr.as_ref_unchecked());
+    auto s3_ref_mut = ss_ptr.offset(2).as_mut_unchecked();
     s3_ref_mut.push(2000);
     zngur_dbg(s3_ref_mut);
     zngur_dbg(ss);
 
     rust::RawMut<Vec<int32_t>> s4_raw_mut = ss.get_mut(2).unwrap();
-    s4_raw_mut.read_mut().push(5);
-    zngur_dbg(s4_raw_mut.read_ref());
+    s4_raw_mut.as_mut_unchecked().push(5);
+    zngur_dbg(s4_raw_mut.as_ref_unchecked());
     zngur_dbg(ss);
 
     rust::Raw<Vec<int32_t>> s4_raw = ss.get_mut(2).unwrap();
-    zngur_dbg(s4_raw.read_ref());
+    zngur_dbg(s4_raw.as_ref_unchecked());
 
     rust::Raw<Vec<int32_t>> ss_ptr2 = ss.as_ptr();
-    zngur_dbg(ss_ptr2.offset(2).read_ref());
-    zngur_dbg(ss_ptr2.offset(4).offset(-2).read_ref());
+    zngur_dbg(ss_ptr2.offset(2).as_ref_unchecked());
+    zngur_dbg(ss_ptr2.offset(4).offset(-2).as_ref_unchecked());
 
     std::vector<int32_t> v { 10, 20, 3, 15 };
     rust::RawMut<rust::Slice<int32_t>> s5_raw_mut { { reinterpret_cast<uint8_t*>(v.data()), 3 } };
-    zngur_dbg(s5_raw_mut.read_ref().to_vec());
+    zngur_dbg(s5_raw_mut.as_ref_unchecked().to_vec());
 }

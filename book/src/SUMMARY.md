@@ -16,6 +16,7 @@
   - [Writing `impl` blocks for Rust types in C++](./call_cpp_from_rust/rust_impl.md)
   - [`Box<dyn Fn>`]()
   - [Opaque C++ types](./call_cpp_from_rust/opaque.md)
+  - [Trivially Relocatable C++ types](./call_cpp_from_rust/trivially_relocatable.md)
 - [Import](./import.md)
 - [Conditional Compilation](./conditional_compilation.md)
 - [Safety](./safety.md)

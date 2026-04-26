@@ -52,7 +52,7 @@
     2,
     4,
 ]
-[main.cpp:40] ss_ptr.read_ref() = [
+[main.cpp:40] ss_ptr.as_ref_unchecked() = [
     2,
     7,
     3,
@@ -82,7 +82,7 @@
         2,
     ],
 ]
-[main.cpp:48] s4_raw_mut.read_ref() = [
+[main.cpp:48] s4_raw_mut.as_ref_unchecked() = [
     2000,
     5,
 ]
@@ -107,19 +107,19 @@
         2,
     ],
 ]
-[main.cpp:52] s4_raw.read_ref() = [
+[main.cpp:52] s4_raw.as_ref_unchecked() = [
     2000,
     5,
 ]
-[main.cpp:55] ss_ptr2.offset(2).read_ref() = [
+[main.cpp:55] ss_ptr2.offset(2).as_ref_unchecked() = [
     2000,
     5,
 ]
-[main.cpp:56] ss_ptr2.offset(4).offset(-2).read_ref() = [
+[main.cpp:56] ss_ptr2.offset(4).offset(-2).as_ref_unchecked() = [
     2000,
     5,
 ]
-[main.cpp:60] s5_raw_mut.read_ref().to_vec() = [
+[main.cpp:60] s5_raw_mut.as_ref_unchecked().to_vec() = [
     10,
     20,
     3,

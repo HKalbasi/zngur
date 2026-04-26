@@ -507,6 +507,7 @@ impl ZngHeaderTemplate {
     pub fn is_ref_kind_ref(&self, ref_kind: &str) -> bool {
         ref_kind == "Ref"
     }
+
     pub fn is_size_t(&self, ty: &str) -> bool {
         ty == "::size_t"
     }
@@ -544,6 +545,7 @@ impl ZngHeaderTemplate {
 #[template(path = "cpp_source.sptl", escape = "none")]
 pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) header_file_name: &'a String,
+    pub(crate) type_defs: &'a Vec<CppTypeDefinition>,
     pub(crate) trait_defs: &'a IndexMap<RustTrait, CppTraitDefinition>,
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,

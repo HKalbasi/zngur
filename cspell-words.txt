@@ -107,3 +107,11 @@ declspec
 elif
 askama
 endfor
+VTABLE
+uintptr
+stdc
+rvalue
+xvalue
+relocatability
+Relocatability
+libstdc
