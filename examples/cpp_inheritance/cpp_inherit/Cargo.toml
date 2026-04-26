@@ -7,4 +7,4 @@ license.workspace = true
 publish = false
 
 [dependencies]
-znglib = { path = "../../../zngur-lib" }
+zngur-lib = { path = "../../../zngur-lib" }

@@ -2,7 +2,7 @@
 mod generated;
 
 pub use generated::cpp::MyCppWrapper;
-use znglib::{ZngCppDefaultConstruct, ZngCppStackObject};
+use zngur_lib::{ZngCppDefaultConstruct, ZngCppStackObject};
 
 // SAFETY: Constructor calls the actual C++ constructor. Object is initialized
 // after calling `.construct()`

@@ -331,7 +331,7 @@ checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 name = "cpp_inherit"
 version = "0.1.0"
 dependencies = [
- "znglib",
+ "zngur-lib",
 ]
 
 [[package]]
@@ -489,8 +489,8 @@ dependencies = [
  "build-rs",
  "cc",
  "cpp_inherit",
- "znglib",
  "zngur",
+ "zngur-lib",
 ]
 
 [[package]]
@@ -572,8 +572,8 @@ version = "0.9.0"
 dependencies = [
  "build-rs",
  "cc",
- "znglib",
  "zngur",
+ "zngur-lib",
 ]
 
 [[package]]
@@ -1568,10 +1568,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b8848ee67ecc8aedbaf3e4122217aff892639231befc6a1b58d29fff4c2cabaa"
 
 [[package]]
-name = "znglib"
-version = "0.9.0"
-
-[[package]]
 name = "zngur"
 version = "0.9.0"
 dependencies = [
@@ -1614,6 +1610,10 @@ dependencies = [
  "zngur-def",
  "zngur-parser",
 ]
+
+[[package]]
+name = "zngur-lib"
+version = "0.9.0"
 
 [[package]]
 name = "zngur-parser"

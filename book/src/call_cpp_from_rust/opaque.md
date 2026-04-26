@@ -257,7 +257,7 @@ fn main() {
 ```
 
 The wrapper unconditionally implements the following traits defined in the
-`znglib` crate.
+`zngur-lib` crate.
 
 - The marker `ZngCppObject`
 - The `ZngCppStackObject` trait with a `new` function if the C++ object is

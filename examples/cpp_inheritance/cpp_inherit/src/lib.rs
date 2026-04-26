@@ -1,4 +1,4 @@
-use znglib::ZngCppStackObject;
+use zngur_lib::ZngCppStackObject;
 
 #[repr(C)]
 pub struct CppInherit<Base: ZngCppStackObject, T> {

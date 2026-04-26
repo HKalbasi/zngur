@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 cpp_inherit = { path = "cpp_inherit" }
-znglib = { path = "../../zngur-lib" }
+zngur-lib = { path = "../../zngur-lib" }
 
 [build-dependencies]
 cc = "1.0"

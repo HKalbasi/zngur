@@ -8,7 +8,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
 use cpp_inherit::CppInherit;
-use znglib::{ZngCppDefaultConstruct, ZngCppStackObject as _};
+use zngur_lib::{ZngCppDefaultConstruct, ZngCppStackObject as _};
 
 use crate::generated::cpp::{CppTask, Dispatcher};
 

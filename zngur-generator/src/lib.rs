@@ -120,10 +120,10 @@ impl ZngurGenerator {
       _pinned: core::marker::PhantomPinned,
     }}
 
-    unsafe impl ::znglib::ZngCppObject for {type_name} {{}}
-    unsafe impl ::znglib::ZngCppStackObject for {type_name} {{}}
+    unsafe impl ::zngur_lib::ZngCppObject for {type_name} {{}}
+    unsafe impl ::zngur_lib::ZngCppStackObject for {type_name} {{}}
 
-    unsafe impl ::znglib::ZngCppDestruct for {type_name} {{
+    unsafe impl ::zngur_lib::ZngCppDestruct for {type_name} {{
         unsafe fn destruct(&mut self) {{
             unsafe extern "C" {{
                 fn {mangled_name}(i0: *mut u8, o: *mut u8);
@@ -137,7 +137,7 @@ impl ZngurGenerator {
 
     impl Drop for {type_name} {{
         fn drop(&mut self) {{
-            use ::znglib::ZngCppDestruct;
+            use ::zngur_lib::ZngCppDestruct;
             unsafe {{
                 self.destruct();
             }}
