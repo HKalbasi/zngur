@@ -146,7 +146,8 @@ correct size and a alignment, and initializes it with the forwarded arguments.
 The only thing you can do with that object is call C++ methods or `Drop` it
 which calls the destructor and frees up the allocation
 
-In the future, we may remove the `destructor` field when its statically known
+> **NOTE**: In the future, we may replace C++ owned objects with a
+> `unique_ptr`-like type that wraps a cpp_ref instead.
 
 ## Trivially Relocatable C++ Types
 
@@ -260,16 +261,11 @@ The wrapper unconditionally implements the following traits defined in the
 `zngur-lib` crate.
 
 - The marker `ZngCppObject`
-- The `ZngCppStackObject` trait with a `new` function if the C++ object is
-  marked as "default constructible".
+- The marker `ZngCppStackObject`
 - The `ZngCppDestruct` trait with an `unsafe fn destruct(&mut self)`.
 
-The generated struct will conditionally implement the `ZngCppDefaultConstruct`
-if the `extern "C++"` block includes a `constructor(&mut self)` and the C++ type
-is default constructible.
-
-If `ZngCppDefaultConstruct` is implemented for a C++ wrapper, then you can use
-the `new()` function to safely construct the object.
+In the future, we may add generic functionality around these traits such as safe
+in-place construction.
 
 ### Type trait
 

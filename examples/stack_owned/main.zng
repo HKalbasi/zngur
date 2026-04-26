@@ -8,8 +8,7 @@ type crate::MyCppWrapper {
 
 extern "C++" {
     impl crate::MyCppWrapper {
-        fn constructor(&mut self);
-        fn custom_constructor(i32, i32) -> crate::MyCppWrapper;
+        fn new(i32, i32) -> crate::MyCppWrapper;
         fn print(&self);
     }
 }

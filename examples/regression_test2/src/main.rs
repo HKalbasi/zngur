@@ -6,28 +6,13 @@ mod generated;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
+use std::mem::MaybeUninit;
 
 use cpp_inherit::CppInherit;
-use zngur_lib::{ZngCppDefaultConstruct, ZngCppStackObject as _};
 
 use crate::generated::cpp::{CppTask, Dispatcher};
 
 pub struct RustTask<'a>(pub Pin<&'a mut dyn Future<Output = ()>>);
-
-// SAFETY: C++ object will be initialized after calling .construct().
-unsafe impl ZngCppDefaultConstruct for CppTask {
-    unsafe fn construct(&mut self) {
-        self.constructor();
-    }
-}
-
-// SAFETY: C++ object will be initialized after calling .construct().
-unsafe impl ZngCppDefaultConstruct for Dispatcher {
-    unsafe fn construct(&mut self) {
-        // SAFETY: Object is uninitialized at the time we call the constructor.
-        self.constructor();
-    }
-}
 
 impl<'a> RustTask<'a> {
     pub fn poll(&mut self) -> Poll<()> {
@@ -49,7 +34,15 @@ fn main() {
     };
 
     let fut = RustTask(unsafe { Pin::new_unchecked(&mut fut) });
-    let mut task: CppInherit<CppTask, RustTask> = CppInherit::new(fut, CppTask::new());
-    let dispatcher = Dispatcher::new();
+    let mut cpp_task: MaybeUninit<CppTask> = MaybeUninit::uninit();
+    unsafe {
+        cpp_task.assume_init_mut().constructor();
+    }
+    let mut task: CppInherit<CppTask, RustTask> = CppInherit::new(fut, unsafe { cpp_task.assume_init() });
+    let mut dispatcher: MaybeUninit<Dispatcher> = MaybeUninit::uninit();
+    unsafe {
+        dispatcher.assume_init_mut().constructor();
+    }
+    let dispatcher = unsafe { dispatcher.assume_init() };
     dispatcher.run_task(&mut task.inner);
 }

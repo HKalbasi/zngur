@@ -1,4 +1,2 @@
-Default constructed CppType:
-CppType 0 0
 Constructed CppType 5 6
 CppType 5 6
