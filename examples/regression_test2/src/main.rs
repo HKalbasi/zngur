@@ -16,16 +16,23 @@ pub struct RustTask<'a>(pub Pin<&'a mut dyn Future<Output = ()>>);
 
 // SAFETY: C++ object will be initialized after calling .construct().
 unsafe impl ZngCppDefaultConstruct for CppTask {
-    unsafe fn construct(&mut self) {
-        self.constructor();
+    unsafe fn construct(this: &mut std::mem::MaybeUninit<Self>) {
+        // SAFETY: It's fine to assume-init a C++ type that hasn't been constructed
+        // yet for the purpose of calling the constructor.
+        unsafe {
+            this.assume_init_mut().constructor();
+        }
     }
 }
 
 // SAFETY: C++ object will be initialized after calling .construct().
 unsafe impl ZngCppDefaultConstruct for Dispatcher {
-    unsafe fn construct(&mut self) {
-        // SAFETY: Object is uninitialized at the time we call the constructor.
-        self.constructor();
+    unsafe fn construct(this: &mut std::mem::MaybeUninit<Self>) {
+        // SAFETY: It's fine to assume-init a C++ type that hasn't been constructed
+        // yet for the purpose of calling the constructor.
+        unsafe {
+            this.assume_init_mut().constructor();
+        }
     }
 }
 

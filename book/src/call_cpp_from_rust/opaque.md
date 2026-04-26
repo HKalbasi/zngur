@@ -146,7 +146,8 @@ correct size and a alignment, and initializes it with the forwarded arguments.
 The only thing you can do with that object is call C++ methods or `Drop` it
 which calls the destructor and frees up the allocation
 
-In the future, we may remove the `destructor` field when its statically known
+> **NOTE**: In the future, we may replace C++ owned objects with a
+> `unique_ptr`-like type that wraps a cpp_ref instead.
 
 ## Trivially Relocatable C++ Types
 
