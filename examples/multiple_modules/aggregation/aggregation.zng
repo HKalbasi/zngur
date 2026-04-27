@@ -6,7 +6,6 @@ import "packet.zng";
 
 type crate::StatsAccumulator {
     #layout(size = 16, align = 8);
-    constructor(ZngurCppOpaqueOwnedObject);
     #cpp_value "0" "::cpp_stats::StatsAccumulator";
 }
 

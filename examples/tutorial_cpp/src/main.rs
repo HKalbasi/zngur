@@ -2,8 +2,8 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 }
 
-struct Inventory(generated::ZngurCppOpaqueOwnedObject);
-struct Item(generated::ZngurCppOpaqueOwnedObject);
+pub use generated::cpp::Inventory;
+pub use generated::cpp::Item;
 
 fn main() {
     let mut inventory = Inventory::new_empty(1000);

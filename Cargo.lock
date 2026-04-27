@@ -328,6 +328,13 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1d07550c9036bf2ae0c684c4297d503f838287c83c53686d05370d0e139ae570"
 
 [[package]]
+name = "cpp_inherit"
+version = "0.1.0"
+dependencies = [
+ "zngur-lib",
+]
+
+[[package]]
 name = "cpufeatures"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -476,6 +483,17 @@ name = "example-conditional"
 version = "0.9.0"
 
 [[package]]
+name = "example-cpp-inheritance"
+version = "0.1.0"
+dependencies = [
+ "build-rs",
+ "cc",
+ "cpp_inherit",
+ "zngur",
+ "zngur-lib",
+]
+
+[[package]]
 name = "example-cxx_demo"
 version = "0.9.0"
 dependencies = [
@@ -547,6 +565,16 @@ version = "0.9.0"
 [[package]]
 name = "example-simple-import"
 version = "0.9.0"
+
+[[package]]
+name = "example-stack-owned"
+version = "0.9.0"
+dependencies = [
+ "build-rs",
+ "cc",
+ "zngur",
+ "zngur-lib",
+]
 
 [[package]]
 name = "example-tutorial"
@@ -1582,6 +1610,10 @@ dependencies = [
  "zngur-def",
  "zngur-parser",
 ]
+
+[[package]]
+name = "zngur-lib"
+version = "0.9.0"
 
 [[package]]
 name = "zngur-parser"

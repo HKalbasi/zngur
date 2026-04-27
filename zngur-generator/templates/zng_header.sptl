@@ -57,7 +57,7 @@
 
 namespace {{ self.cpp_namespace }} {
 
-  inline void* __zng_memcpy( void* dest, const void* src, std::size_t count ){
+  inline void* __zng_memcpy( void* dest, const void* src, ::std::size_t count ){
     if (count > 0) {
 		return memcpy(dest, src, count);
 	}
@@ -137,7 +137,10 @@ namespace {{ self.cpp_namespace }} {
 
   template<typename T>
   struct RefMut;
-
+  template<typename T>
+  struct Raw;
+  template<typename T>
+  struct RawMut;
 
   // offset encoded in type
   template <typename Parent, size_t OFFSET>
@@ -153,24 +156,31 @@ namespace {{ self.cpp_namespace }} {
   template <typename T>
   struct zngur_heap_allocated : ::std::false_type {};
 
+  // specialize to opt-in to stack-owned C++ types
+  template <typename T, typename Enable = void>
+  struct is_trivially_relocatable : ::std::false_type {};
+
+  template <typename T>
+  struct is_trivially_relocatable<T, typename std::enable_if<std::is_trivially_copyable<T>::value>::type> : std::true_type {};
+
   namespace zngur_detail {
-    // std::conjunction analog for c++11 support
+    // ::std::conjunction analog for c++11 support
     template <typename... Conds>
-    struct conjunction : std::true_type {};
+    struct conjunction : ::std::true_type {};
 
     template <typename Cond, typename... Conds>
     struct conjunction<Cond, Conds...>
-        : std::conditional<Cond::value, conjunction<Conds...>,
-                          std::false_type>::type {};
+        : ::std::conditional<Cond::value, conjunction<Conds...>,
+                          ::std::false_type>::type {};
 
     // Offset can be computed at compile time
     template <typename...>
-    struct is_static_offset : std::false_type {};
+    struct is_static_offset : ::std::false_type {};
 
     // a static offset not behind a pointer can be computed
     template <typename Parent, size_t OFFSET>
     struct is_static_offset<FieldStaticOffset<Parent, OFFSET>>
-        : std::true_type {};
+        : ::std::true_type {};
 
     // All offsets can be compile time computed
     template <typename First, typename... Rest>
@@ -278,21 +288,46 @@ namespace {{ self.cpp_namespace }} {
       DataType __zngur_data;
       Raw() {}
       Raw(Ref<T> value) {
-          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<Ref<T>>(value), __zngur_internal_size_of<Ref<T>>());
+          __zng_memcpy(&__zngur_data, reinterpret_cast<DataType*>(&value), sizeof(DataType));
       }
       Raw(RefMut<T> value) {
-          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+          __zng_memcpy(&__zngur_data, reinterpret_cast<DataType*>(&value), sizeof(DataType));
       }
       Raw(DataType data) : __zngur_data(data) {
       }
       Raw<T> offset(ptrdiff_t n) {
           return Raw(__zngur_data + n * __zngur_internal_size_of<T>());
       }
-      Ref<T> read_ref() {
+      Ref<T> as_ref_unchecked() {
           Ref<T> value;
           __zng_memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
           __zngur_internal_assume_init<Ref<T>>(value);
           return value;
+      }
+
+      template<typename U = T, typename ::std::enable_if<!zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t addr() const {
+          return reinterpret_cast<uintptr_t>(__zngur_data);
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t addr() const {
+          return reinterpret_cast<uintptr_t>(__zngur_data.data);
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t metadata() const {
+          return __zngur_data.metadata;
+      }
+
+      template<typename U = T, typename ::std::enable_if<!zngur_is_unsized<U>::value, bool>::type = true>
+      static Raw<T> from_raw_parts(uintptr_t addr) {
+          return Raw<T>(reinterpret_cast<uint8_t*>(addr));
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      static Raw<T> from_raw_parts(uintptr_t addr, uintptr_t metadata) {
+          return Raw<T>(zngur_fat_pointer{reinterpret_cast<uint8_t*>(addr), metadata});
       }
   };
   template<typename T>
@@ -301,7 +336,7 @@ namespace {{ self.cpp_namespace }} {
       DataType __zngur_data;
       RawMut() {}
       RawMut(RefMut<T> value) {
-          __zng_memcpy(&__zngur_data, __zngur_internal_data_ptr<RefMut<T>>(value), __zngur_internal_size_of<RefMut<T>>());
+          __zng_memcpy(&__zngur_data, reinterpret_cast<DataType*>(&value), sizeof(DataType));
       }
       RawMut(DataType data) : __zngur_data(data) {
       }
@@ -314,13 +349,13 @@ namespace {{ self.cpp_namespace }} {
           __zngur_internal_assume_init<T>(value);
           return value;
       }
-      Ref<T> read_ref() {
+      Ref<T> as_ref_unchecked() {
           Ref<T> value;
           __zng_memcpy(__zngur_internal_data_ptr<Ref<T>>(value), &__zngur_data, __zngur_internal_size_of<Ref<T>>());
           __zngur_internal_assume_init<Ref<T>>(value);
           return value;
       }
-      RefMut<T> read_mut() {
+      RefMut<T> as_mut_unchecked() {
           RefMut<T> value;
           __zng_memcpy(__zngur_internal_data_ptr<RefMut<T>>(value), &__zngur_data, __zngur_internal_size_of<RefMut<T>>());
           __zngur_internal_assume_init<RefMut<T>>(value);
@@ -329,6 +364,31 @@ namespace {{ self.cpp_namespace }} {
       void write(T value) {
           __zng_memcpy(__zngur_data, __zngur_internal_data_ptr<T>(value), __zngur_internal_size_of<T>());
           __zngur_internal_assume_deinit<T>(value);
+      }
+
+	  template<typename U = T, typename ::std::enable_if<!zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t addr() const {
+          return reinterpret_cast<uintptr_t>(__zngur_data);
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t addr() const {
+          return reinterpret_cast<uintptr_t>(__zngur_data.data);
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      uintptr_t metadata() const {
+          return __zngur_data.metadata;
+      }
+
+      template<typename U = T, typename ::std::enable_if<!zngur_is_unsized<U>::value, bool>::type = true>
+      static RawMut<T> from_raw_parts(uintptr_t addr) {
+          return RawMut<T>(reinterpret_cast<uint8_t*>(addr));
+      }
+
+      template<typename U = T, typename ::std::enable_if<zngur_is_unsized<U>::value, bool>::type = true>
+      static RawMut<T> from_raw_parts(uintptr_t addr, uintptr_t metadata) {
+          return RawMut<T>(zngur_fat_pointer{reinterpret_cast<uint8_t*>(addr), metadata});
       }
   };
   template<typename... T>
@@ -869,6 +929,8 @@ namespace {{ self.cpp_namespace }} {
     {{ ty }} const& operator*() const {
         return *reinterpret_cast< {{ ty }}*>(__zngur_data);
     }
+
+
   private:
     size_t __zngur_data;
     friend ::{{ self.cpp_namespace }}::__zngur_internal<RefMut< {{ ty }} > >;

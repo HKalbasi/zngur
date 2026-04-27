@@ -97,8 +97,8 @@ Test Ref<Ref<T>> -- started
 [main.cpp:133] strvec.get(2) = Some(
     "a third str",
 )
-[main.cpp:134] *strvec.get(1).unwrap() = "foobar"
-[main.cpp:136] strvec = [
+[main.cpp:138] *strvec.get(1).unwrap() = "foobar"
+[main.cpp:140] strvec = [
     "a str",
     "flip flop",
     "a third str",
@@ -107,11 +107,11 @@ Test Ref<Ref<T>> -- finished
 
 Test zero-sized type -- started
 Method call on ZST
-[main.cpp:143] zst = ZeroSizedType
+[main.cpp:147] zst = ZeroSizedType
 Test zero-sized type -- finished
 
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
-[main.cpp:158] a = TypeA {
+[main.cpp:162] a = TypeA {
     foo: 10,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -128,12 +128,12 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:159] ::rust::Ref<int32_t>(a.foo) = 10
-[main.cpp:160] ::rust::Ref<int32_t>(a.bar.fizz.buzz_2) = 30
-[main.cpp:161] ::rust::RefMut<int32_t>(a.baz.fizz.buzz_3) = 70
-[main.cpp:164] ::rust::Ref<int32_t>(a_fa_fizz.buzz_1) = 20
-[main.cpp:166] ::rust::Ref<int32_t>(a_fb_fizz.buzz_2) = 60
-[main.cpp:177] b = TypeB {
+[main.cpp:163] ::rust::Ref<int32_t>(a.foo) = 10
+[main.cpp:164] ::rust::Ref<int32_t>(a.bar.fizz.buzz_2) = 30
+[main.cpp:165] ::rust::RefMut<int32_t>(a.baz.fizz.buzz_3) = 70
+[main.cpp:168] ::rust::Ref<int32_t>(a_fa_fizz.buzz_1) = 20
+[main.cpp:170] ::rust::Ref<int32_t>(a_fb_fizz.buzz_2) = 60
+[main.cpp:181] b = TypeB {
     foo: 100,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -150,40 +150,40 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:178] ::rust::Ref<int32_t>(b.foo) = 100
-[main.cpp:179] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
-[main.cpp:180] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
-[main.cpp:183] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
-[main.cpp:185] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
-[main.cpp:190] fa = FieldTypeA {
+[main.cpp:182] ::rust::Ref<int32_t>(b.foo) = 100
+[main.cpp:183] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
+[main.cpp:184] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
+[main.cpp:187] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
+[main.cpp:189] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
+[main.cpp:194] fa = FieldTypeA {
     fizz: FieldTypeC {
         buzz_1: 21,
         buzz_2: 31,
         buzz_3: 41,
     },
 }
-[main.cpp:191] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
-[main.cpp:192] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
-[main.cpp:197] fa = FieldTypeA {
+[main.cpp:195] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
+[main.cpp:196] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
+[main.cpp:201] fa = FieldTypeA {
     fizz: FieldTypeC {
         buzz_1: 21,
         buzz_2: 31,
         buzz_3: 41,
     },
 }
-[main.cpp:198] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
-[main.cpp:199] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
+[main.cpp:202] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
+[main.cpp:203] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- finished
 
 Test #layout_conservative -- started
-[main.cpp:208] c_layout = ConservativeLayoutType {
+[main.cpp:212] c_layout = ConservativeLayoutType {
     field1: 3.14159,
     field2: 42,
     field3: "A string at some unknown offset",
 }
 Rust( size = 32 , align = 8 )
 c++( size = 48 , align = 8 )
-[main.cpp:220] layouts = [
+[main.cpp:224] layouts = [
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,
@@ -195,26 +195,26 @@ c++( size = 48 , align = 8 )
         field3: "Another test string",
     },
 ]
-[main.cpp:221] layouts.get(0) = Some(
+[main.cpp:225] layouts.get(0) = Some(
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,
         field3: "A string at some unknown offset",
     },
 )
-[main.cpp:222] layouts.get(1) = Some(
+[main.cpp:226] layouts.get(1) = Some(
     ConservativeLayoutType {
         field1: 2.71828,
         field2: 1000,
         field3: "Another test string",
     },
 )
-[main.cpp:223] layouts.get(1).unwrap() = ConservativeLayoutType {
+[main.cpp:227] layouts.get(1).unwrap() = ConservativeLayoutType {
     field1: 2.71828,
     field2: 1000,
     field3: "Another test string",
 }
-[main.cpp:225] layouts = [
+[main.cpp:229] layouts = [
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,

@@ -67,9 +67,6 @@ impl IntoCpp for RustType {
                     PrimitiveRustType::Bool | PrimitiveRustType::Str | PrimitiveRustType::Char => {
                         None
                     }
-                    PrimitiveRustType::ZngurCppOpaqueOwnedObject => Some(CppType::from(&*format!(
-                        "{namespace}::ZngurCppOpaqueOwnedObject"
-                    ))),
                 },
                 RustType::Raw(Mutability::Mut, t) => Some(CppType::from(&*format!(
                     "{}*",
@@ -160,41 +157,6 @@ impl RustFile {
     pub fn new(mangling_base: &str) -> Self {
         Self {
             text: r#"
-#[allow(dead_code)]
-mod zngur_types {
-    pub struct ZngurCppOpaqueBorrowedObject(());
-
-    #[repr(C)]
-    pub struct ZngurCppOpaqueOwnedObject {
-        data: *mut u8,
-        destructor: extern "C" fn(*mut u8),
-    }
-
-    impl ZngurCppOpaqueOwnedObject {
-        pub unsafe fn new(
-            data: *mut u8,
-            destructor: extern "C" fn(*mut u8),            
-        ) -> Self {
-            Self { data, destructor }
-        }
-
-        pub fn ptr(&self) -> *mut u8 {
-            self.data
-        }
-    }
-
-    impl Drop for ZngurCppOpaqueOwnedObject {
-        fn drop(&mut self) {
-            (self.destructor)(self.data)
-        }
-    }
-}
-
-#[allow(unused_imports)]
-pub use zngur_types::ZngurCppOpaqueOwnedObject;
-#[allow(unused_imports)]
-pub use zngur_types::ZngurCppOpaqueBorrowedObject;
-
 macro_rules! __zngur_str_as_array {
     ($s:expr) => {{
         const VAL: &str = $s;
@@ -580,7 +542,13 @@ pub extern "C" fn {mangled_name}(
     o: *mut u8,
 ) {{
     struct Wrapper {{ 
-        value: ZngurCppOpaqueOwnedObject,
+        data: *mut u8,
+        destructor: extern "C" fn(*mut u8),
+    }}
+    impl Drop for Wrapper {{
+        fn drop(&mut self) {{
+            (self.destructor)(self.data)
+        }}
     }}
     impl {trait_without_assocs} for Wrapper {{
 "#
@@ -602,7 +570,7 @@ pub extern "C" fn {mangled_name}(
                 w!(self, ", i{i}: {ty}");
             }
             wln!(self, ") -> {} {{ unsafe {{", method.output);
-            wln!(self, "            let data = self.value.ptr();");
+            wln!(self, "            let data = self.data;");
             self.call_cpp_function(&format!("{rust_link_name}(data, "), method.inputs.len());
             wln!(self, "        }} }}");
         }
@@ -612,7 +580,8 @@ pub extern "C" fn {mangled_name}(
     }}
     unsafe {{ 
         let this = Wrapper {{
-            value: ZngurCppOpaqueOwnedObject::new(data, destructor),
+            data,
+            destructor,
         }};
         let r: Box<dyn {trait_name}> = Box::new(this);
         std::ptr::write(o as *mut _, r)
@@ -639,7 +608,7 @@ pub extern "C" fn {mangled_name}(
     data: *mut u8,
     o: *mut u8,
 ) {{
-    struct Wrapper(ZngurCppOpaqueBorrowedObject);
+    struct Wrapper(());
     impl {trait_without_assocs} for Wrapper {{
 "#
         );
@@ -700,10 +669,19 @@ pub extern "C" fn {mangled_name}(
     call: extern "C" fn(data: *mut u8, {} o: *mut u8),
     o: *mut u8,
 ) {{
-    let this = unsafe {{ ZngurCppOpaqueOwnedObject::new(data, destructor) }};
+    struct ClosureData {{
+        data: *mut u8,
+        destructor: extern "C" fn(*mut u8),
+    }}
+    impl Drop for ClosureData {{
+        fn drop(&mut self) {{
+            (self.destructor)(self.data)
+        }}
+    }}
+    let this = ClosureData {{ data, destructor }};
     let r: Box<dyn {trait_str}> = Box::new(move |{}| unsafe {{
         _ = &this;
-        let data = this.ptr();
+        let data = this.data;
 "#,
             inputs
                 .iter()
@@ -905,6 +883,7 @@ unsafe extern "C" {{ fn {mangled_name}("#
         w!(
             self,
             r#"
+#[allow(non_snake_case)]
 pub fn {rust_name}("#
         );
         for (n, ty) in inputs.iter().enumerate() {
@@ -916,15 +895,16 @@ pub fn {rust_name}("#
         mangled_name
     }
 
-    pub fn add_cpp_value_bridge(&mut self, ty: &RustType, field: &str) -> String {
-        let mangled_name = self.mangle_name(&format!("{ty}_cpp_value_{field}"));
+    pub fn add_cpp_value_bridge(&mut self, ty: &RustType) -> String {
+        let type_name = ty.to_string().split("::").last().unwrap().to_string();
+        let mangled_name = self.mangle_name(&format!("{ty}_cpp_value"));
         w!(
             self,
             r#"
 #[allow(non_snake_case)]
 #[unsafe(no_mangle)]
-pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut ZngurCppOpaqueOwnedObject {{
-    unsafe {{ &mut (*(d as *mut {ty})).{field} }}
+pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut cpp::{type_name} {{
+    d as *mut cpp::{type_name}
 }}"#
         );
         mangled_name

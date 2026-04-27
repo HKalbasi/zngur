@@ -141,6 +141,13 @@ pub struct CppValue(pub String, pub String);
 #[derive(Debug, PartialEq, Eq)]
 pub struct CppRef(pub String);
 
+#[derive(Debug, PartialEq, Eq)]
+pub struct CppStackOwned {
+    pub cpp_type: String,
+    pub size: usize,
+    pub align: usize,
+}
+
 impl Display for CppRef {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.0)
@@ -157,6 +164,7 @@ pub struct ZngurType {
     pub fields: Vec<ZngurField>,
     pub cpp_value: Option<CppValue>,
     pub cpp_ref: Option<CppRef>,
+    pub cpp_stack_owned: Option<CppStackOwned>,
 }
 
 #[derive(Debug)]
@@ -225,7 +233,6 @@ pub enum PrimitiveRustType {
     Bool,
     Char,
     Str,
-    ZngurCppOpaqueOwnedObject,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -310,9 +317,6 @@ impl Display for RustType {
                 PrimitiveRustType::Bool => write!(f, "bool"),
                 PrimitiveRustType::Char => write!(f, "char"),
                 PrimitiveRustType::Str => write!(f, "str"),
-                PrimitiveRustType::ZngurCppOpaqueOwnedObject => {
-                    write!(f, "ZngurCppOpaqueOwnedObject")
-                }
             },
             RustType::Ref(Mutability::Not, ty) => write!(f, "&{ty}"),
             RustType::Ref(Mutability::Mut, ty) => write!(f, "&mut {ty}"),

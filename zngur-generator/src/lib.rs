@@ -81,6 +81,7 @@ impl ZngurGenerator {
                         .unwrap_or_default()
                 )
             }));
+        let mut cpp_mod_content = String::new();
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);
@@ -98,6 +99,78 @@ impl ZngurGenerator {
             }
             if is_copy {
                 rust_file.add_static_is_copy_assert(&ty);
+            }
+            if let Some(cpp_stack_owned) = &ty_def.cpp_stack_owned {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                let destructor_name = format!("_zngur_crate_{type_name}_destructor");
+                let mangled_name = rust_file.add_extern_cpp_function(
+                    &destructor_name,
+                    &[RustType::Ref(Mutability::Mut, Box::new(ty.clone()))],
+                    &RustType::Tuple(vec![]),
+                );
+                let size = cpp_stack_owned.size;
+                let align = cpp_stack_owned.align;
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    #[repr(C)]
+    #[repr(align({align}))]
+    pub struct {type_name} {{
+      pub(crate) buffer: core::mem::MaybeUninit<[u8; {size}]>,
+      _no_auto_traits: core::marker::PhantomData<*mut ()>,
+      _pinned: core::marker::PhantomPinned,
+    }}
+
+    unsafe impl ::zngur_lib::ZngCppObject for {type_name} {{}}
+    unsafe impl ::zngur_lib::ZngCppStackObject for {type_name} {{}}
+
+    unsafe impl ::zngur_lib::ZngCppDestruct for {type_name} {{
+        unsafe fn destruct(&mut self) {{
+            unsafe extern "C" {{
+                fn {mangled_name}(i0: *mut u8, o: *mut u8);
+            }}
+            let mut dummy = ();
+            unsafe {{
+                {mangled_name}(self.buffer.assume_init_mut().as_mut_ptr() as *mut _, &mut dummy as *mut () as *mut u8);
+            }}
+        }}
+    }} 
+
+    impl Drop for {type_name} {{
+        fn drop(&mut self) {{
+            use ::zngur_lib::ZngCppDestruct;
+            unsafe {{
+                self.destruct();
+            }}
+        }}
+    }}
+"#
+                ));
+            }
+            if ty_def.cpp_value.is_some() {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    #[repr(C)]
+    pub struct {type_name} {{
+        pub(crate) data: *mut u8,
+        pub(crate) destructor: extern "C" fn(*mut u8),
+    }}
+
+    impl Drop for {type_name} {{
+        fn drop(&mut self) {{
+            (self.destructor)(self.data)
+        }}
+    }}
+"#
+                ));
+            }
+            if ty_def.cpp_ref.is_some() {
+                let type_name = ty.to_string().split("::").last().unwrap().to_string();
+                cpp_mod_content.push_str(&format!(
+                    r#"
+    pub struct {type_name}(());
+"#
+                ));
             }
             let mut cpp_methods = vec![];
             let mut constructors = vec![];
@@ -219,10 +292,11 @@ impl ZngurGenerator {
                 methods: cpp_methods,
                 wellknown_traits,
                 cpp_value: ty_def.cpp_value.map(|mut cpp_value| {
-                    cpp_value.0 = rust_file.add_cpp_value_bridge(&ty, &cpp_value.0);
+                    cpp_value.0 = rust_file.add_cpp_value_bridge(&ty);
                     cpp_value
                 }),
                 cpp_ref: ty_def.cpp_ref,
+                cpp_stack_owned: ty_def.cpp_stack_owned,
                 from_trait: if let RustType::Boxed(b) = &ty {
                     if let RustType::Dyn(tr, _) = b.as_ref() {
                         if let RustTrait::Fn {
@@ -259,6 +333,15 @@ impl ZngurGenerator {
                     None
                 },
             });
+        }
+        if !cpp_mod_content.is_empty() {
+            rust_file.text.push_str(&format!(
+                r#"
+pub mod cpp {{
+{cpp_mod_content}
+}}
+"#
+            ));
         }
         for func in zng.funcs {
             let sig = rust_file.add_function(

@@ -4,4 +4,4 @@ mod generated;
 
 pub use packet::Packet;
 
-pub struct StatsAccumulator(pub generated::ZngurCppOpaqueOwnedObject);
+pub use generated::cpp::StatsAccumulator;
