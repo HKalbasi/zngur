@@ -46,6 +46,10 @@ mod crate {
 
 }
 
+type [crate::KeyValuePair] {
+    wellknown_traits(?Sized);
+}
+
 mod ::std {
 
     type option::Option<usize> {
@@ -76,6 +80,20 @@ mod ::std {
         fn unwrap(self) -> &crate::KeyValuePair;
     }
 
+    type option::Option<&[crate::KeyValuePair]> {
+        #layout(size = 16, align = 8);
+        wellknown_traits(Copy, Debug);
+
+        constructor None;
+        constructor Some(&[crate::KeyValuePair]);
+
+        fn unwrap(self) -> &[crate::KeyValuePair];
+    }
+
+    type ::std::ops::RangeFull {
+        #layout(size = 0, align = 1);
+        wellknown_traits(Copy);
+    }
 
     mod vec {
         type Vec<crate::KeyValuePair> {
@@ -85,7 +103,8 @@ mod ::std {
 
             fn new() -> Vec<crate::KeyValuePair>;
             fn push(&mut self, crate::KeyValuePair);
-            fn get(&self, usize) -> ::std::option::Option<&crate::KeyValuePair> deref [crate::KeyValuePair];
+            fn get<usize>(&self, usize) -> ::std::option::Option<&crate::KeyValuePair> deref [crate::KeyValuePair];
+            fn get<::std::ops::RangeFull>(&self, ::std::ops::RangeFull) -> ::std::option::Option<&[crate::KeyValuePair]> deref [crate::KeyValuePair];
             fn iter(&self) -> ::std::slice::Iter<crate::KeyValuePair> deref [crate::KeyValuePair];
         }
     }

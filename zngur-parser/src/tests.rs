@@ -122,12 +122,12 @@ type () {
 }
     "#,
         expect![[r#"
-            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
+            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'unsafe', 'async', 'fn', or '}'
                ╭─[test.zng:4:5]
                │
              4 │     welcome_traits(Copy);
                │     ───────┬──────  
-               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
+               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'unsafe', 'async', 'fn', or '}'
             ───╯
         "#]],
     );
@@ -965,4 +965,51 @@ extern "C++" {
             ───╯
         "#]],
     );
+}
+
+#[test]
+fn parse_unsafe_method() {
+    let parsed = crate::ParsedZngFile::parse_str(
+        r#"
+type A {
+    #layout(size = 1, align = 1);
+    unsafe fn is_unsafe(i32) -> i32;
+    fn is_safe(i32) -> i32;
+}
+
+mod bar::baz {
+    unsafe fn is_unsafe(i32) -> i32;
+    fn is_safe(i32) -> i32;
+}
+    "#,
+        crate::cfg::NullCfg,
+    );
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    let unsafe_fn = ty
+        .methods
+        .iter()
+        .find(|m| m.data.name == "is_unsafe")
+        .expect("Missing method");
+    assert!(!unsafe_fn.data.is_safe);
+    let safe_fn = ty
+        .methods
+        .iter()
+        .find(|m| m.data.name == "is_safe")
+        .expect("Missing method");
+    assert!(safe_fn.data.is_safe);
+
+    let unsafe_fn = parsed
+        .spec
+        .funcs
+        .iter()
+        .find(|fun| fun.path.path.last().unwrap() == "is_unsafe")
+        .expect("Missing method");
+    assert!(!unsafe_fn.is_safe);
+    let safe_fn = parsed
+        .spec
+        .funcs
+        .iter()
+        .find(|fun| fun.path.path.last().unwrap() == "is_safe")
+        .expect("Missing method");
+    assert!(safe_fn.is_safe);
 }
