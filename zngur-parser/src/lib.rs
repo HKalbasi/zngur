@@ -286,11 +286,14 @@ enum ProcessedItem<'a> {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum ParsedExternCppItem<'a> {
-    Function(Spanned<ParsedMethod<'a>>),
+    Function {
+        is_safe: bool,
+        method: Spanned<ParsedMethod<'a>>,
+    },
     Impl {
         tr: Option<ParsedRustTrait<'a>>,
         ty: Spanned<ParsedRustType<'a>>,
-        methods: Vec<ParsedMethod<'a>>,
+        methods: Vec<(bool, ParsedMethod<'a>)>,
     },
 }
 
@@ -362,6 +365,7 @@ impl ParsedMethod<'_> {
             receiver: self.receiver,
             inputs: self.inputs.into_iter().map(|x| x.to_zngur(scope)).collect(),
             output: self.output.to_zngur(scope),
+            is_safe: true,
         }
     }
 }
@@ -684,7 +688,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
             ProcessedItem::ExternCpp(items) => {
                 for item in items {
                     match item {
-                        ParsedExternCppItem::Function(method) => {
+                        ParsedExternCppItem::Function { is_safe, method } => {
                             let span = method.span;
                             let method = method.inner.to_zngur(scope);
                             checked_merge(
@@ -692,6 +696,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                                     name: method.name.to_string(),
                                     inputs: method.inputs,
                                     output: method.output,
+                                    is_safe,
                                 },
                                 r,
                                 span,
@@ -705,7 +710,11 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                                     ty: ty.inner.to_zngur(scope),
                                     methods: methods
                                         .into_iter()
-                                        .map(|x| x.to_zngur(scope))
+                                        .map(|(is_safe, x)| {
+                                            let mut m = x.to_zngur(scope);
+                                            m.is_safe = is_safe;
+                                            m
+                                        })
                                         .collect(),
                                 },
                                 r,
@@ -1263,6 +1272,8 @@ enum Token<'a> {
     KwIf,
     KwElse,
     KwMatch,
+    KwSafe,
+    KwUnsafe,
     Ident(&'a str),
     Str(&'a str),
     Number(usize),
@@ -1290,6 +1301,8 @@ impl<'a> Token<'a> {
             "if" => Token::KwIf,
             "else" => Token::KwElse,
             "match" => Token::KwMatch,
+            "safe" => Token::KwSafe,
+            "unsafe" => Token::KwUnsafe,
             x => Token::Ident(x),
         }
     }
@@ -1341,6 +1354,8 @@ impl Display for Token<'_> {
             Token::KwIf => write!(f, "if"),
             Token::KwElse => write!(f, "else"),
             Token::KwMatch => write!(f, "match"),
+            Token::KwSafe => write!(f, "safe"),
+            Token::KwUnsafe => write!(f, "unsafe"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -1852,9 +1867,15 @@ fn additional_include_item<'a>()
 
 fn extern_cpp_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
-    let function = spanned(method())
+    let safety = choice((
+        just(Token::KwSafe).to(true),
+        just(Token::KwUnsafe).to(false),
+    ));
+    let function = safety
+        .clone()
+        .then(spanned(method()))
         .then_ignore(just(Token::Semicolon))
-        .map(ParsedExternCppItem::Function);
+        .map(|(is_safe, method)| ParsedExternCppItem::Function { is_safe, method });
     let impl_block = just(Token::KwImpl)
         .ignore_then(
             rust_trait(rust_type())
@@ -1864,7 +1885,8 @@ fn extern_cpp_item<'a>()
                 .then(spanned(rust_type())),
         )
         .then(
-            method()
+            safety
+                .then(method())
                 .then_ignore(just(Token::Semicolon))
                 .repeated()
                 .collect::<Vec<_>>()

@@ -107,6 +107,7 @@ impl ZngurGenerator {
                     &destructor_name,
                     &[RustType::Ref(Mutability::Mut, Box::new(ty.clone()))],
                     &RustType::Tuple(vec![]),
+                    true,
                 );
                 let size = cpp_stack_owned.size;
                 let align = cpp_stack_owned.align;
@@ -359,8 +360,12 @@ pub mod cpp {{
             });
         }
         for func in zng.extern_cpp_funcs {
-            let rust_link_name =
-                rust_file.add_extern_cpp_function(&func.name, &func.inputs, &func.output);
+            let rust_link_name = rust_file.add_extern_cpp_function(
+                &func.name,
+                &func.inputs,
+                &func.output,
+                func.is_safe,
+            );
             cpp_file.exported_fn_defs.push(CppExportedFnDefinition {
                 name: func.name.clone(),
                 sig: CppFnSig {

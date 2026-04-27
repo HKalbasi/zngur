@@ -8,7 +8,7 @@ type crate::MyCppWrapper {
 
 extern "C++" {
     impl crate::MyCppWrapper {
-        fn new(i32, i32) -> crate::MyCppWrapper;
-        fn print(&self);
+        safe fn new(i32, i32) -> crate::MyCppWrapper;
+        safe fn print(&self);
     }
 }

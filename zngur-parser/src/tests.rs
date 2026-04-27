@@ -926,3 +926,43 @@ import "module.zng";
         "module.zng"
     );
 }
+
+#[test]
+fn extern_cpp_requires_safety() {
+    let source = r#"
+extern "C++" {
+    fn foo();
+}
+    "#;
+    check_fail(
+        source,
+        expect![[r#"
+            Error: found 'fn' expected 'safe', 'unsafe', 'impl', or '}'
+               ╭─[test.zng:3:5]
+               │
+             3 │     fn foo();
+               │     ─┬  
+               │      ╰── found 'fn' expected 'safe', 'unsafe', 'impl', or '}'
+            ───╯
+        "#]],
+    );
+    let source = r#"
+extern "C++" {
+    impl crate::Foo {
+        fn foo();
+    }
+}
+    "#;
+    check_fail(
+        source,
+        expect![[r#"
+            Error: found 'fn' expected 'safe', 'unsafe', or '}'
+               ╭─[test.zng:4:9]
+               │
+             4 │         fn foo();
+               │         ─┬  
+               │          ╰── found 'fn' expected 'safe', 'unsafe', or '}'
+            ───╯
+        "#]],
+    );
+}

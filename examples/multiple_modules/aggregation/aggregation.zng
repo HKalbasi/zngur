@@ -11,8 +11,8 @@ type crate::StatsAccumulator {
 
 extern "C++" {
     impl crate::StatsAccumulator {
-        fn create() -> crate::StatsAccumulator;
-        fn add_packet(&mut self, packet::Packet);
-        fn print_report(&self);
+        safe fn create() -> crate::StatsAccumulator;
+        safe fn add_packet(&mut self, packet::Packet);
+        safe fn print_report(&self);
     }
 }

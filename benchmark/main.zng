@@ -7,5 +7,5 @@ type ::std::vec::Vec<u64> {
 }
 
 extern "C++" {
-    fn build_vec_by_push_cpp(u64) -> ::std::vec::Vec<u64>;
+    safe fn build_vec_by_push_cpp(u64) -> ::std::vec::Vec<u64>;
 }

@@ -26,12 +26,12 @@ type crate::RustTask {
 
 extern "C++" {
     impl crate::CppTask {
-        fn constructor(&mut self);
+        safe fn constructor(&mut self);
     }
 
     impl crate::Dispatcher {
-        fn constructor(&mut self);
-        fn run_task(&self, &mut crate::RustTask);
+        safe fn constructor(&mut self);
+        safe fn run_task(&self, &mut crate::RustTask);
     }
 }
 
