@@ -4,9 +4,9 @@
 mod generated;
 
 use std::future::Future;
+use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
-use std::mem::MaybeUninit;
 
 use cpp_inherit::CppInherit;
 
@@ -38,7 +38,8 @@ fn main() {
     unsafe {
         cpp_task.assume_init_mut().constructor();
     }
-    let mut task: CppInherit<CppTask, RustTask> = CppInherit::new(fut, unsafe { cpp_task.assume_init() });
+    let mut task: CppInherit<CppTask, RustTask> =
+        CppInherit::new(fut, unsafe { cpp_task.assume_init() });
     let mut dispatcher: MaybeUninit<Dispatcher> = MaybeUninit::uninit();
     unsafe {
         dispatcher.assume_init_mut().constructor();

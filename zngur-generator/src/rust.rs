@@ -838,7 +838,12 @@ pub static {mn}: usize = ::std::mem::offset_of!({owner}, {name});
             if tr.is_none() {
                 w!(self, "pub ");
             }
-            w!(self, r#"fn {}("#, method.name);
+            w!(
+                self,
+                r#"{}fn {}("#,
+                if method.is_safe { "" } else { "unsafe " },
+                method.name
+            );
             match method.receiver {
                 ZngurMethodReceiver::Static => (),
                 ZngurMethodReceiver::Ref(Mutability::Mut) => w!(self, "&mut self, "),
@@ -869,6 +874,7 @@ pub static {mn}: usize = ::std::mem::offset_of!({owner}, {name});
         rust_name: &str,
         inputs: &[RustType],
         output: &RustType,
+        is_safe: bool,
     ) -> String {
         let mangled_name = self.mangle_name(rust_name);
         w!(
@@ -884,7 +890,8 @@ unsafe extern "C" {{ fn {mangled_name}("#
             self,
             r#"
 #[allow(non_snake_case)]
-pub fn {rust_name}("#
+pub {}fn {rust_name}("#,
+            if is_safe { "" } else { "unsafe " }
         );
         for (n, ty) in inputs.iter().enumerate() {
             w!(self, "i{n}: {ty}, ");

@@ -16,7 +16,7 @@ fn check_book_formatting() -> Result<()> {
 }
 
 fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
-    const CARGO_PROJECTS: &[&str] = &["cxx_demo", "tutorial_cpp"];
+    const CARGO_PROJECTS: &[&str] = &["cxx_demo", "tutorial_cpp", "unsafe_fns"];
     let examples_dir = sh.current_dir().join("examples");
     sh.change_dir("examples");
     let examples = sh.read_dir(".")?;

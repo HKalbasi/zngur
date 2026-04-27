@@ -42,5 +42,5 @@ mod crate {
 }
 
 extern "C++" {
-    fn new_blob_store_client() -> Box<dyn crate::BlobStoreTrait>;
+    safe fn new_blob_store_client() -> Box<dyn crate::BlobStoreTrait>;
 }

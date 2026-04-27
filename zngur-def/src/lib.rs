@@ -26,6 +26,7 @@ pub struct ZngurMethod {
     pub receiver: ZngurMethodReceiver,
     pub inputs: Vec<RustType>,
     pub output: RustType,
+    pub is_safe: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -40,6 +41,7 @@ pub struct ZngurExternCppFn {
     pub name: String,
     pub inputs: Vec<RustType>,
     pub output: RustType,
+    pub is_safe: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
