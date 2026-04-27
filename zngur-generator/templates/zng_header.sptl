@@ -85,17 +85,7 @@ namespace {{ self.cpp_namespace }} {
   }
 
   template<typename T>
-  void zngur_assume_init(T& t) noexcept {
-    __zngur_internal<T>::assume_init(t);
-  }
-
-  template<typename T>
   void __zngur_internal_assume_deinit(T& t) noexcept {
-    __zngur_internal<T>::assume_deinit(t);
-  }
-
-  template<typename T>
-  void zngur_assume_deinit(T& t) noexcept {
     __zngur_internal<T>::assume_deinit(t);
   }
 
