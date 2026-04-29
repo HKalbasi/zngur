@@ -1,3 +1,9 @@
+type crate::RustStruct {
+    #layout(size = 0, align = 1);
+    unsafe fn unsafe_rust_fn();
+    fn safe_rust_fn();
+}
+
 extern "C++" {
     unsafe fn dangerous_function() -> i32;
 }

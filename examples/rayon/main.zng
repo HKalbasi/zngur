@@ -38,10 +38,10 @@ type ::rayon::iter::Copied<::rayon::slice::Iter<u64>> {
 type [u64] {
     wellknown_traits(?Sized);
 
-    fn get(&self, usize) -> ::std::option::Option<&u64>;
+    fn get<usize>(&self, usize) -> ::std::option::Option<&u64>;
     fn par_iter(&self) -> ::rayon::slice::Iter<u64> use ::rayon::iter::IntoParallelRefIterator;
 }
 
 mod ::std::slice {
-    fn from_raw_parts(*const u64, usize) -> &[u64];
+    unsafe fn from_raw_parts<u64>(*const u64, usize) -> &[u64];
 }

@@ -43,4 +43,8 @@ int main() {
               << " : " << std::to_string(value) << "}\n";
     zngur_dbg(pair);
   }
+  zngur_dbg(s.get(0).unwrap());
+  ::rust::std::ops::RangeFull range;
+  ::rust::__zngur_internal_assume_init(range);
+  zngur_dbg(s.get(range));
 }

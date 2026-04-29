@@ -247,7 +247,7 @@ enum ParsedItem<'a> {
         tr: Spanned<ParsedRustTrait<'a>>,
         methods: Vec<ParsedMethod<'a>>,
     },
-    Fn(Spanned<ParsedMethod<'a>>),
+    Fn(bool, Spanned<ParsedMethod<'a>>),
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Alias(ParsedAlias<'a>),
     Import(ParsedImportPath),
@@ -275,7 +275,7 @@ enum ProcessedItem<'a> {
         tr: Spanned<ParsedRustTrait<'a>>,
         methods: Vec<ParsedMethod<'a>>,
     },
-    Fn(Spanned<ParsedMethod<'a>>),
+    Fn(bool, Spanned<ParsedMethod<'a>>),
     ExternCpp(Vec<ParsedExternCppItem<'a>>),
     Import(ParsedImportPath),
     ModuleImport {
@@ -329,6 +329,7 @@ enum ParsedTypeItem<'a> {
         data: ParsedMethod<'a>,
         use_path: Option<ParsedPath<'a>>,
         deref: Option<ParsedRustType<'a>>,
+        is_safe: bool,
     },
     CppValue {
         field: &'a str,
@@ -526,6 +527,7 @@ impl ProcessedItem<'_> {
                             data,
                             use_path,
                             deref,
+                            is_safe,
                         } => {
                             let deref = deref.and_then(|x| {
                                 let deref_type = x.to_zngur(scope);
@@ -542,7 +544,11 @@ impl ProcessedItem<'_> {
                                 Some((deref_type, receiver_mutability))
                             });
                             methods.push(ZngurMethodDetails {
-                                data: data.to_zngur(scope),
+                                data: {
+                                    let mut m = data.to_zngur(scope);
+                                    m.is_safe = is_safe;
+                                    m
+                                },
                                 use_path: use_path.map(|x| scope.resolve_path(x)),
                                 deref,
                             });
@@ -668,7 +674,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                     ctx,
                 );
             }
-            ProcessedItem::Fn(f) => {
+            ProcessedItem::Fn(is_safe, f) => {
                 let method = f.inner.to_zngur(scope);
                 checked_merge(
                     ZngurFn {
@@ -679,6 +685,7 @@ Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`."
                         },
                         inputs: method.inputs,
                         output: method.output,
+                        is_safe,
                     },
                     r,
                     f.span,
@@ -1176,7 +1183,7 @@ fn process_parsed_item<'a>(
         }
         ParsedItem::Type { ty, items } => Ret::Processed(ProcessedItem::Type { ty, items }),
         ParsedItem::Trait { tr, methods } => Ret::Processed(ProcessedItem::Trait { tr, methods }),
-        ParsedItem::Fn(method) => Ret::Processed(ProcessedItem::Fn(method)),
+        ParsedItem::Fn(is_safe, method) => Ret::Processed(ProcessedItem::Fn(is_safe, method)),
         ParsedItem::ExternCpp(items) => Ret::Processed(ProcessedItem::ExternCpp(items)),
         ParsedItem::Import(path) => Ret::Processed(ProcessedItem::Import(path)),
         ParsedItem::ModuleImport { path, span } => {
@@ -1791,7 +1798,9 @@ fn inner_type_item<'a>()
             cpp_value,
             cpp_ref,
             cpp_stack_owned,
-            method()
+            just(Token::KwUnsafe)
+                .or_not()
+                .then(method())
                 .then(
                     just(Token::KwUse)
                         .ignore_then(path())
@@ -1804,11 +1813,14 @@ fn inner_type_item<'a>()
                         .map(Some)
                         .or(empty().to(None)),
                 )
-                .map(|((data, use_path), deref)| ParsedTypeItem::Method {
-                    deref,
-                    use_path,
-                    data,
-                }),
+                .map(
+                    |(((opt_unsafe, data), use_path), deref)| ParsedTypeItem::Method {
+                        deref,
+                        use_path,
+                        data,
+                        is_safe: opt_unsafe.is_none(),
+                    },
+                ),
         ));
 
         let match_stmt =
@@ -1847,9 +1859,14 @@ fn trait_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParse
 }
 
 fn fn_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
-    spanned(method())
+    let safety = choice((just(Token::KwUnsafe).to(false),))
+        .or_not()
+        .map(|x| x.unwrap_or(true));
+
+    safety
+        .then(spanned(method()))
         .then_ignore(just(Token::Semicolon))
-        .map(ParsedItem::Fn)
+        .map(|(is_safe, method)| ParsedItem::Fn(is_safe, method))
 }
 
 fn additional_include_item<'a>()

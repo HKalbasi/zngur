@@ -276,6 +276,7 @@ impl ZngurGenerator {
                     &method.output,
                     use_path,
                     deref.map(|x| x.1),
+                    method.is_safe,
                     default_ns,
                     &sanitized_crate_name,
                 );
@@ -351,6 +352,7 @@ pub mod cpp {{
                 &func.output,
                 None,
                 None,
+                func.is_safe,
                 default_ns,
                 &sanitized_crate_name,
             );
