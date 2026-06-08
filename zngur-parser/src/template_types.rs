@@ -214,6 +214,7 @@ fn substitute_method_vars<'a>(
                 receiver,
                 inputs,
                 output,
+                is_safe,
             },
         use_path,
         deref,
@@ -231,6 +232,7 @@ fn substitute_method_vars<'a>(
                 .map(|ty| substitute_vars(ty, mapping, defined_types))
                 .collect::<Result<_, _>>()?,
             output: substitute_vars(output, mapping, defined_types)?,
+            is_safe: *is_safe,
         },
         use_path: use_path.clone(),
         deref: match deref {
@@ -260,6 +262,7 @@ pub fn try_match_template(
         fields,
         cpp_ref,
         cpp_value,
+        cpp_stack_owned,
     } = template;
     debug_assert_eq!(
         substitute_vars(template_ty, &mapping, defined_types).unwrap(),
@@ -324,6 +327,7 @@ pub fn try_match_template(
             .collect(),
         cpp_value: cpp_value.clone(),
         cpp_ref: cpp_ref.clone(),
+        cpp_stack_owned: cpp_stack_owned.clone(),
     };
     Some(TemplateMatch(new_ty))
 }

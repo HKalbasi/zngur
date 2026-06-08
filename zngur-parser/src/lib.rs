@@ -462,7 +462,7 @@ impl ProcessedItem<'_> {
                 }
             }
             ProcessedItem::ModuleImport { path, span: _ } => {
-                r.imported_modules.push(ModuleImport { path: path.clone() });
+                r.spec.imported_modules.push(ModuleImport { path: path.clone() });
             }
             ProcessedItem::Type {
                 ty,
@@ -1283,9 +1283,6 @@ impl<'a> ProcessedZngFile<'a> {
         }
     }
 }
-
-#[derive(Clone, Debug, Default)]
-struct Import(pub std::path::PathBuf);
 
 struct TemplateDef {
     ty: ZngurType,

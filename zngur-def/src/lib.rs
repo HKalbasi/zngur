@@ -143,7 +143,7 @@ pub struct CppValue(pub String, pub String);
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppRef(pub String);
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppStackOwned {
     pub cpp_type: String,
     pub size: usize,
