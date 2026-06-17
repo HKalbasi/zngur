@@ -702,6 +702,10 @@ impl ProcessedItem<'_> {
                         span: ty.span,
                     });
                 } else {
+                    r.ty_to_locations
+                        .entry(zngur_type.ty.clone())
+                        .or_default()
+                        .push((ctx.filename().to_owned(), ty.span.start..ty.span.end));
                     checked_merge(zngur_type, &mut r.spec, ty.span, ctx);
                 }
             }
@@ -966,13 +970,12 @@ impl<'a, 'b> ParseContext<'a, 'b> {
     }
 
     fn consume_from(&mut self, mut other: ParseContext<'_, 'b>) {
-        // Always merge processed files, regardless of errors
         self.processed_files.append(&mut other.processed_files);
-        if other.has_errors() {
-            self.reports.extend(other.reports);
-            self.source_cache.insert(other.path, other.text.to_string());
-            self.source_cache.extend(other.source_cache);
-        }
+        self.reports.extend(other.reports);
+        // Always cache the source in case errors come up in post-processing
+        self.source_cache.insert(other.path, other.text.to_string());
+        self.source_cache.extend(other.source_cache);
+
     }
 
     fn has_errors(&self) -> bool {
@@ -1295,6 +1298,7 @@ struct TemplateDef {
 struct ZngurSpecBuilder {
     spec: ZngurSpec,
     templates: Vec<TemplateDef>,
+    ty_to_locations: HashMap<RustType, Vec<(String, std::ops::Range<usize>)>>,
     imports: Vec<Import>,
 }
 
@@ -1304,13 +1308,19 @@ impl ZngurSpecBuilder {
             mut spec,
             templates,
             imports: _,
+            mut ty_to_locations,
         } = self;
         let defined_types = spec.types.iter().map(|ty| ty.ty.clone()).collect();
         for ty in &mut spec.types {
+            let mut template_locations = Vec::new();
             for template in &templates {
                 if let Some(template_match) =
                     try_match_template(&ty.ty, &template.ty, &defined_types)
                 {
+                    let location = (
+                        template.filename.clone(),
+                        template.span.start..template.span.end,
+                    );
                     if let Err(e) = template_match.merge(ty) {
                         let MergeFailure::Conflict(e) = e;
                         ctx.add_report(
@@ -1320,15 +1330,14 @@ impl ZngurSpecBuilder {
                                     template.ty.ty, ty.ty, e
                                 ))
                                 .with_label(
-                                    Label::new((
-                                        template.filename.clone(),
-                                        template.span.start..template.span.end,
-                                    ))
-                                    .with_message("Template defined here")
-                                    .with_color(Color::Blue),
+                                    Label::new(location)
+                                        .with_message("Template defined here")
+                                        .with_color(Color::Blue),
                                 )
                                 .finish(),
                         );
+                    } else {
+                        template_locations.push(location);
                     }
                 }
             }
@@ -1339,6 +1348,29 @@ impl ZngurSpecBuilder {
                 )
             }) {
                 ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
+            }
+            if ty.layout.is_none() {
+                let mut report = Report::build(ReportKind::Error, "", 0)
+                    .with_message(format!(
+                        "No layout policy found for type {}. \
+    Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
+                        ty.ty
+                    ));
+                for location in ty_to_locations.remove(&ty.ty).unwrap_or_default() {
+                    report = report.with_label(
+                        Label::new(location)
+                            .with_message("Type defined here")
+                            .with_color(Color::Blue),
+                    );
+                }
+                for location in template_locations {
+                    report = report.with_label(
+                        Label::new(location)
+                            .with_message("Matching template defined here")
+                            .with_color(Color::Blue),
+                    );
+                }
+                ctx.add_report(report.finish());
             }
         }
         spec
