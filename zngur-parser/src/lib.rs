@@ -1340,9 +1340,6 @@ impl ZngurSpecBuilder {
             }) {
                 ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
             }
-            if ty.layout.is_none() {
-                ctx.add_report(Report::build(kind, src_id, offset));
-            }
         }
         spec
     }
