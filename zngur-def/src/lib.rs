@@ -191,7 +191,6 @@ pub struct ModuleImport {
 
 #[derive(Debug, Default)]
 pub struct ZngurSpec {
-    pub imports: Vec<Import>,
     pub imported_modules: Vec<ModuleImport>,
     pub types: Vec<ZngurType>,
     pub traits: IndexMap<RustTrait, ZngurTrait>,
