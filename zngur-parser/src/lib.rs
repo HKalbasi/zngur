@@ -1131,6 +1131,7 @@ impl<'a> ParsedZngFile<'a> {
     pub fn parse(path: std::path::PathBuf, cfg: Box<dyn RustCfgProvider>) -> ParseResult {
         let mut zngur = ZngurSpecBuilder::default();
         zngur.spec.rust_cfg.extend(cfg.get_cfg_pairs());
+        zngur.spec.rust_cfg.sort();
         let text = std::fs::read_to_string(&path).unwrap();
         let mut ctx = ParseContext::new(path.clone(), &text, cfg.clone_box());
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
@@ -1338,6 +1339,9 @@ impl ZngurSpecBuilder {
                 )
             }) {
                 ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
+            }
+            if ty.layout.is_none() {
+                ctx.add_report(Report::build(kind, src_id, offset));
             }
         }
         spec
