@@ -462,7 +462,9 @@ impl ProcessedItem<'_> {
                 }
             }
             ProcessedItem::ModuleImport { path, span: _ } => {
-                r.spec.imported_modules.push(ModuleImport { path: path.clone() });
+                r.spec
+                    .imported_modules
+                    .push(ModuleImport { path: path.clone() });
             }
             ProcessedItem::Type {
                 ty,
@@ -975,7 +977,6 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         // Always cache the source in case errors come up in post-processing
         self.source_cache.insert(other.path, other.text.to_string());
         self.source_cache.extend(other.source_cache);
-
     }
 
     fn has_errors(&self) -> bool {
@@ -1350,12 +1351,11 @@ impl ZngurSpecBuilder {
                 ty.wellknown_traits.push(ZngurWellknownTrait::Drop);
             }
             if ty.layout.is_none() {
-                let mut report = Report::build(ReportKind::Error, "", 0)
-                    .with_message(format!(
-                        "No layout policy found for type {}. \
+                let mut report = Report::build(ReportKind::Error, "", 0).with_message(format!(
+                    "No layout policy found for type {}. \
     Use one of `#layout(size = X, align = Y)`, `#heap_allocated` or `#only_by_ref`.",
-                        ty.ty
-                    ));
+                    ty.ty
+                ));
                 for location in ty_to_locations.remove(&ty.ty).unwrap_or_default() {
                     report = report.with_label(
                         Label::new(location)
