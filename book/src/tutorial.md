@@ -381,8 +381,8 @@ struct Inventory {
 ```
 
 Create a new cargo project, this time a binary one since we want to write the main function to live inside Rust.
-Copy the above code into the `inventory.h` file.
-Then create a `main.zng` file with the following content:
+Copy the above code into the `inventory.h` file at the root of the crate.
+In the same directory, create a `main.zng` file with the following content:
 
 ```
 #cpp_additional_includes "
@@ -392,15 +392,11 @@ Then create a `main.zng` file with the following content:
 type crate::Inventory {
     #layout(size = 16, align = 8);
 
-    constructor(ZngurCppOpaqueOwnedObject);
-
     #cpp_value "0" "::cpp_inventory::Inventory";
 }
 
 type crate::Item {
     #layout(size = 16, align = 8);
-
-    constructor(ZngurCppOpaqueOwnedObject);
 
     #cpp_value "0" "::cpp_inventory::Item";
 }
@@ -413,8 +409,8 @@ mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 }
 
-struct Inventory(generated::ZngurCppOpaqueOwnedObject);
-struct Item(generated::ZngurCppOpaqueOwnedObject);
+pub use generated::cpp::Inventory;
+pub use generated::cpp::Item;
 ```
 
 This time we will use the Zngur generator inside of cargo build script.
@@ -424,8 +420,8 @@ Add `zngur` and `cc` to your build dependencies:
 ```toml
 [build-dependencies]
 cc = "1.0"
-build-rs = "0.1.2" # This one is optional
-zngur = "0.5.0" # Or whatever the latest version is
+build-rs = "0.3.4" # This one is optional
+zngur = "0.10.0" # Or whatever the latest version is
 ```
 
 Then fill the `build.rs` file:
@@ -434,22 +430,25 @@ Then fill the `build.rs` file:
 use zngur::Zngur;
 
 fn main() {
-    build::rerun_if_changed("main.zng");
-    build::rerun_if_changed("impls.cpp");
+    build_rs::output::rerun_if_changed("main.zng");
+    build_rs::output::rerun_if_changed("impls.cpp");
+    build_rs::output::rerun_if_env_changed("CXX");
 
-    let crate_dir = build::cargo_manifest_dir();
-    let out_dir = build::out_dir();
+    let crate_dir = build_rs::input::cargo_manifest_dir();
+    let out_dir = build_rs::input::out_dir();
 
     Zngur::from_zng_file(crate_dir.join("main.zng"))
         .with_cpp_file(out_dir.join("generated.cpp"))
         .with_h_file(out_dir.join("generated.h"))
         .with_rs_file(out_dir.join("generated.rs"))
+        .with_crate_name("crate")
+        .with_zng_header_in_place()
         .generate();
 
     let my_build = &mut cc::Build::new();
     let my_build = my_build
-        .cpp(true)
-        .compiler("g++")
+	    .cpp(true)
+		.std("c++20");
         .include(&crate_dir)
         .include(&out_dir);
     let my_build = || my_build.clone();
@@ -477,13 +476,13 @@ type str {
 
 extern "C++" {
     impl crate::Inventory {
-        fn new_empty(u32) -> crate::Inventory;
-        fn add_banana(&mut self, u32);
-        fn add_item(&mut self, crate::Item);
+        safe fn new_empty(u32) -> crate::Inventory;
+        safe fn add_banana(&mut self, u32);
+        safe fn add_item(&mut self, crate::Item);
     }
 
     impl crate::Item {
-        fn new(&str, u32) -> crate::Item;
+        safe fn new(&str, u32) -> crate::Item;
     }
 }
 ```
@@ -498,8 +497,7 @@ Create a file named `impls.cpp` with this content:
 using namespace rust::crate;
 
 Inventory rust::Impl<Inventory>::new_empty(uint32_t space) {
-  return Inventory(
-      rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Inventory>(space));
+  return Inventory::build(space);
 }
 
 rust::Unit rust::Impl<Inventory>::add_banana(rust::RefMut<Inventory> self,
@@ -515,11 +513,10 @@ rust::Unit rust::Impl<Inventory>::add_item(rust::RefMut<Inventory> self,
 }
 
 Item rust::Impl<Item>::new_(rust::Ref<rust::Str> name, uint32_t size) {
-  return Item(rust::ZngurCppOpaqueOwnedObject::build<cpp_inventory::Item>(
-      cpp_inventory::Item{
-          .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
-                                name.len()),
-          .size = size}));
+  return Item::build(cpp_inventory::Item{
+      .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
+                            name.len()),
+      .size = size});
 }
 ```
 
@@ -577,7 +574,7 @@ extern "C++" {
     // ...
 
     impl std::fmt::Debug for crate::Inventory {
-        fn fmt(&self, &mut ::std::fmt::Formatter) -> ::std::fmt::Result;
+        safe fn fmt(&self, &mut ::std::fmt::Formatter) -> ::std::fmt::Result;
     }
 }
 ```
@@ -590,8 +587,7 @@ rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
 }
 
 rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
-    rust::Ref<::rust::crate::Inventory> self,
-    rust::RefMut<::rust::std::fmt::Formatter> f) {
+    Ref<Inventory> self, RefMut<rust::std::fmt::Formatter> f) {
   ::std::string result = "Inventory { remaining_space: ";
   result += ::std::to_string(self.cpp().remaining_space);
   result += ", items: [";

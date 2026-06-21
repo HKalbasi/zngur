@@ -4,15 +4,15 @@ use std::env;
 use zngur::Zngur;
 
 fn main() {
-    build::rerun_if_changed("main.zng");
-    build::rerun_if_changed("impls.cpp");
-    build::rerun_if_env_changed("CXX");
+    build_rs::output::rerun_if_changed("main.zng");
+    build_rs::output::rerun_if_changed("impls.cpp");
+    build_rs::output::rerun_if_env_changed("CXX");
 
     #[cfg(not(target_os = "windows"))]
     let cxx = env::var("CXX").unwrap_or("c++".to_owned());
 
-    let crate_dir = build::cargo_manifest_dir();
-    let out_dir = build::out_dir();
+    let crate_dir = build_rs::input::cargo_manifest_dir();
+    let out_dir = build_rs::input::out_dir();
 
     // Force rerun if generated files don't exist
     let generated_files = [

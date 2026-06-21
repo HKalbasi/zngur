@@ -12,5 +12,5 @@ publish = false
 
 [build-dependencies]
 cc = "1.0"
-build-rs = "0.1.2"
+build-rs = "0.3.4"
 zngur = { path = "../../zngur" }
