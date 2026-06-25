@@ -110,8 +110,8 @@ mod ::std::vec {
         wellknown_traits(Debug);
 
         fn new() -> Vec<f32>;
-        fn get(&self, usize) -> ::std::option::Option<&f32> deref [f32];
-        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut f32> deref [f32];
+        fn get<usize>(&self, usize) -> ::std::option::Option<&f32> deref [f32];
+        fn get_mut<usize>(&mut self, usize) -> ::std::option::Option<&mut f32> deref [f32];
         fn push(&mut self, f32);
     }
 
@@ -120,8 +120,8 @@ mod ::std::vec {
         wellknown_traits(Debug);
 
         fn new() -> Vec<&str>;
-        fn get(&self, usize) -> ::std::option::Option<&&str> deref [&str];
-        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut &str> deref [&str];
+        fn get<usize>(&self, usize) -> ::std::option::Option<&&str> deref [&str];
+        fn get_mut<usize>(&mut self, usize) -> ::std::option::Option<&mut &str> deref [&str];
         fn push(&mut self, &str);
     }
 
@@ -130,8 +130,8 @@ mod ::std::vec {
         wellknown_traits(Debug);
 
         fn new() -> Vec<crate::ConservativeLayoutType>;
-        fn get(&self, usize) -> ::std::option::Option<&crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
-        fn get_mut(&mut self, usize) -> ::std::option::Option<&mut crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
+        fn get<usize>(&self, usize) -> ::std::option::Option<&crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
+        fn get_mut<usize>(&mut self, usize) -> ::std::option::Option<&mut crate::ConservativeLayoutType> deref [crate::ConservativeLayoutType];
         fn push(&mut self, crate::ConservativeLayoutType);
     }
 }

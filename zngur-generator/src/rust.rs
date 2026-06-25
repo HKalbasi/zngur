@@ -924,6 +924,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut cpp::{type_name} {{
         output: &RustType,
         use_path: Option<Vec<String>>,
         deref: Option<Mutability>,
+        is_safe: bool,
         namespace: &str,
         crate_name: &str,
     ) -> CppFnSig {
@@ -950,16 +951,26 @@ pub extern "C" fn {mangled_name}("#
         } else {
             (output.clone(), false)
         };
-        wln!(self, "o: *mut u8) {{ unsafe {{");
-        self.wrap_in_catch_unwind(|this| {
-            if let Some(use_path) = use_path {
-                if use_path.first().is_some_and(|x| x == "crate") {
-                    wln!(this, "    use {};", use_path.iter().join("::"));
-                } else {
-                    wln!(this, "    use ::{};", use_path.iter().join("::"));
-                }
-            }
+        wln!(self, "o: *mut u8) {{");
 
+        if let Some(use_path) = use_path {
+            if use_path.first().is_some_and(|x| x == "crate") {
+                wln!(self, "    use {};", use_path.iter().join("::"));
+            } else {
+                wln!(self, "    use ::{};", use_path.iter().join("::"));
+            }
+        }
+        if is_safe {
+            let loops = (0..inputs.len()).map(|_| "loop {}").join(", ");
+            wln!(
+                self,
+                "    const {{ let _verify_safety = || {{ #[allow(unreachable_code)] let _ = {}({}); }}; }};",
+                rust_name,
+                loops
+            );
+        }
+        wln!(self, "unsafe {{");
+        self.wrap_in_catch_unwind(|this| {
             w!(
                 this,
                 "    ::std::ptr::write(o as *mut {modified_output}, {impl_trait} {rust_name}(",

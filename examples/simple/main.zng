@@ -44,7 +44,7 @@ mod ::std {
             fn new() -> Vec<i32>;
             fn push(&mut self, i32);
             fn clone(&self) -> Vec<i32>;
-            fn get(&self, usize) -> ::std::option::Option<&i32> deref [i32];
+            fn get<usize>(&self, usize) -> ::std::option::Option<&i32> deref [i32];
             fn into_iter(self) -> ::std::vec::IntoIter<i32>;
         }
     }
