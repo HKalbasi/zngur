@@ -168,7 +168,7 @@ dependencies = [
 name = "benchmark"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "criterion",
  "zngur",
@@ -200,6 +200,15 @@ name = "build-rs"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b00b8763668c99f8d9101b8a0dd82106f58265464531a79b2cef0d9a30c17dd2"
+
+[[package]]
+name = "build-rs"
+version = "0.3.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "fe808acca98fccf920154ee7833e791bfb683299be4aae7ec222ddffad8cd4f8"
+dependencies = [
+ "unicode-ident",
+]
 
 [[package]]
 name = "bumpalo"
@@ -486,7 +495,7 @@ version = "0.10.0"
 name = "example-cpp-inheritance"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "cpp_inherit",
  "zngur",
@@ -497,7 +506,7 @@ dependencies = [
 name = "example-cxx_demo"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "zngur",
 ]
@@ -506,7 +515,7 @@ dependencies = [
 name = "example-cxx_demo_split"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "zngur",
 ]
@@ -570,7 +579,7 @@ version = "0.10.0"
 name = "example-stack-owned"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "zngur",
  "zngur-lib",
@@ -588,7 +597,7 @@ version = "0.10.0"
 name = "example-tutorial_cpp"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.3.4",
  "cc",
  "zngur",
 ]
@@ -597,7 +606,7 @@ dependencies = [
 name = "example-unsafe_fns"
 version = "0.10.0"
 dependencies = [
- "build-rs",
+ "build-rs 0.1.2",
  "cc",
  "zngur",
 ]
