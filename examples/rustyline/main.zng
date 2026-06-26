@@ -35,9 +35,10 @@ mod ::rustyline {
 
     type error::ReadlineError {
         #heap_allocated;
+        non_exhaustive;
 
-        constructor Interrupted;
-        constructor Eof;
+        variant Interrupted {}
+        variant Eof {}
     }
 
     type Result<DefaultEditor> {

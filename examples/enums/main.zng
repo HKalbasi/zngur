@@ -1,0 +1,31 @@
+#convert_panic_to_exception
+
+merge "./second.zng";
+
+mod ::std {
+    type option::Option<i32> {
+        #layout(size = 8, align = 4);
+        wellknown_traits(Debug, Copy);
+
+        variant None {}
+        variant Some {
+            field 0 (offset = auto, type = i32);
+        }
+    }
+}
+
+mod crate {
+    // Primarily here to test that merging works properly.
+    type Merged {
+        // This file knows that First is non_exhaustive, but not its fields.
+        variant First {
+            non_exhaustive;
+        }
+        // And knows that Second has a 0 field, but not that it's non_exhaustive.
+        variant Second {
+            field 0 (offset = auto, type = i32);
+        }
+
+        fn first() -> Merged;
+    }
+}

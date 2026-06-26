@@ -9,9 +9,10 @@ type<T> [T] {
 mod ::std {
 
     type<T> option::Option<T> {
-        constructor Some(T);
-        constructor None;
-        fn unwrap(self) -> T;
+        variant None { }
+        variant Some {
+            field 0 (offset = auto, type = T);
+        }
     }
 
     type<T> option::Option<&T> {

@@ -1,9 +1,13 @@
 #include <iostream>
 #include "generated.h"
 
+template<class T> using Vec = rust::std::vec::Vec<T>;
+template<class T> using Option = rust::std::option::Option<T>;
+using String = rust::std::string::String;
+
 // External function declarations from foo.cpp and bar.cpp
-extern rust::std::vec::Vec<int32_t> foo();
-extern rust::std::option::Option<rust::std::string::String> bar();
+extern Vec<int32_t> foo();
+extern Option<String> bar();
 
 int main() {
     // Get Vec<i32> from foo() and demonstrate both imported and extended APIs
@@ -21,7 +25,7 @@ int main() {
     // Get Option<String> from bar() and demonstrate both imported and extended APIs
     std::cout << "bar(): Creating Rust Option<String>" << std::endl;
     auto some_value = bar();
-    auto none_value = rust::std::option::Option<rust::std::string::String>::None();
+    Option<String> none_value = Option<String>::None();
 
     // Use imported APIs from bar.zng
     std::cout << "  some_value.is_some(): " << some_value.is_some() << std::endl;

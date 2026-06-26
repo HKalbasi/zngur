@@ -31,8 +31,8 @@ int main() {
     s.push(KVPair{key.to_owned(), static_cast<KVPairValue_T>(value)});
   }
   auto it = s.iter();
-  for (auto next = it.next(); next.matches_Some(); next = it.next()) {
-    auto pair = next.unwrap();
+  for (auto next = it.next(); auto some = Option<rust::Ref<KVPair>>::Some::match(next); next = it.next()) {
+    rust::Ref<KVPair> pair = some->f0;
     rust::Ref<rust::std::string::String> key = pair.key;
     KVPairValue_T value = pair.value;
     std::cout << "KVPair(size = " << KVPair::self_size()

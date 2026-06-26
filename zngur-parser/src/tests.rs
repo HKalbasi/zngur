@@ -122,12 +122,12 @@ type () {
 }
     "#,
         expect![[r#"
-            Error: found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
+            Error: found 'welcome_traits' expected '#', 'variant', 'wellknown_traits', 'non_exhaustive', 'constructor', 'field', 'async', 'fn', or '}'
                ╭─[test.zng:4:5]
                │
              4 │     welcome_traits(Copy);
                │     ───────┬──────  
-               │            ╰──────── found 'welcome_traits' expected '#', 'wellknown_traits', 'constructor', 'field', 'async', 'fn', or '}'
+               │            ╰──────── found 'welcome_traits' expected '#', 'variant', 'wellknown_traits', 'non_exhaustive', 'constructor', 'field', 'async', 'fn', or '}'
             ───╯
         "#]],
     );
@@ -229,6 +229,39 @@ mod crate {
         panic!("no match?");
     };
     assert_eq!(p.as_slice(), ["crate", "MyLocalString"]);
+}
+
+#[test]
+fn parse_variants() {
+    println!("meow");
+
+    let parsed = ParsedZngFile::parse_str(
+        r#"
+type Option<i32> {
+    #layout(size = 8, align = 4);
+    variant None { }
+    variant Some {
+        field 0 (offset = auto, type = i32);
+    }
+}
+        "#,
+        NullCfg,
+    );
+
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_eq!(ty.variants.len(), 2, "should have two variants");
+
+    assert_eq!(ty.variants[0].name, "None");
+    assert_eq!(ty.variants[0].fields.len(), 0);
+
+    assert_eq!(ty.variants[1].name, "Some");
+    assert_eq!(ty.variants[1].fields.len(), 1);
+    assert_eq!(ty.variants[1].fields[0].name, "0");
+    assert_eq!(
+        ty.variants[1].fields[0].ty,
+        RustType::Primitive(zngur_def::PrimitiveRustType::Int(32))
+    );
+    assert_eq!(ty.variants[1].fields[0].offset, None);
 }
 
 struct MockFilesystem {

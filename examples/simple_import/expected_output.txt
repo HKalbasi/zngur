@@ -1,5 +1,5 @@
 foo(): Creating a Rust Vec<i32>
-  Vec contents: [main.cpp:13] numbers = [
+  Vec contents: [main.cpp:17] numbers = [
     10,
     20,
     30,
@@ -10,4 +10,4 @@ foo(): Creating a Rust Vec<i32>
 bar(): Creating Rust Option<String>
   some_value.is_some(): 1
   none_value.is_none(): 1
-  Unwrapped string: [main.cpp:33] unwrapped_string = ""
+  Unwrapped string: [main.cpp:37] unwrapped_string = ""

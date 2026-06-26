@@ -15,8 +15,10 @@ mod ::std {
     type option::Option<::std::string::String> {
         #layout(size = 24, align = 8);
 
-        constructor None;
-        constructor Some(::std::string::String);
+        variant None {}
+        variant Some {
+            field 0 (offset = auto, type = ::std::string::String);
+        }
 
         fn is_some(&self) -> bool;
         fn is_none(&self) -> bool;

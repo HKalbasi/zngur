@@ -15,7 +15,10 @@ int main() {
   vec_b.push(rust::crate::TypeB(2));
   vec_b.push(rust::crate::TypeB(3));
   for (std::size_t i = 0; i < vec_b.len(); i++) {
-    zngur_dbg(vec_b.get(i).unwrap());
+    auto opt = vec_b.get(i);
+    if (auto r = rust::std::option::Option<rust::Ref<rust::crate::TypeB>>::Some::match(opt)) {
+        zngur_dbg(*rust::Ref(r->f0));
+    }
   }
 
   auto box = rust::crate::get_box();

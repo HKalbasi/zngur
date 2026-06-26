@@ -1,7 +1,7 @@
 use crate::{
     AdditionalIncludes, ConvertPanicToException, CppRef, CppStackOwned, CppValue, LayoutPolicy,
     ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
-    ZngurMethodDetails, ZngurSpec, ZngurTrait, ZngurType,
+    ZngurMethodDetails, ZngurSpec, ZngurTrait, ZngurType, ZngurVariant,
 };
 
 /// Trait for types with a partial union operation.
@@ -156,9 +156,15 @@ impl Merge for ZngurType {
         merge_by_identity(self.methods, &mut into.methods, |a, b| {
             a.data.name == b.data.name
         })?;
-        merge_by_identity(self.constructors, &mut into.constructors, |a, b| {
-            a.name == b.name
-        })?;
+        if into.constructor.is_none() {
+            into.constructor = self.constructor;
+        } else if self.constructor != into.constructor {
+            return Err(MergeFailure::Conflict(
+                "Duplicate constructor found".to_string(),
+            ));
+        }
+        into.exhaustive = self.exhaustive && into.exhaustive;
+        merge_by_identity(self.variants, &mut into.variants, |a, b| a.name == b.name)?;
         merge_by_identity(self.fields, &mut into.fields, |a, b| a.name == b.name)?;
 
         Ok(())
@@ -246,6 +252,20 @@ impl Merge for ZngurConstructor {
         if self != *into {
             return Err(MergeFailure::Conflict("Constructor mismatch".to_string()));
         }
+        Ok(())
+    }
+}
+
+impl Merge for ZngurVariant {
+    fn merge(self, into: &mut Self) -> MergeResult {
+        if self.name != into.name {
+            panic!(
+                "Attempt to merge different variants: {} and {}",
+                self.name, into.name
+            );
+        }
+        merge_by_identity(self.fields, &mut into.fields, |a, b| a.name == b.name)?;
+        into.exhaustive = self.exhaustive && into.exhaustive;
         Ok(())
     }
 }

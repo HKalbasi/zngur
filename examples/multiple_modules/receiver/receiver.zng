@@ -11,7 +11,9 @@ type crate::Receiver {
 type ::std::option::Option<crate::Receiver> {
     #layout(size = 16, align = 8);
 
-    constructor None;
-    constructor Some(crate::Receiver);
-    fn unwrap(self) -> crate::Receiver;   
+    variant None {}
+    variant Some {
+        field 0 (offset = auto, type = crate::Receiver);
+    }
+    fn unwrap(self) -> crate::Receiver;
 }

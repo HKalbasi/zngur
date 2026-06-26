@@ -94,21 +94,23 @@ impl Display for CppPath {
 pub struct CppType {
     pub path: CppPath,
     pub generic_args: Vec<CppType>,
+    // TODO: is there a better way to do it?
+    pub tail: Option<String>,
 }
 
 impl CppType {
-    pub fn into_ref(self) -> CppType {
-        CppType {
-            path: CppPath::from(&*format!("{}::Ref", self.top_level_ns())),
-            generic_args: vec![self],
+    pub fn with_tail(self, tail: String) -> Self {
+        Self {
+            tail: Some(tail),
+            ..self
         }
     }
 
-    fn top_level_ns(&self) -> &String {
-        &self.path.namespace()[0]
-    }
-
     pub(crate) fn specialization_decl(&self) -> String {
+        if self.tail.is_some() {
+            panic!("specialization decl makes no sense for nested classes");
+        }
+
         let name = self.path.name();
         // Tuple<> is a little special because it is a template even though self.generic_args is empty
         if self.generic_args.is_empty() && name != "Tuple" {
@@ -120,6 +122,26 @@ impl CppType {
                 self.generic_args.iter().join(", ")
             )
         }
+    }
+
+    pub(crate) fn specialized_name(&self) -> String {
+        // We don't get `std::fmt::from_fn()` on our MSRV.
+        struct Helper<'a>(&'a CppType);
+
+        impl Display for Helper<'_> {
+            fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+                write!(f, "{}", self.0.path.name())?;
+                if !self.0.generic_args.is_empty() {
+                    write!(f, "< {} >", self.0.generic_args.iter().join(", "))?;
+                }
+                if let Some(tail) = &self.0.tail {
+                    write!(f, " :: {tail}")?;
+                }
+                Ok(())
+            }
+        }
+
+        Helper(self).to_string()
     }
 
     fn header_helper(&self, state: &mut impl Write) -> std::fmt::Result {
@@ -207,12 +229,14 @@ impl From<&str> for CppType {
             None => CppType {
                 path: CppPath::from(value),
                 generic_args: vec![],
+                tail: None,
             },
             Some((path, generics)) => {
                 let generics = generics.strip_suffix('>').unwrap();
                 CppType {
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
+                    tail: None,
                 }
             }
         }
@@ -347,6 +371,14 @@ impl CppMethod {
             .map(|(n, ty)| format!("{ty} i{n}"))
             .join(", ")
     }
+}
+
+#[derive(Debug)]
+pub struct CppVariant {
+    pub name: String,
+    pub constructor: Option<CppFnSig>,
+    pub match_check: String,
+    pub fields: Vec<ZngurFieldData>,
 }
 
 #[derive(Debug)]
@@ -486,7 +518,9 @@ pub struct CppTypeDefinition {
     pub ty: CppType,
     pub layout: CppLayoutPolicy,
     pub methods: Vec<CppMethod>,
-    pub constructors: Vec<CppFnSig>,
+    pub constructor: Option<CppFnSig>,
+    pub variants: Vec<CppVariant>,
+    pub discriminant: Option<String>,
     pub fields: Vec<ZngurFieldData>,
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
@@ -618,7 +652,9 @@ impl Default for CppTypeDefinition {
             ty: CppType::from("fill::me::you::forgot::it"),
             layout: CppLayoutPolicy::OnlyByRef,
             methods: vec![],
-            constructors: vec![],
+            constructor: None,
+            variants: vec![],
+            discriminant: None,
             fields: vec![],
             wellknown_traits: vec![],
             from_trait: None,

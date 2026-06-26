@@ -14,10 +14,10 @@ int main() {
     auto r = editor.readline(">>> "_rs);
     if (r.is_err()) {
       auto e = r.unwrap_err();
-      if (e.matches_Eof()) {
+      if (rust::rustyline::error::ReadlineError::Eof::check(e)) {
         std::cout << "CTRL-D" << std::endl;
       }
-      if (e.matches_Interrupted()) {
+      if (rust::rustyline::error::ReadlineError::Interrupted::check(e)) {
         std::cout << "CTRL-C" << std::endl;
       }
       break;

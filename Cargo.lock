@@ -521,6 +521,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "example-enums"
+version = "0.10.0"
+
+[[package]]
 name = "example-impl-trait"
 version = "0.10.0"
 
@@ -537,6 +541,10 @@ dependencies = [
  "processor",
  "receiver",
 ]
+
+[[package]]
+name = "example-overloaded-trait"
+version = "0.10.0"
 
 [[package]]
 name = "example-raw-pointer"

@@ -23,11 +23,11 @@ public:
 
   Option<T> next() override {
     if (pos >= vec.size()) {
-      return Option<T>::None();
+      return typename Option<T>::None();
     }
     T value = vec[pos++];
     // You can construct Rust enum with fields in C++
-    return Option<T>::Some(value);
+    return typename Option<T>::Some(value);
   }
 };
 

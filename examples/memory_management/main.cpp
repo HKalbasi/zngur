@@ -119,10 +119,10 @@ int main() {
   }
   std::cout << "Checkpoint 35" << std::endl;
   {
-    auto p1 = Option<PrintOnDrop>::Some(
+    Option<PrintOnDrop> p1 = Option<PrintOnDrop>::Some(
         PrintOnDrop("option_A"_rs));
     std::cout << "Checkpoint 36" << std::endl;
-    auto p2 = Option<PrintOnDrop>::Some(
+    Option<PrintOnDrop> p2 = Option<PrintOnDrop>::Some(
         PrintOnDrop("option_B"_rs));
     std::cout << "Checkpoint 37" << std::endl;
     p2.take();
@@ -135,7 +135,7 @@ int main() {
     rust::Ref<rust::Str> elems[3] = {"elem1"_rs, "elem2"_rs, "elem3"_rs};
     int i = 0;
     auto iter = rust::std::iter::from_fn(
-        rust::Box<rust::Dyn<rust::Fn<Option<PrintOnDrop>>>>::make_box([&] {
+        rust::Box<rust::Dyn<rust::Fn<Option<PrintOnDrop>>>>::make_box([&]() -> Option<PrintOnDrop> {
           if (i == 3) {
             return Option<PrintOnDrop>::None();
           }

@@ -71,8 +71,10 @@ mod ::std {
         type Option<crate::PrintOnDrop> {
             #layout(size = 16, align = 8);
 
-            constructor Some(crate::PrintOnDrop);
-            constructor None;
+            variant None {}
+            variant Some {
+                field 0 (offset = auto, type = crate::PrintOnDrop);
+            }
 
             fn take(&mut self) -> Option<crate::PrintOnDrop>;
         }

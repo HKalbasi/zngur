@@ -6,8 +6,8 @@ use cpp::CppFnSig;
 use cpp::CppMethod;
 use cpp::CppPath;
 use cpp::CppTraitDefinition;
-use cpp::CppType;
 use cpp::CppTypeDefinition;
+use cpp::CppVariant;
 use cpp::cpp_handle_keyword;
 use indexmap::map::Entry;
 use itertools::Itertools;
@@ -177,54 +177,68 @@ impl ZngurGenerator {
                 ));
             }
             let mut cpp_methods = vec![];
-            let mut constructors = vec![];
+            let mut constructor = None;
+            let mut variants = vec![];
             let mut fields = vec![];
             let mut wellknown_traits = vec![];
-            for constructor in ty_def.constructors {
-                match constructor.name {
-                    Some(name) => {
-                        let rust_link_names = rust_file
-                            .add_constructor(&format!("{}::{}", ty, name), &constructor.inputs);
-                        cpp_methods.push(CppMethod {
-                            name: cpp_handle_keyword(&name).to_owned(),
-                            kind: ZngurMethodReceiver::Static,
-                            sig: CppFnSig {
-                                rust_link_name: rust_link_names.constructor,
-                                inputs: constructor
-                                    .inputs
-                                    .iter()
-                                    .map(|x| x.1.into_cpp(default_ns, &sanitized_crate_name))
-                                    .collect(),
-                                output: ty.into_cpp(default_ns, &sanitized_crate_name),
-                            },
-                        });
-                        cpp_methods.push(CppMethod {
-                            name: format!("matches_{}", name),
-                            kind: ZngurMethodReceiver::Ref(Mutability::Not),
-                            sig: CppFnSig {
-                                rust_link_name: rust_link_names.match_check,
-                                inputs: vec![
-                                    ty.into_cpp(default_ns, &sanitized_crate_name).into_ref(),
-                                ],
-                                output: CppType::from("uint8_t"),
-                            },
-                        });
-                    }
-                    None => {
-                        let rust_link_name = rust_file
-                            .add_constructor(&format!("{}", ty), &constructor.inputs)
-                            .constructor;
-                        constructors.push(CppFnSig {
-                            rust_link_name,
-                            inputs: constructor
-                                .inputs
-                                .iter()
-                                .map(|x| x.1.into_cpp(default_ns, &sanitized_crate_name))
-                                .collect(),
-                            output: ty.into_cpp(default_ns, &sanitized_crate_name),
-                        });
-                    }
+            if let Some(constructor_def) = ty_def.constructor {
+                let rust_link_name = rust_file.add_constructor(
+                    &ty.to_string(),
+                    constructor_def.inputs.iter().map(|(name, ty)| (name, ty)),
+                );
+                constructor = Some(CppFnSig {
+                    rust_link_name,
+                    inputs: constructor_def
+                        .inputs
+                        .iter()
+                        .map(|x| x.1.into_cpp(default_ns, &sanitized_crate_name))
+                        .collect(),
+                    output: ty.into_cpp(default_ns, &sanitized_crate_name),
+                });
+            }
+            let discriminant = if ty_def.exhaustive {
+                rust_file.add_discriminant(&ty.to_string(), &ty_def.variants)
+            } else {
+                None
+            };
+            for variant in ty_def.variants {
+                let rust_name = format!("{}::{}", ty, variant.name);
+                let constructor = if variant.exhaustive {
+                    let rust_link_name = rust_file.add_constructor(
+                        &rust_name,
+                        variant.fields.iter().map(|field| (&field.name, &field.ty)),
+                    );
+                    Some(CppFnSig {
+                        rust_link_name,
+                        inputs: variant
+                            .fields
+                            .iter()
+                            .map(|x| x.ty.into_cpp(default_ns, &sanitized_crate_name))
+                            .collect(),
+                        output: ty
+                            .into_cpp(default_ns, &sanitized_crate_name)
+                            .with_tail(variant.name.clone()),
+                    })
+                } else {
+                    None
+                };
+                let match_check = rust_file.add_match_check(&rust_name);
+                let mut fields = vec![];
+                for field in variant.fields {
+                    let mn =
+                        rust_file.add_variant_field_calculations(&field, &ty_def.ty, &variant.name);
+                    fields.push(ZngurFieldData {
+                        name: field.name,
+                        ty: field.ty,
+                        offset: ZngurFieldDataOffset::AutoDynamic(mn),
+                    });
                 }
+                variants.push(CppVariant {
+                    name: variant.name,
+                    constructor,
+                    match_check,
+                    fields,
+                });
             }
             for field in ty_def.fields {
                 let extern_mn = rust_file.add_field_assertions(&field, &ty_def.ty);
@@ -243,7 +257,7 @@ impl ZngurGenerator {
             if let RustType::Tuple(fields) = &ty_def.ty {
                 if !fields.is_empty() {
                     let rust_link_name = rust_file.add_tuple_constructor(&fields);
-                    constructors.push(CppFnSig {
+                    constructor = Some(CppFnSig {
                         rust_link_name,
                         inputs: fields
                             .iter()
@@ -294,7 +308,9 @@ impl ZngurGenerator {
             cpp_file.type_defs.push(CppTypeDefinition {
                 ty: ty.into_cpp(default_ns, &sanitized_crate_name),
                 layout: rust_file.add_layout_policy_shim(&ty, layout),
-                constructors,
+                constructor,
+                variants,
+                discriminant,
                 fields,
                 methods: cpp_methods,
                 wellknown_traits,

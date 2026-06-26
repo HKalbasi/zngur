@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use zngur_def::{
     Merge, RustPathAndGenerics, RustTrait, RustType, TypeVar, ZngurConstructor, ZngurField,
-    ZngurMethod, ZngurMethodDetails, ZngurType,
+    ZngurMethod, ZngurMethodDetails, ZngurType, ZngurVariant,
 };
 
 fn matches_template<'a, 'b>(
@@ -230,8 +230,10 @@ pub fn try_match_template(ty: &RustType, template: &ZngurType) -> Option<Templat
         ty: template_ty,
         layout,
         wellknown_traits,
+        exhaustive,
         methods,
-        constructors,
+        constructor,
+        variants,
         fields,
         cpp_ref,
         cpp_value,
@@ -242,44 +244,57 @@ pub fn try_match_template(ty: &RustType, template: &ZngurType) -> Option<Templat
         ty: ty.clone(),
         layout: *layout,
         wellknown_traits: wellknown_traits.clone(),
+        exhaustive: *exhaustive,
         methods: methods
             .iter()
-            .filter_map(|method| match substitute_method_vars(method, &mapping) {
-                Ok(m) => Some(m),
+            .map(|method| match substitute_method_vars(method, &mapping) {
+                Ok(m) => m,
                 Err(SubstitutionError::UnboundVar(var)) => unreachable!(
                     "Unbound type variable {} in method {} in template {} for type {}",
                     var.0, method.data.name, template.ty, ty
                 ),
             })
             .collect(),
-        constructors: constructors
-            .iter()
-            .filter_map(|constructor| {
-                match constructor
-                    .inputs
-                    .iter()
-                    .map(|(name, ty)| substitute_vars(ty, &mapping).map(|ty| (name.clone(), ty)))
-                    .collect()
-                {
-                    Ok(inputs) => Some(ZngurConstructor {
-                        name: constructor.name.clone(),
-                        inputs,
-                    }),
-                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
-                        "Unbound type variable {} in constructor {:?} in template {} for type {}",
-                        var.0, constructor.name, template.ty, ty
-                    ),
-                }
-            })
-            .collect(),
-        fields: fields
-            .iter()
-            .filter_map(|field| match substitute_vars(&field.ty, &mapping) {
-                Ok(ty) => Some(ZngurField {
+        constructor: constructor.as_ref().map(|constructor| {
+            match constructor
+                .inputs
+                .iter()
+                .map(|(name, ty)| substitute_vars(ty, &mapping).map(|ty| (name.clone(), ty)))
+                .collect()
+            {
+                Ok(inputs) => ZngurConstructor { inputs },
+                Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                    "Unbound type variable {} in constructor in template {} for type {}",
+                    var.0, template.ty, ty
+                ),
+            }
+        }),
+        variants: variants.iter().map(|variant| {
+            let fields = variant.fields.iter().map(|field| match substitute_vars(&field.ty, &mapping) {
+                Ok(ty) => ZngurField {
                     name: field.name.clone(),
                     ty,
                     offset: field.offset,
-                }),
+                },
+                Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                    "Unbound type variable {} in field {} of variant {}, in template {} for type {}",
+                    var.0, field.name, variant.name, template.ty, ty
+                ),
+            }).collect();
+            ZngurVariant {
+                name: variant.name.clone(),
+                exhaustive: variant.exhaustive,
+                fields,
+            }
+        }).collect(),
+        fields: fields
+            .iter()
+            .map(|field| match substitute_vars(&field.ty, &mapping) {
+                Ok(ty) => ZngurField {
+                    name: field.name.clone(),
+                    ty,
+                    offset: field.offset,
+                },
                 Err(SubstitutionError::UnboundVar(var)) => unreachable!(
                     "Unbound type variable {} in field {} in template {} for type {}",
                     var.0, field.name, template.ty, ty

@@ -16,7 +16,7 @@ use zngur_def::{
     LayoutPolicy, Merge, MergeFailure, ModuleImport, Mutability, PrimitiveRustType,
     RustPathAndGenerics, RustTrait, RustType, TypeVar, ZngurConstructor, ZngurExternCppFn,
     ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver,
-    ZngurSpec, ZngurTrait, ZngurType, ZngurWellknownTrait,
+    ZngurSpec, ZngurTrait, ZngurType, ZngurVariant, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -358,9 +358,13 @@ enum ParsedLayoutPolicy<'a> {
 enum ParsedTypeItem<'a> {
     Layout(Span, ParsedLayoutPolicy<'a>),
     Traits(Vec<Spanned<ZngurWellknownTrait>>),
+    NonExhaustive,
     Constructor {
-        name: Option<&'a str>,
         args: ParsedConstructorArgs<'a>,
+    },
+    Variant {
+        name: &'a str,
+        items: Vec<Spanned<ParsedTypeItem<'a>>>,
     },
     Field {
         name: String,
@@ -486,11 +490,13 @@ impl ProcessedItem<'_> {
                 };
 
                 let mut methods = vec![];
-                let mut constructors = vec![];
+                let mut constructor = None;
+                let mut variants = vec![];
                 let mut fields = vec![];
                 let mut wellknown_traits = vec![];
                 let mut layout = None;
                 let mut layout_span = None;
+                let mut exhaustive = true;
                 let mut cpp_value = None;
                 let mut cpp_ref = None;
                 let mut cpp_stack_owned = None;
@@ -560,9 +566,20 @@ impl ProcessedItem<'_> {
                         ParsedTypeItem::Traits(tr) => {
                             wellknown_traits.extend(tr);
                         }
-                        ParsedTypeItem::Constructor { name, args } => {
-                            constructors.push(ZngurConstructor {
-                                name: name.map(|x| x.to_owned()),
+                        ParsedTypeItem::NonExhaustive => {
+                            if !exhaustive {
+                                ctx.add_error_str(
+                                    "Duplicate non_exhaustive annotation found",
+                                    item_span,
+                                );
+                            }
+                            exhaustive = false;
+                        }
+                        ParsedTypeItem::Constructor { args } => {
+                            if constructor.is_some() {
+                                ctx.add_error_str("Duplicate constructor found", item_span);
+                            }
+                            constructor = Some(ZngurConstructor {
                                 inputs: match args {
                                     ParsedConstructorArgs::Unit => vec![],
                                     ParsedConstructorArgs::Tuple(t) => t
@@ -575,7 +592,43 @@ impl ProcessedItem<'_> {
                                         .map(|(i, t)| (i.to_owned(), t.to_zngur(scope)))
                                         .collect(),
                                 },
-                            })
+                            });
+                        }
+                        ParsedTypeItem::Variant { name, items } => {
+                            let mut exhaustive = true;
+                            let mut fields = vec![];
+                            for item in items {
+                                match item.inner {
+                                    ParsedTypeItem::NonExhaustive => {
+                                        if !exhaustive {
+                                            ctx.add_error_str(
+                                                "Duplicate non_exhaustive annotation found",
+                                                item.span,
+                                            );
+                                        }
+                                        exhaustive = false;
+                                    }
+                                    ParsedTypeItem::Field { name, ty, offset } => {
+                                        if offset.is_some() {
+                                            ctx.add_error_str(
+                                                "static offsets on enum fields are not supported",
+                                                item.span,
+                                            );
+                                        }
+                                        fields.push(ZngurField {
+                                            name: name.to_owned(),
+                                            ty: ty.to_zngur(scope),
+                                            offset,
+                                        });
+                                    }
+                                    _ => panic!("bug: invalid variant item found: {item:?}"),
+                                }
+                            }
+                            variants.push(ZngurVariant {
+                                name: name.to_owned(),
+                                fields,
+                                exhaustive,
+                            });
                         }
                         ParsedTypeItem::Field { name, ty, offset } => {
                             fields.push(ZngurField {
@@ -694,7 +747,9 @@ impl ProcessedItem<'_> {
                     layout,
                     methods,
                     wellknown_traits: wt,
-                    constructors,
+                    exhaustive,
+                    constructor,
+                    variants,
                     fields,
                     cpp_value,
                     cpp_ref,
@@ -1011,9 +1066,11 @@ impl<'a, 'b> ParseContext<'a, 'b> {
             )
             .unwrap();
         }
-        std::panic::resume_unwind(Box::new(tests::ErrorText(
-            String::from_utf8(strip_ansi_escapes::strip(r)).unwrap(),
-        )));
+        std::panic::resume_unwind(Box::new(tests::ErrorText({
+            let s = String::from_utf8(strip_ansi_escapes::strip(r)).unwrap();
+            eprintln!("{s}");
+            s
+        })));
     }
 
     #[cfg(not(test))]
@@ -1879,6 +1936,8 @@ fn inner_type_item<'a>()
         )
         .map(ParsedTypeItem::Traits)
         .boxed();
+    let non_exhaustive =
+        just(Token::Ident("non_exhaustive")).map(|_| ParsedTypeItem::NonExhaustive);
     let constructor_args = rust_type()
         .separated_by(just(Token::Comma))
         .collect::<Vec<_>>()
@@ -1896,14 +1955,9 @@ fn inner_type_item<'a>()
         .map(ParsedConstructorArgs::Named))
         .or(empty().to(ParsedConstructorArgs::Unit))
         .boxed();
-    let constructor = just(Token::Ident("constructor")).ignore_then(
-        (select! {
-            Token::Ident(c) => Some(c),
-        })
-        .or(empty().to(None))
-        .then(constructor_args)
-        .map(|(name, args)| ParsedTypeItem::Constructor { name, args }),
-    );
+    let constructor = just(Token::Ident("constructor"))
+        .ignore_then(constructor_args)
+        .map(|args| ParsedTypeItem::Constructor { args });
     let field = just(Token::Ident("field")).ignore_then(
         (select! {
             Token::Ident(c) => c.to_owned(),
@@ -1959,10 +2013,24 @@ fn inner_type_item<'a>()
                 .boxed(),
         )
         .map(|(cpp_type, props)| ParsedTypeItem::CppStackOwned { cpp_type, props });
+
+    let variant = just(Token::Ident("variant"))
+        .ignore_then(select! { Token::Ident(c) => c })
+        .then(
+            spanned(
+                choice((non_exhaustive.clone(), field.clone())).then_ignore(just(Token::Semicolon)),
+            )
+            .repeated()
+            .collect::<Vec<_>>()
+            .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+        )
+        .map(|(name, items)| ParsedTypeItem::Variant { name, items });
+
     recursive(|item| {
         let inner_item = choice((
             layout.boxed(),
             traits.boxed(),
+            non_exhaustive.boxed(),
             constructor.boxed(),
             field.boxed(),
             cpp_value.boxed(),
@@ -2006,6 +2074,7 @@ fn inner_type_item<'a>()
 
         choice((
             match_stmt,
+            variant,
             inner_item.then_ignore(just(Token::Semicolon)).boxed(),
         ))
     })

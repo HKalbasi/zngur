@@ -1,0 +1,17 @@
+mod crate {
+    type Merged {
+        #layout(size = 12, align = 4);
+        // This file knows that the whole enum is non_exhaustive.
+        non_exhaustive;
+        // That First variant has a field.
+        variant First {
+            field 0 (offset = auto, type = i32);
+        }
+        // And that the Second variant is non_exhaustive.
+        variant Second {
+            non_exhaustive;
+        }
+
+        fn second() -> Merged;
+    }
+}

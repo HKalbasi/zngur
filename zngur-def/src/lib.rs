@@ -53,8 +53,14 @@ pub struct ZngurExternCppImpl {
 
 #[derive(Debug, PartialEq, Eq)]
 pub struct ZngurConstructor {
-    pub name: Option<String>,
     pub inputs: Vec<(String, RustType)>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+pub struct ZngurVariant {
+    pub name: String,
+    pub fields: Vec<ZngurField>,
+    pub exhaustive: bool,
 }
 
 #[derive(Debug, PartialEq, Eq)]
@@ -75,6 +81,7 @@ pub struct ZngurFieldData {
 pub enum ZngurFieldDataOffset {
     Offset(usize),
     Auto(String),
+    AutoDynamic(String),
 }
 
 impl ZngurFieldDataOffset {
@@ -162,8 +169,10 @@ pub struct ZngurType {
     pub ty: RustType,
     pub layout: Option<LayoutPolicy>,
     pub wellknown_traits: Vec<ZngurWellknownTrait>,
+    pub exhaustive: bool,
     pub methods: Vec<ZngurMethodDetails>,
-    pub constructors: Vec<ZngurConstructor>,
+    pub constructor: Option<ZngurConstructor>,
+    pub variants: Vec<ZngurVariant>,
     pub fields: Vec<ZngurField>,
     pub cpp_value: Option<CppValue>,
     pub cpp_ref: Option<CppRef>,

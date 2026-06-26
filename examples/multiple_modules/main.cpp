@@ -6,9 +6,9 @@
 #include <receiver.zng.h>
 
 int main() {
-  auto processor = rust::std::option::Option<rust::processor::Processor>::Some(
+  rust::std::option::Option<rust::processor::Processor> processor = rust::std::option::Option<rust::processor::Processor>::Some(
       rust::processor::Processor::new_());
-  auto receiver = rust::std::option::Option<rust::receiver::Receiver>::Some(
+  rust::std::option::Option<rust::receiver::Receiver> receiver = rust::std::option::Option<rust::receiver::Receiver>::Some(
       rust::receiver::Receiver::new_());
   auto stats =
       rust::Impl<rust::aggregation::StatsAccumulator, rust::Inherent>::create();

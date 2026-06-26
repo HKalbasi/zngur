@@ -12,8 +12,8 @@ type crate::Dispatcher {
 
 type ::core::task::Poll<()> {
     #layout(size = 1, align = 1);
-    constructor Ready(());
-    constructor Pending;
+    variant Ready { non_exhaustive; }
+    variant Pending {}
 
     fn is_ready(&self) -> bool;
     fn is_pending(&self) -> bool;

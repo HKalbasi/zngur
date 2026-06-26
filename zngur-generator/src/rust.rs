@@ -29,6 +29,7 @@ impl IntoCpp for RustPathAndGenerics {
                 .chain(named_generics)
                 .map(|x| x.into_cpp(namespace, crate_name))
                 .collect(),
+            tail: None,
         }
     }
 }
@@ -48,6 +49,7 @@ impl IntoCpp for RustTrait {
                     .chain(Some(&**output))
                     .map(|x| x.into_cpp(namespace, crate_name))
                     .collect(),
+                tail: None,
             },
         }
     }
@@ -96,6 +98,7 @@ impl IntoCpp for RustType {
             RustType::Boxed(t) => CppType {
                 path: CppPath::from(&*format!("{namespace}::Box")),
                 generic_args: vec![t.into_cpp(namespace, crate_name)],
+                tail: None,
             },
             RustType::Ref(m, t) => CppType {
                 path: match m {
@@ -103,10 +106,12 @@ impl IntoCpp for RustType {
                     Mutability::Not => CppPath::from(&*format!("{}::Ref", namespace)),
                 },
                 generic_args: vec![t.into_cpp(namespace, crate_name)],
+                tail: None,
             },
             RustType::Slice(s) => CppType {
                 path: CppPath::from(&*format!("{namespace}::Slice")),
                 generic_args: vec![s.into_cpp(namespace, crate_name)],
+                tail: None,
             },
             RustType::Raw(m, t) => CppType {
                 path: match m {
@@ -114,6 +119,7 @@ impl IntoCpp for RustType {
                     Mutability::Not => CppPath::from(&*format!("{namespace}::Raw")),
                 },
                 generic_args: vec![t.into_cpp(namespace, crate_name)],
+                tail: None,
             },
             RustType::Adt(pg) => pg.into_cpp(namespace, crate_name),
             RustType::Tuple(v) => {
@@ -126,6 +132,7 @@ impl IntoCpp for RustType {
                         .into_iter()
                         .map(|x| x.into_cpp(namespace, crate_name))
                         .collect(),
+                    tail: None,
                 }
             }
             RustType::Dyn(tr, marker_bounds) => {
@@ -140,6 +147,7 @@ impl IntoCpp for RustType {
                                 .map(|x| CppType::from(&*format!("{namespace}::{x}"))),
                         )
                         .collect(),
+                    tail: None,
                 }
             }
             RustType::Impl(_, _) => panic!("impl Trait is invalid in C++"),
@@ -423,11 +431,6 @@ fn mangle_name(name: &str, mangling_base: &str) -> String {
         w!(name, "{}{pos}", which.2);
     }
     name
-}
-
-pub struct ConstructorMangledNames {
-    pub constructor: String,
-    pub match_check: String,
 }
 
 impl RustFile {
@@ -732,13 +735,12 @@ pub extern "C" fn {constructor}("#
         constructor
     }
 
-    pub fn add_constructor(
+    pub fn add_constructor<'a>(
         &mut self,
         rust_name: &str,
-        args: &[(String, RustType)],
-    ) -> ConstructorMangledNames {
+        args: impl IntoIterator<Item = (&'a String, &'a RustType)> + Clone,
+    ) -> String {
         let constructor = self.mangle_name(rust_name);
-        let match_check = format!("{constructor}_check");
         w!(
             self,
             r#"
@@ -746,7 +748,7 @@ pub extern "C" fn {constructor}("#
 #[unsafe(no_mangle)]
 pub extern "C" fn {constructor}("#
         );
-        for (name, _) in args {
+        for (name, _) in args.clone() {
             w!(self, "f_{name}: *mut u8, ");
         }
         w!(
@@ -758,6 +760,11 @@ pub extern "C" fn {constructor}("#
             w!(self, "{name}: ::std::ptr::read(f_{name} as *mut {ty}), ");
         }
         wln!(self, "}}) }} }}");
+        constructor
+    }
+
+    pub(crate) fn add_match_check(&mut self, rust_name: &str) -> String {
+        let match_check = self.mangle_name(&format!("{rust_name}_check"));
         w!(
             self,
             r#"
@@ -767,10 +774,44 @@ pub extern "C" fn {match_check}(i: *mut u8, o: *mut u8) {{ unsafe {{
     *o = matches!(&*(i as *mut &_), {rust_name} {{ .. }}) as u8;
 }} }}"#
         );
-        ConstructorMangledNames {
-            constructor,
-            match_check,
+        match_check
+    }
+
+    pub(crate) fn add_discriminant(
+        &mut self,
+        rust_name: &str,
+        variants: &[ZngurVariant],
+    ) -> Option<String> {
+        if variants.is_empty() {
+            return None;
         }
+
+        let name = self.mangle_name(&format!("{rust_name}::match"));
+        w!(
+            self,
+            r#"
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {name}(i: *mut u8) -> u32 {{ unsafe {{
+    match &*(i as *mut {rust_name} as *const _) {{"#
+        );
+        for (n, variant) in variants.iter().enumerate() {
+            let name = &variant.name;
+            w!(
+                self,
+                r#"
+        {rust_name}::{name} {{ .. }} => {n},
+        "#
+            );
+        }
+        w!(
+            self,
+            r#"
+    }}
+}} }}
+            "#
+        );
+        Some(name)
     }
 
     pub(crate) fn add_field_assertions(
@@ -798,6 +839,37 @@ pub static {mn}: usize = ::std::mem::offset_of!({owner}, {name});
             );
             Some(mn)
         }
+    }
+
+    pub(crate) fn add_variant_field_calculations(
+        &mut self,
+        field: &ZngurField,
+        owner: &RustType,
+        variant: &str,
+    ) -> String {
+        let ZngurField { name, .. } = field;
+        let mn = self.mangle_name(&format!("{owner}_{variant}_field_{name}_offset"));
+        // SAFETY: this function is only called from the variant class methods.
+        // The only way to obtain variant classes is to match, so it is impossible
+        // to obtain an instance of variant class set to a wrong variant,
+        // so this match will always pass.
+        wln!(
+            self,
+            r#"
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {mn}(i: *const u8) -> usize {{ unsafe {{
+    let base = &*(i as *const {owner});
+    match base {{
+        {owner}::{variant} {{ {name}: f, .. }} => {{
+            (f as *const _ as usize) - (base as *const _ as usize)
+        }}
+        _ => std::hint::unreachable_unchecked(),
+    }}
+}} }}
+            "#
+        );
+        mn
     }
 
     pub fn add_extern_cpp_impl(

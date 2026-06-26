@@ -12,7 +12,9 @@ type crate::Processor {
 type ::std::option::Option<crate::Processor> {
     #layout(size = 1, align = 1);
 
-    constructor None;
-    constructor Some(crate::Processor);
-    fn unwrap(self) -> crate::Processor;   
+    variant None {}
+    variant Some {
+        field 0 (offset = auto, type = crate::Processor);
+    }
+    fn unwrap(self) -> crate::Processor;
 }

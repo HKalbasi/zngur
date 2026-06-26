@@ -51,29 +51,29 @@ mod ::std {
     type option::Option<usize> {
         #layout(size = 16, align = 8);
 
-        constructor None;
-        constructor Some(usize);
-
-        fn unwrap(self) -> usize;
+        variant None {}
+        variant Some {
+            field 0 (offset = auto, type = usize);
+        }
     }
 
     type option::Option<crate::KeyValuePair> {
         #layout(size = 32, align = 8);
 
-        constructor None;
-        constructor Some(crate::KeyValuePair);
-
-        fn unwrap(self) -> crate::KeyValuePair;
+        variant None {}
+        variant Some {
+            field 0 (offset = auto, type = crate::KeyValuePair);
+        }
     }
 
     type option::Option<&crate::KeyValuePair> {
         #layout(size = 8, align = 8);
         wellknown_traits(Copy);
 
-        constructor None;
-        constructor Some(&crate::KeyValuePair);
-
-        fn unwrap(self) -> &crate::KeyValuePair;
+        variant None {}
+        variant Some {
+            field 0 (offset = auto, type = &crate::KeyValuePair);
+        }
     }
 
 

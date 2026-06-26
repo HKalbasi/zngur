@@ -9,6 +9,10 @@
 #include <array>
 #include <iostream>
 #include <functional>
+#if __cplusplus >= 201703L
+#include <variant>
+#include <optional>
+#endif
 #include <math.h>
 #include <type_traits>
 
@@ -44,14 +48,35 @@ extern "C" {
       ) noexcept ;
     {% endfor %}
 
-    {% for constructor in td.constructors %}
+    {% if let Some(constructor) = td.constructor %}
       void {{ constructor.rust_link_name }} (
         {% for n in 0..constructor.inputs.len() %}
           uint8_t*,
         {% endfor %}
         uint8_t* o
       ) noexcept ;
+    {% endif %}
+
+    {% for variant in td.variants %}
+      {% if let Some(constructor) = variant.constructor %}
+        void {{ constructor.rust_link_name }} (
+          {% for n in 0..constructor.inputs.len() %}
+            uint8_t*,
+          {% endfor %}
+          uint8_t* o
+        ) noexcept ;
+      {% endif %}
+      void {{ variant.match_check }} (uint8_t* i, uint8_t* o) noexcept;
+      {% for field in variant.fields %}
+        {% if let ZngurFieldDataOffset::AutoDynamic(field_offset_getter_name) = field.offset %}
+        size_t {{ field_offset_getter_name }}(const uint8_t* p) noexcept;
+        {% endif %}
+      {% endfor %}
     {% endfor %}
+
+    {% if let Some(discriminant) = td.discriminant %}
+      uint32_t {{ discriminant }} (uint8_t* i) noexcept;
+    {% endif %}
 
     {% if let Some(cpp_value) = td.cpp_value %}
       ::{{ self.namespace }}::ZngurCppOpaqueOwnedObject* {{ cpp_value.0 }}(uint8_t*);
@@ -199,6 +224,11 @@ namespace {{ self.namespace }} {
   {{ td.ty.path.open_namespace() }}
     {{ td.ty.specialization_decl() }} {
       public:
+
+      {% for variant in td.variants %}
+      class {{ variant.name }};
+      {% endfor %}
+
     {% if td.layout.is_only_by_ref() %}
         {{ name }}() = delete;
 
@@ -394,13 +424,79 @@ namespace {{ self.namespace }} {
         {% endif %}
     {% endfor %}
 
-    {% for constructor in td.constructors %}
+    {% if let Some(constructor) = td.constructor %}
       {{ td.ty.path.0.last().unwrap() }}(
         {{ splat!(&constructor.inputs, |n, ty|, "{ty}") }}
       ) noexcept ;
+    {% endif %}
+
+#if __cplusplus >= 201703L
+    {% if let Some(discriminant) = td.discriminant %}
+      inline ::std::variant<
+      {% for variant in td.variants %}
+        {{ name }}::{{ variant.name }}{% if !loop.last %},{% endif %}
+      {% endfor %}
+      > match() & noexcept;
+
+      inline ::std::variant<
+      {% for variant in td.variants %}
+        rust::Ref<{{ name }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+      {% endfor %}
+      > match_ref() & noexcept;
+
+      inline ::std::variant<
+      {% for variant in td.variants %}
+        rust::RefMut<{{ name }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+      {% endfor %}
+      > match_mut() & noexcept;
+    {% endif %}
+#endif
+
+    {% for variant in td.variants %}
+      inline {{ td.ty.path.0.last().unwrap() }}({{ variant.name }}&& child) noexcept;
     {% endfor %}
 
   }; // {{ td.ty.specialization_decl() }}
+
+  {% for variant in td.variants %}
+    class {{ td.ty.specialized_name() }}::{{ variant.name }} {
+    public:
+      union {
+        {{ td.ty.specialized_name() }} __zngur_parent;
+        {% for (index, field) in variant.fields.iter().enumerate() %}
+          ::{{ self.namespace }}::FieldOwned<
+            {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+            ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}::{{ variant.name }}, {{ index }} >
+          > {{ self.cpp_handle_field_name(field.name) }};
+        {% endfor %}
+      };
+
+      inline {{ variant.name }}(
+        ::{{ self.namespace }}::__zngur_internal_unsafe_enum_constructor,
+        {{ td.ty.specialized_name() }}&& parent
+      ) noexcept: __zngur_parent(::std::move(parent)) {}
+
+      inline ~{{ variant.name }}() { ::{{ self.namespace }}::__zng_destroy_at(&__zngur_parent); }
+
+#if __cplusplus >= 201703L
+      inline static ::std::optional<{{ variant.name }}> match({{ td.ty.specialized_name() }}& parent);
+      inline static ::std::optional<rust::Ref<{{ variant.name }}>> match_ref(rust::Ref<{{ td.ty.specialized_name() }}> parent);
+      inline static ::std::optional<rust::RefMut<{{ variant.name }}>> match_mut(rust::RefMut<{{ td.ty.specialized_name() }}> parent);
+#endif
+
+      {% if let Some(c) = variant.constructor.as_ref() %}
+        inline {{ variant.name }}({{ splat!(&c.inputs, |n, ty|, "{ty} i{n}") }}) noexcept ;
+      {% endif %}
+      inline static bool check(Ref<{{ name }}>) noexcept;
+
+      {% if td.has_copy() %}
+        {{ variant.name }}(const {{ variant.name }}& other) : __zngur_parent (other.__zngur_parent) {}
+        {{ variant.name }}& operator=(const {{ variant.name }}& other) { __zngur_parent = other.__zngur_parent; return *this; }
+      {% endif %}
+      {{ variant.name }}({{ variant.name }}&& other) : __zngur_parent (::std::move(other.__zngur_parent)) {}
+      {{ variant.name }}& operator=({{ variant.name }}&& other) { __zngur_parent = ::std::move(other.__zngur_parent); return *this; }
+    };
+  {% endfor %}
 
 {{ td.ty.path.close_namespace() }}
 
@@ -455,11 +551,24 @@ namespace {{ self.namespace }} {
 
 {% endif %}
 
+{% for variant in td.variants.iter() %}
+  {% for (index, field) in variant.fields.iter().enumerate() %}
+    {% if let ZngurFieldDataOffset::AutoDynamic(field_offset_getter_name) = field.offset %}
+      template<>
+      struct FieldAutoOffset< {{ td.ty }}::{{ variant.name }}, {{ index }} > {
+        static size_t offset(const uint8_t* parent) noexcept {
+          return {{ field_offset_getter_name }}(parent);
+        }
+      };
+    {% endif %}
+  {% endfor %}
+{% endfor %}
+
 {% for (index, field) in td.fields.iter().enumerate() %}
   {% if let ZngurFieldDataOffset::Auto(field_offset_const_name) = field.offset %}
   template <>
   struct FieldAutoOffset< {{ td.ty }}, {{ index }} > {
-    static constexpr size_t offset() noexcept { return {{ field_offset_const_name }}; }
+    static constexpr size_t offset(const uint8_t*) noexcept { return {{ field_offset_const_name }}; }
   };
   {% endif %}
 {% endfor %}
@@ -467,6 +576,34 @@ namespace {{ self.namespace }} {
 } // namespace {{ self.namespace }}
 
 namespace {{ self.namespace }} {
+
+  {% for variant in td.variants %}
+  template<>
+  struct RefMut< {{ td.ty }}::{{ variant.name }}> {
+  public:
+    RefMut() : __zngur_data(0) { }
+    RefMut({{ self.namespace }}::__zngur_internal_unsafe_enum_constructor, size_t p) : __zngur_data(p) {}
+    union {
+      size_t __zngur_data;
+
+      {% if !td.layout.is_only_by_ref() %}
+      {% for (index, field) in variant.fields.iter().enumerate() %}
+        ::{{ self.namespace }}::FieldRefMut<
+          {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+          ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}::{{ variant.name }}, {{ index }} >
+        > {{ self.cpp_handle_field_name(field.name) }};
+      {% endfor %}
+      {% endif %}
+    };
+
+    {% if !td.layout.is_only_by_ref() %}
+    RefMut({{ td.ty }}::{{ variant.name }}& t) {
+      ::{{ self.namespace }}::__zngur_internal_check_init<{{ td.ty }}>(t.__zngur_parent);
+      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t.__zngur_parent));
+    }
+    {% endif %}
+  };
+  {% endfor %}
 
   template<>
   struct RefMut< {{ td.ty }} > {
@@ -510,7 +647,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       RefMut(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(nullptr);
           if (heap_allocated) {
             __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -529,7 +666,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       RefMut(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
           if (heap_allocated) {
             __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -547,7 +684,7 @@ namespace {{ self.namespace }} {
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       RefMut(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(nullptr);
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
 
@@ -560,7 +697,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       RefMut(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
     {% endif %}
@@ -594,6 +731,16 @@ namespace {{ self.namespace }} {
       {% endif %}
     {% endfor %}
 
+#if __cplusplus >= 201703L
+    {% if let Some(discriminant) = td.discriminant %}
+      inline ::std::variant<
+      {% for variant in td.variants %}
+        rust::RefMut<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+      {% endfor %}
+      > match_mut() noexcept;
+    {% endif %}
+#endif
+
   }; // struct RefMut< {{ td.ty }} >
 
   template<>
@@ -620,6 +767,38 @@ namespace {{ self.namespace }} {
 {% endif %}
 
 namespace {{ self.namespace }} {
+
+  {% for variant in td.variants %}
+  template<>
+  struct Ref< {{ td.ty }}::{{ variant.name }}> {
+  public:
+    Ref() : __zngur_data(0) { }
+    Ref({{ self.namespace }}::__zngur_internal_unsafe_enum_constructor, size_t p) : __zngur_data(p) {}
+    union {
+      size_t __zngur_data;
+
+      {% if !td.layout.is_only_by_ref() %}
+      {% for (index, field) in variant.fields.iter().enumerate() %}
+        ::{{ self.namespace }}::FieldRef<
+          {{ field.ty.into_cpp(self.namespace, self.crate_name) }},
+          ::{{ self.namespace }}::FieldAutoOffset< {{ td.ty }}::{{ variant.name }}, {{ index }} >
+        > {{ self.cpp_handle_field_name(field.name) }};
+      {% endfor %}
+      {% endif %}
+    };
+
+    {% if !td.layout.is_only_by_ref() %}
+    Ref(const {{ td.ty }}::{{ variant.name }}& t) {
+      ::{{ self.namespace }}::__zngur_internal_check_init<{{ td.ty }}>(t.__zngur_parent);
+      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t.__zngur_parent));
+    }
+    {% endif %}
+
+    Ref(RefMut< {{ td.ty }}::{{ variant.name }} > rm) {
+      __zngur_data = rm.__zngur_data;
+    }
+  };
+  {% endfor %}
 
   template<>
   struct Ref< {{ td.ty }} > {
@@ -667,7 +846,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       Ref(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(nullptr);
           if (heap_allocated) {
               __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -685,7 +864,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       Ref(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
           if (heap_allocated) {
               __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -702,7 +881,7 @@ namespace {{ self.namespace }} {
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRef< {{ td.ty }}, Offset, Offsets...>& f) {
-          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(nullptr);
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
 
@@ -715,7 +894,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRef< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
 
@@ -728,7 +907,7 @@ namespace {{ self.namespace }} {
               zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          constexpr size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(nullptr);
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
 
@@ -741,7 +920,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset();
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
     {% endif %}
@@ -777,10 +956,21 @@ namespace {{ self.namespace }} {
       {% endif %}
     {% endfor %}
 
+#if __cplusplus >= 201703L
+    {% if let Some(discriminant) = td.discriminant %}
+      inline ::std::variant<
+      {% for variant in td.variants %}
+        rust::Ref<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+      {% endfor %}
+      > match_ref() noexcept;
+    {% endif %}
+#endif
+
     {% if td.ty.path.to_string() == format!("::{}::Str", &self.namespace) %}
       friend auto ::operator""_rs(const char* input, size_t len) -> ::{{ self.namespace }}::Ref<::{{ self.namespace }}::Str>;
     {% endif %}
-};
+  }; // struct Ref< {{ td.ty }}>
+
 
 {% for ref_kind in ["Ref", "Raw", "RawMut"] %}
 
@@ -830,11 +1020,11 @@ struct __zngur_internal< {{ ref_kind }} < {{ td.ty }} > > {
 
   {% let cpp_type = td.ty.to_string() %}
   {% let name = cpp_type.strip_prefix("::").unwrap() %}
+  {% let constructor_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap() %}
 
-  {% for c in td.constructors %}
-    {% let fn_name = name.to_owned() + "::" + td.ty.path.0.last().unwrap() %}
+  {% if let Some(c) = td.constructor %}
     {#  do default construction first to ensure allocation  #}
-    inline {{ fn_name }}({{ splat!(&c.inputs, |n, ty|, "{ty} i{n}") }}) noexcept : {{ fn_name }}() { 
+    inline {{ constructor_name }}({{ splat!(&c.inputs, |n, ty|, "{ty} i{n}") }}) noexcept : {{ constructor_name }}() { 
       ::{{ self.namespace }}::__zngur_internal_assume_init(*this);
       {{ c.rust_link_name }}(
         {% for n in 0..c.inputs.len() %}
@@ -846,7 +1036,144 @@ struct __zngur_internal< {{ ref_kind }} < {{ td.ty }} > > {
         ::{{ self.namespace }}::__zngur_internal_assume_deinit(i{{ n }});
       {% endfor %}
     }
+  {% endif %}
+
+  {% for variant in td.variants %}
+    inline {{ constructor_name }}({{ variant.name }}&& child) noexcept: {{ constructor_name }}() {
+      *this = ::std::move(child.__zngur_parent);
+    }
+
+    {% if let Some(c) = variant.constructor.as_ref() %}
+      inline {{ name }}::{{ variant.name }}::{{ variant.name }}({{ splat!(&c.inputs, |n, ty|, "{ty} i{n}") }}) noexcept : __zngur_parent() {
+        ::{{ self.namespace }}::__zngur_internal_assume_init(this->__zngur_parent);
+        {{ c.rust_link_name }}(
+          {% for n in 0..c.inputs.len() %}
+            ::{{ self.namespace }}::__zngur_internal_data_ptr(i{{ n }}),
+          {% endfor %}
+          ::{{ self.namespace }}::__zngur_internal_data_ptr(this->__zngur_parent)
+        );
+        {% for n in 0..c.inputs.len() %}
+          ::{{ self.namespace }}::__zngur_internal_assume_deinit(i{{ n }});
+        {% endfor %}
+      }
+    {% endif %}
+
+    inline bool {{ name }}::{{ variant.name }}::check(Ref<{{ name }}> parent) noexcept{
+      uint8_t result;
+      {{ variant.match_check }}(
+        ::{{ self.namespace }}::__zngur_internal_data_ptr(parent),
+        &result
+      );
+      return result;
+    }
+
+#if __cplusplus >= 201703L
+      inline ::std::optional<{{ name }}::{{ variant.name }}> {{ name }}::{{ variant.name }}::match(
+        {{ name }}& parent
+      ) {
+        if ({{ name }}::{{ variant.name }}::check(parent)) {
+          return {{ name }}::{{ variant.name }} {
+            ::{{ self.namespace }}::__zngur_internal_unsafe_enum_constructor{},
+            ::std::move(parent),
+          };
+        }
+        return ::std::nullopt;
+      }
+
+      inline ::std::optional<rust::Ref<{{ name }}::{{ variant.name }}>> {{ name }}::{{ variant.name }}::match_ref(
+        rust::Ref<{{ name }}> parent
+      ) {
+        if ({{ name }}::{{ variant.name }}::check(parent)) {
+          rust::Ref<{{ name }}::{{ variant.name }}> r;
+          r.__zngur_data = parent.__zngur_data;
+          return r;
+        }
+        return ::std::nullopt;
+      }
+
+      inline ::std::optional<rust::RefMut<{{ name }}::{{ variant.name }}>> {{ name }}::{{ variant.name }}::match_mut(
+        rust::RefMut<{{ name }}> parent
+      ) {
+        if ({{ name }}::{{ variant.name }}::check(parent)) {
+          rust::RefMut<{{ name }}::{{ variant.name }}> r;
+          r.__zngur_data = parent.__zngur_data;
+          return r;
+        }
+        return ::std::nullopt;
+      }
+#endif
   {% endfor %}
+
+  {% if let Some(discriminant) = td.discriminant %}
+#if __cplusplus >= 201703L
+    inline ::std::variant<
+    {% for variant in td.variants %}
+      {{ name }}::{{ variant.name }}{% if !loop.last %},{% endif %}
+    {% endfor %}
+    > {{ name }}::match() & noexcept{
+      uint32_t d = {{ discriminant }}(reinterpret_cast<uint8_t*>(&this->__zngur_data));
+      switch (d) {
+      {% for (n, variant) in td.variants.iter().enumerate() %}
+        case {{ n }}: return {{ name }}::{{ variant.name }}(
+          {{ self.namespace }}::__zngur_internal_unsafe_enum_constructor{},
+          ::std::move(*this)
+        );
+      {% endfor %}
+      }
+      ::std::abort();  // exhaustiveness check in Rust prevents us from reaching this
+    }
+
+    inline ::std::variant<
+    {% for variant in td.variants %}
+      rust::Ref<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+    {% endfor %}
+    > {{ name }}::match_ref() & noexcept{
+        return rust::Ref<{{ td.ty }}>(*this).match_ref();
+    }
+
+    inline ::std::variant<
+    {% for variant in td.variants %}
+      rust::RefMut<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+    {% endfor %}
+    > {{ name }}::match_mut() & noexcept{
+        return rust::RefMut<{{ td.ty }}>(*this).match_mut();
+    }
+
+    inline ::std::variant<
+    {% for variant in td.variants %}
+      rust::Ref<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+    {% endfor %}
+    > rust::Ref<{{ name }}>::match_ref() noexcept{
+      uint32_t d = {{ discriminant }}(reinterpret_cast<uint8_t*>(this->__zngur_data));
+      switch (d) {
+      {% for (n, variant) in td.variants.iter().enumerate() %}
+        case {{ n }}: return rust::Ref<{{ name }}::{{ variant.name }}>(
+          {{ self.namespace }}::__zngur_internal_unsafe_enum_constructor{},
+          this->__zngur_data
+        );
+      {% endfor %}
+      }
+      ::std::abort();  // exhaustiveness check in Rust prevents us from reaching this
+    }
+
+    inline ::std::variant<
+    {% for variant in td.variants %}
+      rust::RefMut<{{ td.ty }}::{{ variant.name }}>{% if !loop.last %},{% endif %}
+    {% endfor %}
+    > rust::RefMut<{{ name }}>::match_mut() noexcept{
+      uint32_t d = {{ discriminant }}(reinterpret_cast<uint8_t*>(this->__zngur_data));
+      switch (d) {
+      {% for (n, variant) in td.variants.iter().enumerate() %}
+        case {{ n }}: return rust::RefMut<{{ name }}::{{ variant.name }}>(
+          {{ self.namespace }}::__zngur_internal_unsafe_enum_constructor{},
+          this->__zngur_data
+        );
+      {% endfor %}
+      }
+      ::std::abort();  // exhaustiveness check in Rust prevents us from reaching this
+    }
+#endif
+  {% endif %}
 
   {{ self.render_from_trait(td) }}
   {{ self.render_from_trait_ref(td) }}
