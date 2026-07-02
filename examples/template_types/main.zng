@@ -46,8 +46,7 @@ mod crate {
     type ::std::vec::Vec<TypeA> {
         wellknown_traits(Debug);
     }
-    // These definitions are required for the Vec<T> template to instantiate all methods
-    type [TypeA] {}
+    // This definition is required for the Vec<T> template to instantiate all methods
     type ::std::option::Option<&TypeA> {} 
 
     type TypeB {
@@ -58,7 +57,6 @@ mod crate {
 
     // All relevant definitions are provided by the templates
     type ::std::vec::Vec<TypeB> {}
-    type [TypeB] {}
     type ::std::option::Option<&TypeB> {}
 
     type ::std::boxed::Box<dyn MyTrait> {
