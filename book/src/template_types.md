@@ -1,6 +1,6 @@
 # Template types
 
-Template type definitions provide a shorthand syntax to avoid repeating the defintion of methods on common generic types. All of the items within a template type definition are copied into each matching concrete type definition. At the moment, template types are considered unstable and ust be activated with the `#unstable(template_types)` directive.
+Template type definitions provide a shorthand syntax to avoid repeating the definition of methods on common generic types. All of the items within a template type definition are copied into each matching concrete type definition. At the moment, template types are considered unstable and ust be activated with the `#unstable(template_types)` directive.
 
 For example:
 ```
@@ -36,7 +36,7 @@ type<T> option::Option<&T> {
 }
 ```
 
-Note that multiple template defintions can apply to the same concrete type, so `Option<&i32>` would inherit definitions from the `Option<T>` template and the `Option<&T>` template.
+Note that multiple template definitions can apply to the same concrete type, so `Option<&i32>` would inherit definitions from the `Option<T>` template and the `Option<&T>` template.
 
 You can also override the layout given in a template:
 ```
