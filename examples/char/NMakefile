@@ -1,6 +1,6 @@
 CXX = cl.exe
 # MSVC doesn't support earlier that c++14
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++14 
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++14 /Zc:__cplusplus
 WINLIBS = ntdll.lib
 
 EXAMPLE_NAME = char

@@ -1,5 +1,5 @@
 CXX = cl.exe
-CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 
+CXXFLAGS = /W4 /DEBUG /EHsc /std:c++20 /Zc:__cplusplus
 WINLIBS = ntdll.lib User32.lib
 
 EXAMPLE_NAME = rustyline
