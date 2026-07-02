@@ -8,7 +8,6 @@ int main() {
   vec_a.push(rust::crate::TypeA(1));
   vec_a.push(rust::crate::TypeA(2));
   vec_a.push(rust::crate::TypeA(3));
-  // vec_a.get(0); // Does not exist because [TypeA] is not defined in main.zng
   zngur_dbg(vec_a);
 
   auto vec_b = rust::std::vec::Vec<rust::crate::TypeB>::new_();

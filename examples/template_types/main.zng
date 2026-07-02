@@ -46,6 +46,9 @@ mod crate {
     type ::std::vec::Vec<TypeA> {
         wellknown_traits(Debug);
     }
+    // These definitions are required for the Vec<T> template to instantiate all methods
+    type [TypeA] {}
+    type ::std::option::Option<&TypeA> {} 
 
     type TypeB {
         #layout(size = 4, align = 4);

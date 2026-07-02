@@ -1311,12 +1311,11 @@ impl ZngurSpecBuilder {
             imports: _,
             mut ty_to_locations,
         } = self;
-        let defined_types = spec.types.iter().map(|ty| ty.ty.clone()).collect();
         for ty in &mut spec.types {
             let mut template_locations = Vec::new();
             for template in &templates {
                 if let Some(template_match) =
-                    try_match_template(&ty.ty, &template.ty, &defined_types)
+                    try_match_template(&ty.ty, &template.ty)
                 {
                     let location = (
                         template.filename.clone(),
