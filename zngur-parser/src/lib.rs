@@ -1314,9 +1314,7 @@ impl ZngurSpecBuilder {
         for ty in &mut spec.types {
             let mut template_locations = Vec::new();
             for template in &templates {
-                if let Some(template_match) =
-                    try_match_template(&ty.ty, &template.ty)
-                {
+                if let Some(template_match) = try_match_template(&ty.ty, &template.ty) {
                     let location = (
                         template.filename.clone(),
                         template.span.start..template.span.end,

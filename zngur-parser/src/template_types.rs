@@ -213,18 +213,13 @@ fn substitute_method_vars<'a>(
         },
         use_path: use_path.clone(),
         deref: match deref {
-            Some((ty, mutability)) => {
-                Some((substitute_vars(&ty, mapping)?, *mutability))
-            }
+            Some((ty, mutability)) => Some((substitute_vars(&ty, mapping)?, *mutability)),
             None => None,
         },
     })
 }
 
-pub fn try_match_template(
-    ty: &RustType,
-    template: &ZngurType,
-) -> Option<TemplateMatch> {
+pub fn try_match_template(ty: &RustType, template: &ZngurType) -> Option<TemplateMatch> {
     let mut mapping = HashMap::new();
     if !matches_template(ty, &template.ty, &mut mapping) {
         return None;
@@ -240,25 +235,20 @@ pub fn try_match_template(
         cpp_value,
         cpp_stack_owned,
     } = template;
-    debug_assert_eq!(
-        substitute_vars(template_ty, &mapping).unwrap(),
-        *ty
-    );
+    debug_assert_eq!(substitute_vars(template_ty, &mapping).unwrap(), *ty);
     let new_ty = ZngurType {
         ty: ty.clone(),
         layout: *layout,
         wellknown_traits: wellknown_traits.clone(),
         methods: methods
             .iter()
-            .filter_map(
-                |method| match substitute_method_vars(method, &mapping) {
-                    Ok(m) => Some(m),
-                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
-                        "Unbound type variable {} in method {} in template {} for type {}",
-                        var.0, method.data.name, template.ty, ty
-                    ),
-                },
-            )
+            .filter_map(|method| match substitute_method_vars(method, &mapping) {
+                Ok(m) => Some(m),
+                Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                    "Unbound type variable {} in method {} in template {} for type {}",
+                    var.0, method.data.name, template.ty, ty
+                ),
+            })
             .collect(),
         constructors: constructors
             .iter()
@@ -266,9 +256,7 @@ pub fn try_match_template(
                 match constructor
                     .inputs
                     .iter()
-                    .map(|(name, ty)| {
-                        substitute_vars(ty, &mapping).map(|ty| (name.clone(), ty))
-                    })
+                    .map(|(name, ty)| substitute_vars(ty, &mapping).map(|ty| (name.clone(), ty)))
                     .collect()
                 {
                     Ok(inputs) => Some(ZngurConstructor {
@@ -284,19 +272,17 @@ pub fn try_match_template(
             .collect(),
         fields: fields
             .iter()
-            .filter_map(
-                |field| match substitute_vars(&field.ty, &mapping) {
-                    Ok(ty) => Some(ZngurField {
-                        name: field.name.clone(),
-                        ty,
-                        offset: field.offset,
-                    }),
-                    Err(SubstitutionError::UnboundVar(var)) => unreachable!(
-                        "Unbound type variable {} in field {} in template {} for type {}",
-                        var.0, field.name, template.ty, ty
-                    ),
-                },
-            )
+            .filter_map(|field| match substitute_vars(&field.ty, &mapping) {
+                Ok(ty) => Some(ZngurField {
+                    name: field.name.clone(),
+                    ty,
+                    offset: field.offset,
+                }),
+                Err(SubstitutionError::UnboundVar(var)) => unreachable!(
+                    "Unbound type variable {} in field {} in template {} for type {}",
+                    var.0, field.name, template.ty, ty
+                ),
+            })
             .collect(),
         cpp_value: cpp_value.clone(),
         cpp_ref: cpp_ref.clone(),
