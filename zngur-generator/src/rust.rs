@@ -922,6 +922,7 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut cpp::{type_name} {{
 
     pub fn add_function(
         &mut self,
+        cxx_name: &str,
         rust_name: &str,
         inputs: &[RustType],
         output: &RustType,
@@ -930,7 +931,8 @@ pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut cpp::{type_name} {{
         namespace: &str,
         crate_name: &str,
     ) -> CppFnSig {
-        let mut mangled_name = self.mangle_name(rust_name) + "_" + &hash_of_sig(&inputs);
+        let mut mangled_name =
+            self.mangle_name(&format!("{cxx_name}={rust_name}")) + "_" + &hash_of_sig(&inputs);
         if deref.is_some() {
             mangled_name += "_deref";
         }

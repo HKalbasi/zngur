@@ -265,10 +265,13 @@ impl ZngurGenerator {
                     data: method,
                     use_path,
                     deref,
+                    cpp_name,
                 } = method_details;
                 let rusty_inputs = real_inputs_of_method(&method, &ty);
+                let cpp_name = cpp_name.as_ref().unwrap_or(&method.name);
 
                 let sig = rust_file.add_function(
+                    cpp_name,
                     &format!(
                         "<{}>::{}::<{}>",
                         deref.as_ref().map(|x| &x.0).unwrap_or(&ty),
@@ -283,7 +286,7 @@ impl ZngurGenerator {
                     &sanitized_crate_name,
                 );
                 cpp_methods.push(CppMethod {
-                    name: cpp_handle_keyword(&method.name).to_owned(),
+                    name: cpp_handle_keyword(cpp_name).to_owned(),
                     kind: method.receiver,
                     sig,
                 });
@@ -349,6 +352,7 @@ pub mod cpp {{
         }
         for func in zng.funcs {
             let sig = rust_file.add_function(
+                &func.path.to_string(),
                 &func.path.to_string(),
                 &func.inputs,
                 &func.output,

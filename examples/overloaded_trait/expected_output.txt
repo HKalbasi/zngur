@@ -1,0 +1,15 @@
+[main.cpp:5] s.as_ref() = "string"
+[main.cpp:6] s.as_ref_u8() = [
+    115,
+    116,
+    114,
+    105,
+    110,
+    103,
+]
+[main.cpp:12] ip.partial_cmp(ipv4) = Some(
+    Greater,
+)
+[main.cpp:13] ip.partial_cmp(ipv6) = Some(
+    Equal,
+)

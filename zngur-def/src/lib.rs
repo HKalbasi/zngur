@@ -135,6 +135,7 @@ pub struct ZngurMethodDetails {
     pub data: ZngurMethod,
     pub use_path: Option<Vec<String>>,
     pub deref: Option<(RustType, Mutability)>,
+    pub cpp_name: Option<String>,
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]

@@ -371,6 +371,7 @@ enum ParsedTypeItem<'a> {
         data: ParsedMethod<'a>,
         use_path: Option<ParsedPath<'a>>,
         deref: Option<ParsedRustType<'a>>,
+        cpp_name: Option<&'a str>,
     },
     CppValue {
         field: &'a str,
@@ -587,6 +588,7 @@ impl ProcessedItem<'_> {
                             data,
                             use_path,
                             deref,
+                            cpp_name,
                         } => {
                             let deref = deref.and_then(|x| {
                                 let deref_type = x.to_zngur(scope);
@@ -606,6 +608,7 @@ impl ProcessedItem<'_> {
                                 data: data.to_zngur(scope),
                                 use_path: use_path.map(|x| scope.resolve_path(x)),
                                 deref,
+                                cpp_name: cpp_name.map(|s| s.to_owned()),
                             });
                         }
                         ParsedTypeItem::CppValue { field, cpp_type } => {
@@ -1951,11 +1954,19 @@ fn inner_type_item<'a>()
                         .map(Some)
                         .or(empty().to(None)),
                 )
-                .map(|((data, use_path), deref)| ParsedTypeItem::Method {
-                    deref,
-                    use_path,
-                    data,
-                }),
+                .then(
+                    just(Token::KwAs)
+                        .ignore_then(select! { Token::Ident(c) => Some(c), })
+                        .or(empty().to(None)),
+                )
+                .map(
+                    |(((data, use_path), deref), cpp_name)| ParsedTypeItem::Method {
+                        deref,
+                        use_path,
+                        data,
+                        cpp_name,
+                    },
+                ),
         ));
 
         let match_stmt =

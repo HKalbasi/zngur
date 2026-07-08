@@ -195,6 +195,7 @@ fn substitute_method_vars<'a>(
             },
         use_path,
         deref,
+        cpp_name,
     } = m;
     Ok(ZngurMethodDetails {
         data: ZngurMethod {
@@ -216,6 +217,7 @@ fn substitute_method_vars<'a>(
             Some((ty, mutability)) => Some((substitute_vars(&ty, mapping)?, *mutability)),
             None => None,
         },
+        cpp_name: cpp_name.clone(),
     })
 }
 

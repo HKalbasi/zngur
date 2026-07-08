@@ -67,3 +67,33 @@ char* bc = (char*)&b;
 So Zngur can't use `bool` the way it uses `uint32_t` and friends.
 But it adds some special codes to `bool`
 so that you can use it in an `if` statement or cast it to and from C++ `bool`.
+
+## Renaming generated C++ wrapper functions
+
+Traits may be implemented multiple times with different parameters for the same Rust type, providing identically named methods with different type signatures.
+C++ does not support overloading functions based on their return type in this manner, but we still want to be able to expose all implementations of a trait without requiring *additional* traits just to rename methods.
+Zngur allows renaming an exposed method on the C++ side from the spec itself to support this.
+Since C++ does support overloading methods based on their argument types such renaming is only needed when method implementations differ in their return types only.
+
+```
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+
+    fn as_ref(&self) -> &str use ::std::convert::AsRef;
+    // renaming needed for the second overload since only the return type differs
+    fn as_ref(&self) -> &[u8] use ::std::convert::AsRef as as_ref_u8;
+}
+
+mod ::std::net {
+    type IpAddr {
+        #layout(size = 17, align = 1);
+
+        constructor V4(Ipv4Addr);
+        constructor V6(Ipv6Addr);
+
+        fn partial_cmp(&self, &Ipv4Addr) -> ::std::option::Option<::std::cmp::Ordering> use ::std::cmp::PartialOrd;
+        // renaming not needed since the argument types differ
+        fn partial_cmp(&self, &Ipv6Addr) -> ::std::option::Option<::std::cmp::Ordering> use ::std::cmp::PartialOrd;
+    }
+}
+```

@@ -1,0 +1,53 @@
+type bool {
+    #layout(size = 1, align = 1);
+    wellknown_traits(Debug);
+}
+
+type str {
+    wellknown_traits(?Sized, Debug);
+
+    fn to_owned(&self) -> ::std::string::String;
+}
+
+type [u8] {
+    wellknown_traits(?Sized, Debug);
+}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+
+    fn as_ref(&self) -> &str use ::std::convert::AsRef;
+    fn as_ref(&self) -> &[u8] use ::std::convert::AsRef as as_ref_u8;
+}
+
+type ::std::option::Option<::std::cmp::Ordering> {
+    #layout(size = 1, align = 1);
+    wellknown_traits(Debug);
+}
+
+mod ::std::net {
+    type IpAddr {
+        #layout(size = 17, align = 1);
+        wellknown_traits(Debug, Copy);
+
+        constructor V4 (Ipv4Addr);
+        constructor V6 (Ipv6Addr);
+
+        fn partial_cmp(&self, &Ipv4Addr) -> ::std::option::Option<::std::cmp::Ordering> use ::std::cmp::PartialOrd;
+        fn partial_cmp(&self, &Ipv6Addr) -> ::std::option::Option<::std::cmp::Ordering> use ::std::cmp::PartialOrd;
+    }
+
+    type Ipv4Addr {
+        #layout(size = 4, align = 1);
+        wellknown_traits(Debug, Copy);
+
+        fn from_bits(u32) -> Ipv4Addr;
+    }
+
+    type Ipv6Addr {
+        #layout(size = 16, align = 1);
+        wellknown_traits(Debug, Copy);
+
+        fn new(u16, u16, u16, u16, u16, u16, u16, u16) -> Ipv6Addr;
+    }
+}
