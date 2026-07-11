@@ -1559,6 +1559,7 @@ fn lexer<'src>()
         .padded()
         .repeated()
         .collect()
+        .boxed()
 }
 
 fn alias<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
@@ -1581,7 +1582,11 @@ fn alias<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtr
 
 fn file_parser<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedZngFile<'a>, ZngParserExtra<'a>> + Clone {
-    item().repeated().collect::<Vec<_>>().map(ParsedZngFile)
+    item()
+        .repeated()
+        .collect::<Vec<_>>()
+        .map(ParsedZngFile)
+        .boxed()
 }
 
 fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngParserExtra<'a>> {
@@ -1614,7 +1619,8 @@ fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngPars
                         Token::Ident(c) => c,
                     })
                     .repeated()
-                    .collect::<Vec<_>>(),
+                    .collect::<Vec<_>>()
+                    .boxed(),
             )
             .map(|((token, first), rest)| match token {
                 Token::KwDyn => ParsedRustType::Dyn(first, rest),
@@ -1658,7 +1664,15 @@ fn rust_type<'a>() -> Boxed<'a, 'a, ParserInput<'a>, ParsedRustType<'a>, ZngPars
             .then(parser)
             .map(|(m, x)| ParsedRustType::Raw(m, Box::new(x)));
         choice((
-            scalar, boxed, unit, tuple, slice, adt, reference, raw_ptr, dyn_trait,
+            scalar.boxed(),
+            boxed.boxed(),
+            unit.boxed(),
+            tuple.boxed(),
+            slice.boxed(),
+            adt.boxed(),
+            reference.boxed(),
+            raw_ptr.boxed(),
+            dyn_trait.boxed(),
         ))
     })
     .boxed()
@@ -1678,14 +1692,19 @@ fn rust_generics<'a>(
     .then_ignore(just(Token::Eq))
     .then(rust_type.clone())
     .map(Either::Left);
-    just(Token::ColonColon).repeated().at_most(1).ignore_then(
-        named_generic
-            .or(rust_type.clone().map(Either::Right))
-            .separated_by(just(Token::Comma))
-            .allow_trailing()
-            .collect::<Vec<_>>()
-            .delimited_by(just(Token::AngleOpen), just(Token::AngleClose)),
-    )
+    just(Token::ColonColon)
+        .repeated()
+        .at_most(1)
+        .ignore_then(
+            named_generic
+                .or(rust_type.clone().map(Either::Right))
+                .separated_by(just(Token::Comma))
+                .allow_trailing()
+                .collect::<Vec<_>>()
+                .delimited_by(just(Token::AngleOpen), just(Token::AngleClose))
+                .boxed(),
+        )
+        .boxed()
 }
 
 fn rust_path_and_generics<'a>(
@@ -1703,6 +1722,7 @@ fn rust_path_and_generics<'a>(
                 named_generics,
             }
         })
+        .boxed()
 }
 
 fn fn_args<'a>(
@@ -1746,7 +1766,7 @@ fn rust_trait<'a>(
     });
 
     let rust_trait = fn_trait.or(rust_path_and_generics(rust_type).map(ParsedRustTrait::Normal));
-    rust_trait
+    rust_trait.boxed()
 }
 
 fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserExtra<'a>> + Clone {
@@ -1761,7 +1781,8 @@ fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserE
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
                 .delimited_by(just(Token::AngleOpen), just(Token::AngleClose))
-                .or(empty().to(vec![])),
+                .or(empty().to(vec![]))
+                .boxed(),
         )
         .then(fn_args(rust_type()))
         .map(|(((opt_async, name), generics), args)| {
@@ -1804,6 +1825,7 @@ fn method<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedMethod<'a>, ZngParserE
                 output,
             }
         })
+        .boxed()
 }
 
 fn inner_type_item<'a>()
@@ -1821,7 +1843,8 @@ fn inner_type_item<'a>()
                 .clone()
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                .boxed(),
         )
         .map(ParsedLayoutPolicy::StackAllocated)
         .or(just([Token::Sharp, Token::Ident("layout_conservative")])
@@ -1830,7 +1853,8 @@ fn inner_type_item<'a>()
                     .clone()
                     .separated_by(just(Token::Comma))
                     .collect::<Vec<_>>()
-                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                    .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                    .boxed(),
             )
             .map(ParsedLayoutPolicy::Conservative))
         .or(just([Token::Sharp, Token::Ident("only_by_ref")]).to(ParsedLayoutPolicy::OnlyByRef))
@@ -1850,7 +1874,8 @@ fn inner_type_item<'a>()
             spanned(trait_item)
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                .boxed(),
         )
         .map(ParsedTypeItem::Traits)
         .boxed();
@@ -1897,7 +1922,8 @@ fn inner_type_item<'a>()
                         .then(just(Token::Eq))
                         .ignore_then(rust_type()),
                 )
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                .boxed(),
         )
         .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
     );
@@ -1929,35 +1955,39 @@ fn inner_type_item<'a>()
                 .clone()
                 .separated_by(just(Token::Comma))
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose)),
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                .boxed(),
         )
         .map(|(cpp_type, props)| ParsedTypeItem::CppStackOwned { cpp_type, props });
     recursive(|item| {
         let inner_item = choice((
-            layout,
-            traits,
-            constructor,
-            field,
-            cpp_value,
-            cpp_ref,
-            cpp_stack_owned,
+            layout.boxed(),
+            traits.boxed(),
+            constructor.boxed(),
+            field.boxed(),
+            cpp_value.boxed(),
+            cpp_ref.boxed(),
+            cpp_stack_owned.boxed(),
             method()
                 .then(
                     just(Token::KwUse)
                         .ignore_then(path())
                         .map(Some)
-                        .or(empty().to(None)),
+                        .or(empty().to(None))
+                        .boxed(),
                 )
                 .then(
                     just(Token::Ident("deref"))
                         .ignore_then(rust_type())
                         .map(Some)
-                        .or(empty().to(None)),
+                        .or(empty().to(None))
+                        .boxed(),
                 )
                 .then(
                     just(Token::KwAs)
                         .ignore_then(select! { Token::Ident(c) => Some(c), })
-                        .or(empty().to(None)),
+                        .or(empty().to(None))
+                        .boxed(),
                 )
                 .map(
                     |(((data, use_path), deref), cpp_name)| ParsedTypeItem::Method {
@@ -1966,14 +1996,20 @@ fn inner_type_item<'a>()
                         data,
                         cpp_name,
                     },
-                ),
+                )
+                .boxed(),
         ));
 
-        let match_stmt =
-            conditional_item::<_, CfgConditional<'a>, NItems>(item).map(ParsedTypeItem::MatchOnCfg);
+        let match_stmt = conditional_item::<_, CfgConditional<'a>, NItems>(item)
+            .map(ParsedTypeItem::MatchOnCfg)
+            .boxed();
 
-        choice((match_stmt, inner_item.then_ignore(just(Token::Semicolon))))
+        choice((
+            match_stmt,
+            inner_item.then_ignore(just(Token::Semicolon)).boxed(),
+        ))
     })
+    .boxed()
 }
 
 fn type_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
@@ -2000,7 +2036,7 @@ fn type_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParser
             spanned(inner_type_item())
                 .repeated()
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)).boxed(),
         )
         .map(|((type_vars, ty), items)| ParsedItem::Type {
             ty,
@@ -2019,7 +2055,8 @@ fn trait_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParse
                 .then_ignore(just(Token::Semicolon))
                 .repeated()
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                .boxed(),
         )
         .map(|(tr, methods)| ParsedItem::Trait { tr, methods })
         .boxed()
@@ -2029,17 +2066,21 @@ fn fn_item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserEx
     spanned(method())
         .then_ignore(just(Token::Semicolon))
         .map(ParsedItem::Fn)
+        .boxed()
 }
 
 fn additional_include_item<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
     just(Token::Sharp)
         .ignore_then(choice((
-            just(Token::Ident("cpp_additional_includes")).ignore_then(select! {
-                Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
-            }),
+            just(Token::Ident("cpp_additional_includes"))
+                .ignore_then(select! {
+                    Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+                })
+                .boxed(),
             just(Token::Ident("convert_panic_to_exception"))
-                .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span())),
+                .map_with(|_, extra| ParsedItem::ConvertPanicToException(extra.span()))
+                .boxed(),
         )))
         .boxed()
 }
@@ -2061,7 +2102,8 @@ fn extern_cpp_item<'a>()
                 .then_ignore(just(Token::KwFor))
                 .map(Some)
                 .or(empty().to(None))
-                .then(spanned(rust_type())),
+                .then(spanned(rust_type()))
+                .boxed(),
         )
         .then(
             safety
@@ -2069,7 +2111,8 @@ fn extern_cpp_item<'a>()
                 .then_ignore(just(Token::Semicolon))
                 .repeated()
                 .collect::<Vec<_>>()
-                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                .boxed(),
         )
         .map(|((tr, ty), methods)| ParsedExternCppItem::Impl { tr, ty, methods });
     just(Token::KwExtern)
@@ -2088,31 +2131,33 @@ fn extern_cpp_item<'a>()
 
 fn unstable_feature<'a>()
 -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
-    just([Token::Sharp, Token::Ident("unstable")]).ignore_then(
-        select! { Token::Ident(feat) => feat }
-            .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
-            .try_map_with(|feat, e| match feat {
-                "cfg_match" => {
-                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
-                    ctx.unstable_features.cfg_match = true;
-                    Ok(ParsedItem::UnstableFeature("cfg_match"))
-                }
-                "cfg_if" => {
-                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
-                    ctx.unstable_features.cfg_if = true;
-                    Ok(ParsedItem::UnstableFeature("cfg_if"))
-                }
-                "template_types" => {
-                    let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
-                    ctx.unstable_features.template_types = true;
-                    Ok(ParsedItem::UnstableFeature("template_types"))
-                }
-                _ => Err(Rich::custom(
-                    e.span(),
-                    format!("unknown unstable feature '{feat}'"),
-                )),
-            }),
-    )
+    just([Token::Sharp, Token::Ident("unstable")])
+        .ignore_then(
+            select! { Token::Ident(feat) => feat }
+                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
+                .try_map_with(|feat, e| match feat {
+                    "cfg_match" => {
+                        let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                        ctx.unstable_features.cfg_match = true;
+                        Ok(ParsedItem::UnstableFeature("cfg_match"))
+                    }
+                    "cfg_if" => {
+                        let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                        ctx.unstable_features.cfg_if = true;
+                        Ok(ParsedItem::UnstableFeature("cfg_if"))
+                    }
+                    "template_types" => {
+                        let ctx: &mut extra::SimpleState<ZngParserState> = e.state();
+                        ctx.unstable_features.template_types = true;
+                        Ok(ParsedItem::UnstableFeature("template_types"))
+                    }
+                    _ => Err(Rich::custom(
+                        e.span(),
+                        format!("unknown unstable feature '{feat}'"),
+                    )),
+                }),
+        )
+        .boxed()
 }
 
 fn item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra<'a>> + Clone {
@@ -2125,9 +2170,11 @@ fn item<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedItem<'a>, ZngParserExtra
                     item.clone()
                         .repeated()
                         .collect::<Vec<_>>()
-                        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose)),
+                        .delimited_by(just(Token::BraceOpen), just(Token::BraceClose))
+                        .boxed(),
                 )
-                .map(|(path, items)| ParsedItem::Mod { path, items }),
+                .map(|(path, items)| ParsedItem::Mod { path, items })
+                .boxed(),
             type_item(),
             trait_item(),
             extern_cpp_item(),
@@ -2186,7 +2233,8 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
             })
             .separated_by(just(Token::ColonColon))
             .at_least(1)
-            .collect::<Vec<_>>(),
+            .collect::<Vec<_>>()
+            .boxed(),
         )
         .or(just(Token::KwCrate).to((ParsedPathStart::Crate, vec![])))
         .map_with(|(start, segments), extra| ParsedPath {
