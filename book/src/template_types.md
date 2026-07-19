@@ -8,8 +8,10 @@ For example:
 #unstable(template_types)
 
 type<T> ::std::option::Option<T> {
-    constructor Some(T);
-    constructor None;
+    variant Some {
+        field 0 (offset = auto, type = T);
+    }
+    variant None { }
     fn unwrap(self) -> T;
     fn is_some(&self) -> bool;
 }

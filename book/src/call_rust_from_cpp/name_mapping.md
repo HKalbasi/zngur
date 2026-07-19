@@ -88,8 +88,13 @@ mod ::std::net {
     type IpAddr {
         #layout(size = 17, align = 1);
 
-        constructor V4(Ipv4Addr);
-        constructor V6(Ipv6Addr);
+        variant V4 {
+            field 0 (offset = auto, type = Ipv4Addr);
+        }
+
+        variant V6 {
+            field 0 (offset = auto, type = Ipv6Addr);
+        }
 
         fn partial_cmp(&self, &Ipv4Addr) -> ::std::option::Option<::std::cmp::Ordering> use ::std::cmp::PartialOrd;
         // renaming not needed since the argument types differ

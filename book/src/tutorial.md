@@ -560,8 +560,6 @@ type ::std::result::Result<&str, ::std::str::Utf8Error> {
 
 type ::std::fmt::Result {
     #layout(size = 1, align = 1);
-
-    constructor Ok(());
 }
 
 type ::std::fmt::Formatter {

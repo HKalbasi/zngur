@@ -73,8 +73,10 @@ mod ::std {
         #layout(size = 8, align = 4);
         wellknown_traits(Copy);
 
-        constructor None;
-        constructor Some(i32);
+        variant None { }
+        variant Some {
+            field 0 (offset = auto, type = i32);
+        }
 
         fn unwrap(self) -> i32;
     }
@@ -160,8 +162,10 @@ mod ::crate {
         #layout(size = 8, align = 4);
         wellknown_traits(Copy);
 
-        constructor None;
-        constructor Some(i32);
+        variant None { }
+        variant Some {
+            field 0 (offset = auto, type = i32);
+        }
 
         fn unwrap(self) -> i32;
     }
