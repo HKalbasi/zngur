@@ -691,7 +691,7 @@ namespace {{ self.cpp_namespace }} {
   struct ZngurPrettyPrinter< {{ ref_kind }} < {{ nested_ref_kind }} < T > > > {
     static inline void print({{ ref_kind }} < {{ nested_ref_kind }} < T > > const& t) {
       ::{{ self.cpp_namespace }}::__zngur_internal_check_init(t);
-      ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< {{ nested_ref_kind }} < T > >::print( reinterpret_cast< const {{ nested_ref_kind }} < T > &>(t.__zngur_data) );
+      ::{{ self.cpp_namespace }}::ZngurPrettyPrinter< {{ nested_ref_kind }} < T > >::print( *reinterpret_cast< const {{ nested_ref_kind }} < T > *>(t.__zngur_data) );
     }
   };
 

@@ -228,3 +228,30 @@ c++( size = 48 , align = 8 )
 ]
 Test #layout_conservative -- finished
 
+Test dbg of Ref<Ref<T>> -- started
+[main.cpp:241] r = RefHolder(
+    SimpleFoo(
+        42,
+    ),
+)
+[main.cpp:242] rr = RefHolder(
+    SimpleFoo(
+        42,
+    ),
+)
+[main.cpp:243] rrr = RefHolder(
+    SimpleFoo(
+        42,
+    ),
+)
+[main.cpp:244] rust::Ref(r.f0) = SimpleFoo(
+    42,
+)
+[main.cpp:245] rust::Ref((*rr).f0) = SimpleFoo(
+    42,
+)
+[main.cpp:246] rust::Ref((**rrr).f0) = SimpleFoo(
+    42,
+)
+Test dbg of Ref<Ref<T>> -- finished
+

@@ -146,6 +146,19 @@ type Box<dyn Fn(i32, crate::Scoped, &str)> {
     #layout(size = 16, align = 8);
 }
 
+type crate::SimpleFoo {
+    #layout(size = 4, align = 4);
+    wellknown_traits(Debug);
+    constructor (i32);
+}
+
+type crate::RefHolder {
+    #layout(size = 8, align = 8);
+    wellknown_traits(Debug);
+    constructor (&crate::SimpleFoo);
+    field 0 (offset = 0, type = &crate::SimpleFoo);
+}
+
 type crate::ZeroSizedType {
     #layout(size = 0, align = 1);
     wellknown_traits(Debug);

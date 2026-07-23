@@ -230,6 +230,22 @@ void test_conservative_layout() {
 
 }
 
+void test_nested_ref_dbg() {
+  auto scope = rust::crate::Scoped::new_("Test dbg of Ref<Ref<T>>"_rs);
+
+  auto foo = rust::crate::SimpleFoo(42);
+  auto bar = rust::crate::RefHolder(rust::Ref<rust::crate::SimpleFoo>(foo));
+  rust::Ref<rust::crate::RefHolder> r = bar;
+  rust::Ref<rust::Ref<rust::crate::RefHolder>> rr = r;
+  rust::Ref<rust::Ref<rust::Ref<rust::crate::RefHolder>>> rrr = rr;
+  zngur_dbg(r);
+  zngur_dbg(rr);
+  zngur_dbg(rrr);
+  zngur_dbg(rust::Ref(r.f0));
+  zngur_dbg(rust::Ref((*rr).f0));
+  zngur_dbg(rust::Ref((**rrr).f0));
+}
+
 int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
@@ -240,4 +256,5 @@ int main() {
   test_zero_sized_type();
   test_nested_heap_refs_and_auto_field_offset();
   test_conservative_layout();
+  test_nested_ref_dbg();
 }

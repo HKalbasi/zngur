@@ -340,6 +340,7 @@ macro_rules! __zngur_assert_has_field {
     ($x:ty, $y:ty, $($field:tt)+ $(,)?) => {
         const _: () = {
             #[allow(dead_code)]
+            #[allow(mismatched_lifetime_syntaxes)]
             fn check_field(value: $x) -> $y {
                 value.$($field)+
             }

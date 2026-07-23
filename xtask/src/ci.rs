@@ -130,7 +130,7 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                 println!("Skipping {example}, no NMakefile for this example");
             }
         }
-        if fix {
+        if fix && !skip {
             sh.copy_file("./actual_output.txt", "./expected_output.txt")?;
         }
 

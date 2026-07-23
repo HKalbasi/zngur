@@ -89,6 +89,12 @@ fn call_dyn_fn_multi_args(func: Box<dyn Fn(i32, crate::Scoped, &str)>) {
 }
 
 #[derive(Debug)]
+pub struct SimpleFoo(pub i32);
+
+#[derive(Debug)]
+pub struct RefHolder<'a>(pub &'a SimpleFoo);
+
+#[derive(Debug)]
 struct ZeroSizedType;
 
 impl ZeroSizedType {
