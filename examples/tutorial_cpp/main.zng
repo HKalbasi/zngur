@@ -1,6 +1,6 @@
-#cpp_additional_includes "
-    #include <inventory.h>
-"
+#cpp_additional_includes r#"
+    #include "inventory.h"
+"#
 
 type str {
     wellknown_traits(?Sized);

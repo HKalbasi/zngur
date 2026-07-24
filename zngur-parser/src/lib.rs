@@ -1483,6 +1483,7 @@ enum Token<'a> {
     KwUnsafe,
     Ident(&'a str),
     Str(&'a str),
+    RawStr(usize, &'a str),
     Number(usize),
 }
 
@@ -1566,12 +1567,35 @@ impl Display for Token<'_> {
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
+            Token::RawStr(hashes, s) => {
+                let h = "#".repeat(*hashes);
+                write!(f, r#"r{h}"{s}"{h}"#)
+            }
         }
     }
 }
 
 fn lexer<'src>()
 -> impl Parser<'src, &'src str, Vec<(Token<'src>, Span)>, extra::Err<Rich<'src, char, Span>>> {
+    let plain_string = just('"')
+        .ignore_then(none_of('"').repeated().to_slice().map(Token::Str))
+        .then_ignore(just('"'));
+
+    let raw_string_start = just('r')
+        .ignore_then(just('#').repeated().count())
+        .then_ignore(just('"'));
+    let raw_string_end =
+        just('"').then(just('#').repeated().configure(|cfg, ctx| cfg.exactly(*ctx)));
+    let raw_string = raw_string_start
+        .then_with_ctx(
+            any()
+                .and_is(raw_string_end.not())
+                .repeated()
+                .to_slice()
+                .then_ignore(raw_string_end),
+        )
+        .map(|(h, s)| Token::RawStr(h, s));
+
     let token = choice((
         choice([
             just("->").to(Token::Arrow),
@@ -1599,11 +1623,10 @@ fn lexer<'src>()
             just(".").to(Token::Dot),
             just("!").to(Token::Bang),
         ]),
+        raw_string,
+        plain_string,
         text::ident().map(Token::ident_or_kw),
         text::int(10).map(|x: &str| Token::Number(x.parse().unwrap())),
-        just('"')
-            .ignore_then(none_of('"').repeated().to_slice().map(Token::Str))
-            .then_ignore(just('"')),
     ));
 
     let comment = just("//")
@@ -2145,6 +2168,7 @@ fn additional_include_item<'a>()
             just(Token::Ident("cpp_additional_includes"))
                 .ignore_then(select! {
                     Token::Str(c) => ParsedItem::CppAdditionalInclude(c),
+                    Token::RawStr(_, c) => ParsedItem::CppAdditionalInclude(c),
                 })
                 .boxed(),
             just(Token::Ident("convert_panic_to_exception"))

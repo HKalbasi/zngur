@@ -388,6 +388,10 @@ In the same directory, create a `main.zng` file with the following content:
 #cpp_additional_includes "
     #include <inventory.h>
 "
+// "file" includes can be written using rust raw string syntax:
+// #cpp_additional_includes r#"
+//     #include "inventory.h"
+// "#
 
 type crate::Inventory {
     #layout(size = 16, align = 8);

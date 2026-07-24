@@ -1074,3 +1074,34 @@ extern "C++" {
         "#]],
     );
 }
+
+#[test]
+fn cpp_additional_includes() {
+    let parsed = crate::ParsedZngFile::parse_str(
+        r#"
+#cpp_additional_includes "
+    // comment
+    stuff
+"
+    "#,
+        crate::cfg::NullCfg,
+    );
+    assert_eq!(
+        parsed.spec.additional_includes.0,
+        "\n    // comment\n    stuff\n"
+    );
+
+    let parsed = crate::ParsedZngFile::parse_str(
+        r##"
+#cpp_additional_includes r#"
+    // comment
+    "stuff"
+"#
+    "##,
+        crate::cfg::NullCfg,
+    );
+    assert_eq!(
+        parsed.spec.additional_includes.0,
+        "\n    // comment\n    \"stuff\"\n"
+    );
+}
