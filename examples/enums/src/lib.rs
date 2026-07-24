@@ -1,9 +1,12 @@
 #[rustfmt::skip]
 mod generated;
 
+#[derive(Debug)]
+pub struct NonPrimitive(pub i32);
+
 pub enum Merged {
     First(i32, i32),
-    Second(i32, i32),
+    Second(i32, NonPrimitive),
     Third,
 }
 
@@ -13,7 +16,7 @@ impl Merged {
     }
 
     pub fn second() -> Self {
-        Self::Second(24, 42)
+        Self::Second(24, NonPrimitive(42))
     }
 }
 

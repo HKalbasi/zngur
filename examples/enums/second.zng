@@ -1,4 +1,9 @@
 mod crate {
+    type NonPrimitive {
+        #layout(size = 4, align = 4);
+        wellknown_traits(Debug);
+    }
+
     type Merged {
         #layout(size = 12, align = 4);
         // This file knows that the whole enum is non_exhaustive.

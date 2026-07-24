@@ -21,9 +21,9 @@ mod crate {
         variant First {
             non_exhaustive;
         }
-        // And knows that Second has a 0 field, but not that it's non_exhaustive.
+        // And knows that Second has a 1 field, but not that it's non_exhaustive.
         variant Second {
-            field 0 (offset = auto, type = i32);
+            field 1 (offset = auto, type = NonPrimitive);
         }
 
         fn first() -> Merged;

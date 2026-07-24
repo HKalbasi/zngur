@@ -3,4 +3,6 @@ some 42
 is some
 some 1337
 first: 42
-second: 24
+second: [main.cpp:51] rust::Ref(r->f1) = NonPrimitive(
+    42,
+)

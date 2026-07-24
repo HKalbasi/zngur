@@ -46,8 +46,9 @@ int main() {
         std::cout << "first: " << r->f0 << std::endl;
     }
     m = Merged::second();
-    if (auto r = Merged::Second::match(m)) {
-        std::cout << "second: " << r->f0 << std::endl;
+    if (auto r = Merged::Second::match_ref(m)) {
+        std::cout << "second: ";
+        zngur_dbg(rust::Ref(r->f1));
     }
 
     Container c = { Merged::first() };
