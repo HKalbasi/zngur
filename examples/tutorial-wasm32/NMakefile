@@ -1,3 +1,7 @@
+!IFNDEF EXAMPLES_CARGO_PROFILE
+EXAMPLES_CARGO_PROFILE = debug
+!ENDIF
+
 # can not eval mise after the fact in nmake, must preeval
 WASIFLAGS = -std=c++17 \
            --target=wasm32-wasi \
@@ -21,18 +25,18 @@ a.bat: main.wasm
 	echo wasmtime run --allow-precompiled "%0\..\main.wasm" "$$@" >> $@
 
 main.wasm: main.cpp generated.h generated.cpp \
-           ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
+           ./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
-	    ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+	    ./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a \
 	    -o $@
 
 
-./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a:  generated.h ./src/generated.rs ./src/lib.rs
-	cargo build --target=wasm32-wasip1 --release
+./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a:  generated.h ./src/generated.rs ./src/lib.rs
+	cargo build --target=wasm32-wasip1 --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
-	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g -i main32.zng
+	cargo run --profile $(EXAMPLES_CARGO_PROFILE:debug=dev) --manifest-path ../../zngur-cli/Cargo.toml g -i main32.zng
 
 clean:
 	cargo clean

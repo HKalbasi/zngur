@@ -14,6 +14,12 @@ jobs:
     runs-on: macos-14
     strategy:
       fail-fast: false
+      matrix:
+        cargo_profile:
+          - debug
+          - release
+    env:
+      EXAMPLES_CARGO_PROFILE: ${{ matrix.cargo_profile }}
     steps:
       - uses: actions/checkout@v3
       - uses: jdx/mise-action@v3
@@ -35,8 +41,12 @@ jobs:
         cpp_compiler:
           - clang++
           - g++
+        cargo_profile:
+          - debug
+          - release
     env:
       CXX: ${{ matrix.cpp_compiler }}
+      EXAMPLES_CARGO_PROFILE: ${{ matrix.cargo_profile }}
     steps:
       - uses: actions/checkout@v3
       - uses: jdx/mise-action@v3
@@ -59,8 +69,13 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
+      matrix:
+        cargo_profile:
+          - debug
+          - release
     env:
       CXX: g++
+      EXAMPLES_CARGO_PROFILE: ${{ matrix.cargo_profile }}
     steps:
       - uses: actions/checkout@v3
       - uses: jdx/mise-action@v3
@@ -75,6 +90,13 @@ jobs:
 
   build-win:
     runs-on: windows-2022
+    strategy:
+      matrix:
+        cargo_profile:
+          - debug
+          - release
+    env:
+      EXAMPLES_CARGO_PROFILE: ${{ matrix.cargo_profile }}
     steps:
       - name: Turn off autocrlf
         run: |

@@ -17,6 +17,12 @@ fn check_book_formatting() -> Result<()> {
 
 fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
     const CARGO_PROJECTS: &[&str] = &["cxx_demo", "tutorial_cpp", "unsafe_fns"];
+    let profile = std::env::var("EXAMPLES_CARGO_PROFILE").ok();
+    // Default to debug; translate debug to dev.
+    let (profile, target_dir) = match profile.as_deref() {
+        None | Some("debug") => ("dev", "debug"),
+        Some(other) => (other, other),
+    };
     let examples_dir = sh.current_dir().join("examples");
     sh.change_dir("examples");
     let examples = sh.read_dir(".")?;
@@ -39,12 +45,12 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                     "rm -f generated.h generated.cpp src/generated.rs actual_output.txt"
                 )
                 .run();
-                cmd!(sh, "cargo build")
+                cmd!(sh, "cargo build --profile {profile}")
                     .run()
                     .with_context(|| format!("Building example `{example}` failed"))?;
 
                 let bash_cmd = format!(
-                    "../../target/debug/example-{example} 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt"
+                    "../../target/{target_dir}/example-{example} 2>&1 | sed -e s/thread.*\\(.*\\)/thread/g > actual_output.txt"
                 );
                 cmd!(sh, "bash -c {bash_cmd}")
                     .run()
@@ -58,11 +64,13 @@ fn check_examples(sh: &Shell, fix: bool) -> Result<()> {
                     "cmd /c 'del /f /q generated.h generated.cpp src\\generated.rs actual_output.txt 2>nul'"
                 )
                 .run();
-                cmd!(sh, "cmd /c 'cargo build'")
+                let batch_cmd = format!("cargo build --profile {profile}");
+                cmd!(sh, "cmd /c {batch_cmd}")
                     .run()
                     .with_context(|| format!("Building example `{example}` failed"))?;
-                let batch_cmd =
-                    format!("..\\..\\target\\debug\\example-{example} > actual_output.txt 2>&1");
+                let batch_cmd = format!(
+                    "..\\..\\target\\{target_dir}\\example-{example} > actual_output.txt 2>&1"
+                );
                 cmd!(sh, "cmd /c {batch_cmd}")
                     .run()
                     .with_context(|| format!("Running example `{example}` failed"))?;

@@ -1,10 +1,11 @@
+EXAMPLES_CARGO_PROFILE ?= debug
 ZNGUR_CLI = cd ../../zngur-cli && cargo run
 
-a.out: main.cpp aggregation.a packet.zng.h receiver.zng.h aggregation.zng.h processor.zng.h zngur.h ../../target/release/libexample_multiple_modules.a
-	${CXX} -std=c++11 -Werror -I. -Iaggregation main.cpp aggregation.a -g -L ../../target/release/ -l example_multiple_modules
+a.out: main.cpp aggregation.a packet.zng.h receiver.zng.h aggregation.zng.h processor.zng.h zngur.h ../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_multiple_modules.a
+	${CXX} -std=c++11 -Werror -I. -Iaggregation main.cpp aggregation.a -g -L ../../target/$(EXAMPLES_CARGO_PROFILE)/ -l example_multiple_modules
 
-../../target/release/libexample_multiple_modules.a:
-	cargo build --release
+../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_multiple_modules.a:
+	cargo build --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
 
 aggregation.a: aggregation/impls.cpp aggregation/generated.cpp aggregation.zng.h zngur.h
 	${CXX} -c -std=c++11 -Werror -I. -Iaggregation -o aggregation/generated.o aggregation/generated.cpp
@@ -39,7 +40,7 @@ processor.zng.h processor/src/processor.zng.rs: processor/processor.zng receiver
 zngur.h:
 	${ZNGUR_CLI} -- make-zng-header ../examples/multiple_modules/zngur.h
 
-.PHONY: ../../target/release/libexample_multiple_modules.a clean run
+.PHONY: ../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_multiple_modules.a clean run
 
 run: a.out
 	./a.out

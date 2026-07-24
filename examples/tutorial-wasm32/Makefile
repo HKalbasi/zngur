@@ -1,3 +1,6 @@
+EXAMPLES_CARGO_PROFILE ?= debug
+
+#
 # WASI build flags for C++ compilation with wasmtime
 WASIFLAGS = -std=c++14 \
            --target=wasm32-wasi \
@@ -26,17 +29,17 @@ a.out: main.wasm
 	@chmod +x $@
 
 main.wasm: main.cpp generated.h generated.cpp \
-           ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a
+           ./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a
 	$(CXX) $(WASIFLAGS) \
 	    main.cpp generated.cpp \
-	    ./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a \
+	    ./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a \
 	    -o $@
 
-./target/wasm32-wasip1/release/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
-	cargo build --target=wasm32-wasip1 --release
+./target/wasm32-wasip1/$(EXAMPLES_CARGO_PROFILE)/libexample_tutorial_wasm32.a: wasm32-wasip1-target generated.h ./src/generated.rs ./src/lib.rs
+	cargo build --target=wasm32-wasip1 --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
 
 generated.h ./src/generated.rs generated.cpp: main32.zng
-	cargo run --release --manifest-path ../../zngur-cli/Cargo.toml g -i main32.zng
+	cargo run --profile $(EXAMPLES_CARGO_PROFILE:debug=dev) --manifest-path ../../zngur-cli/Cargo.toml g -i main32.zng
 
 # Ensure wasm32-wasip1 target is installed
 wasm32-wasip1-target:

@@ -1,6 +1,8 @@
+EXAMPLES_CARGO_PROFILE ?= debug
+
 a.out: src/main.rs build.rs main.zng impls.cpp
-	cargo build
-	cp ../../target/debug/example-stack-owned a.out
+	cargo build --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
+	cp ../../target/$(EXAMPLES_CARGO_PROFILE)/example-stack-owned a.out
 
 .PHONY: clean
 clean:

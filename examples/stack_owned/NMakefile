@@ -1,6 +1,10 @@
+!IFNDEF EXAMPLES_CARGO_PROFILE
+EXAMPLES_CARGO_PROFILE = debug
+!ENDIF
+
 a.exe: src/main.rs build.rs main.zng impls.cpp
-	cargo build
-	copy ..\..\target\debug\example-stack-owned.exe a.exe
+	cargo build --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
+	copy ..\..\target\$(EXAMPLES_CARGO_PROFILE)\example-stack-owned.exe a.exe
 
 clean:
 	- del /f /q a.exe actual_output.txt generated.h generated.cpp src\generated.rs 2>nul

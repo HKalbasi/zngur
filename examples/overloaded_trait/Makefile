@@ -1,15 +1,16 @@
 NAME = overloaded_trait
+EXAMPLES_CARGO_PROFILE ?= debug
 
-a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/release/libexample_$(NAME).a
-	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/release/ -l example_$(NAME)
+a.out: main.cpp generated.h src/generated.rs src/lib.rs ../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_$(NAME).a
+	${CXX} -std=c++11 -Werror main.cpp -g -L ../../target/$(EXAMPLES_CARGO_PROFILE)/ -l example_$(NAME)
 
-../../target/release/libexample_$(NAME).a:
-	cargo build --release
+../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_$(NAME).a:
+	cargo build --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)
 
 generated.h ./src/generated.rs: main.zng
 	cd ../../zngur-cli && cargo run g -i ../examples/$(NAME)/main.zng --crate-name "crate"
 
-.PHONY: ../../target/release/libexample_$(NAME).a generated.h clean
+.PHONY: ../../target/$(EXAMPLES_CARGO_PROFILE)/libexample_$(NAME).a generated.h clean
 
 clean:
 	rm -f generated.h generated.cpp src/generated.rs a.out actual_output.txt
