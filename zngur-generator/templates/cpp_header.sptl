@@ -666,7 +666,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       RefMut(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<const uint8_t*>(&f));
           if (heap_allocated) {
             __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -697,7 +697,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       RefMut(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<const uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
     {% endif %}
@@ -864,7 +864,7 @@ namespace {{ self.namespace }} {
               bool>::type = true>
       Ref(const FieldOwned< {{ td.ty }}, Offset, Offsets... >& f) {
           constexpr bool heap_allocated = __zngur_internal_calc_field<Offset, Offsets...>::heap_allocated();
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<const uint8_t*>(&f));
           if (heap_allocated) {
               __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
           } else {
@@ -894,7 +894,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRef< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<const uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
 
@@ -920,7 +920,7 @@ namespace {{ self.namespace }} {
               !zngur_detail::all_static_offset<Offset, Offsets...>::value,
               bool>::type = true>
       Ref(const FieldRefMut< {{ td.ty }}, Offset, Offsets...>& f) {
-          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<uint8_t*>(&f));
+          size_t offset = __zngur_internal_calc_field<Offset, Offsets...>::offset(reinterpret_cast<const uint8_t*>(&f));
           __zngur_data = *reinterpret_cast<const size_t*>(&f) + offset;
       }
     {% endif %}

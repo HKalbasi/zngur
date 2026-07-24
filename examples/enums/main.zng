@@ -28,4 +28,10 @@ mod crate {
 
         fn first() -> Merged;
     }
+
+    type Container {
+        #layout(size = 12, align = 4);
+        field 0 (offset = auto, type = Merged);
+        constructor (Merged);
+    }
 }

@@ -16,3 +16,6 @@ impl Merged {
         Self::Second(24, 42)
     }
 }
+
+// Test that enums behave properly inside of fields.
+pub struct Container(pub Merged);

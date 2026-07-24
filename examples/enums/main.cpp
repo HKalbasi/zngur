@@ -9,6 +9,7 @@ template<class... Ts> overloaded(Ts...) -> overloaded<Ts...>;
 
 template<class T> using Option = rust::std::option::Option<T>;
 using Merged = rust::crate::Merged;
+using Container = rust::crate::Container;
 
 int main() {
     Option<int> v = Option<int>::Some(42);
@@ -48,4 +49,7 @@ int main() {
     if (auto r = Merged::Second::match(m)) {
         std::cout << "second: " << r->f0 << std::endl;
     }
+
+    Container c = { Merged::first() };
+    auto cr = rust::Ref(c.f0);
 }
