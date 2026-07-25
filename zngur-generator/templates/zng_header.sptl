@@ -413,7 +413,7 @@ namespace {{ self.cpp_namespace }} {
   template<>
   struct __zngur_internal< ::{{ self.cpp_namespace }}::Unit > {
     static inline uint8_t* data_ptr(const ::{{ self.cpp_namespace }}::Unit& t) noexcept {
-        return const_cast<uint8_t*>(t.__zngur_data.data());
+        return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
     }
     static inline void check_init(const ::{{ self.cpp_namespace }}::Unit&) noexcept {}
     static inline void assume_init(::{{ self.cpp_namespace }}::Unit&) noexcept {}
