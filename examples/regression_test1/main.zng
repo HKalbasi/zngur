@@ -2,7 +2,7 @@
 
 type bool {
 	#layout(size = 1, align = 1);
-	wellknown_traits(Copy);
+	wellknown_traits(Debug, Copy);
 }
 
 type str {
@@ -214,6 +214,16 @@ type crate::TypeB {
     field foo (offset = 0, type = i32 );
     field bar (offset = 4, type = crate::FieldTypeA );
     field baz (offset = 16, type = crate::FieldTypeB );
+}
+
+type crate::BoolHolder {
+    #layout(size = 16, align = 4);
+    wellknown_traits(Debug, Copy);
+    constructor { flag: bool, data: crate::FieldTypeC };
+
+    // rustc reordering
+    field data (offset = 0, type = crate::FieldTypeC );
+    field flag (offset = 12, type = bool );
 }
 
 type crate::ConservativeLayoutType {

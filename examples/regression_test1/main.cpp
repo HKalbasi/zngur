@@ -88,6 +88,34 @@ void test_field_underlying_conversions() {
   zngur_dbg(pmut.f1.len());
 }
 
+void test_ref_deref_of_user_types() {
+  auto scope =
+      rust::crate::Scoped::new_("Test Ref and RefMut deref of user types"_rs);
+
+  rust::crate::BoolHolder holder{true, rust::crate::FieldTypeC{7, 8, 9}};
+
+  // Ref of a user-defined type dereferences to the aliased object.
+  rust::Ref<rust::crate::BoolHolder> r = holder;
+  rust::crate::BoolHolder& view = *r;
+  zngur_dbg(view.flag);
+  zngur_dbg(int32_t(view.data.buzz_3));
+
+  // Copying out of a Ref works when the type is Copy, no ownership of the
+  // aliased object changes hands either way.
+  rust::crate::BoolHolder snapshot = *r;
+  zngur_dbg(snapshot);
+
+  // Member access through ->
+  zngur_dbg(int32_t(r->data.buzz_3));
+
+  // Mutation through a RefMut deref is visible in the parent
+  rust::RefMut<rust::crate::BoolHolder> m = holder;
+  *rust::RefMut<rust::Bool>(m->flag) = false;
+  zngur_dbg(holder.flag);
+  *rust::RefMut<rust::Bool>(m->flag) = true;
+  zngur_dbg(holder.flag);
+}
+
 void test_floats() {
   auto scope = rust::crate::Scoped::new_("Test floats"_rs);
 
@@ -250,6 +278,7 @@ int main() {
   test_dbg_works_for_ref_and_refmut();
   test_fields_and_constructor();
   test_field_underlying_conversions();
+  test_ref_deref_of_user_types();
   test_floats();
   test_dyn_fn_with_multiple_arguments();
   test_refref();

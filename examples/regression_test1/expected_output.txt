@@ -59,19 +59,35 @@ Test Field* underlying conversions -- started
 [main.cpp:88] pmut.f1.len() = 3
 Test Field* underlying conversions -- finished
 
+Test Ref and RefMut deref of user types -- started
+[main.cpp:101] view.flag = true
+[main.cpp:102] int32_t(view.data.buzz_3) = 9
+[main.cpp:107] snapshot = BoolHolder {
+    flag: true,
+    data: FieldTypeC {
+        buzz_1: 7,
+        buzz_2: 8,
+        buzz_3: 9,
+    },
+}
+[main.cpp:110] int32_t(r->data.buzz_3) = 9
+[main.cpp:115] holder.flag = false
+[main.cpp:117] holder.flag = true
+Test Ref and RefMut deref of user types -- finished
+
 Test floats -- started
-[main.cpp:98] *r1 = 12.3
-[main.cpp:100] v1 = 12.3
-[main.cpp:105] fvec = [
+[main.cpp:127] *r1 = 12.3
+[main.cpp:129] v1 = 12.3
+[main.cpp:134] fvec = [
     42.24,
     147.0,
 ]
-[main.cpp:106] fvec.get(0) = Some(
+[main.cpp:135] fvec.get(0) = Some(
     42.24,
 )
-[main.cpp:107] fvec.get(2) = None
-[main.cpp:108] *fvec.get(1).unwrap() = 147
-[main.cpp:110] fvec = [
+[main.cpp:136] fvec.get(2) = None
+[main.cpp:137] *fvec.get(1).unwrap() = 147
+[main.cpp:139] fvec = [
     42.24,
     5.43,
 ]
@@ -86,19 +102,19 @@ End of call_dyn_fn_multi_args
 Test dyn Fn() with multiple arguments -- finished
 
 Test Ref<Ref<T>> -- started
-[main.cpp:131] strvec = [
+[main.cpp:160] strvec = [
     "a str",
     "foobar",
     "a third str",
 ]
-[main.cpp:132] strvec.get(0) = Some(
+[main.cpp:161] strvec.get(0) = Some(
     "a str",
 )
-[main.cpp:133] strvec.get(2) = Some(
+[main.cpp:162] strvec.get(2) = Some(
     "a third str",
 )
-[main.cpp:138] *strvec.get(1).unwrap() = "foobar"
-[main.cpp:140] strvec = [
+[main.cpp:167] *strvec.get(1).unwrap() = "foobar"
+[main.cpp:169] strvec = [
     "a str",
     "flip flop",
     "a third str",
@@ -107,11 +123,11 @@ Test Ref<Ref<T>> -- finished
 
 Test zero-sized type -- started
 Method call on ZST
-[main.cpp:147] zst = ZeroSizedType
+[main.cpp:176] zst = ZeroSizedType
 Test zero-sized type -- finished
 
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
-[main.cpp:162] a = TypeA {
+[main.cpp:191] a = TypeA {
     foo: 10,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -128,12 +144,12 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:163] ::rust::Ref<int32_t>(a.foo) = 10
-[main.cpp:164] ::rust::Ref<int32_t>(a.bar.fizz.buzz_2) = 30
-[main.cpp:165] ::rust::RefMut<int32_t>(a.baz.fizz.buzz_3) = 70
-[main.cpp:168] ::rust::Ref<int32_t>(a_fa_fizz.buzz_1) = 20
-[main.cpp:170] ::rust::Ref<int32_t>(a_fb_fizz.buzz_2) = 60
-[main.cpp:181] b = TypeB {
+[main.cpp:192] ::rust::Ref<int32_t>(a.foo) = 10
+[main.cpp:193] ::rust::Ref<int32_t>(a.bar.fizz.buzz_2) = 30
+[main.cpp:194] ::rust::RefMut<int32_t>(a.baz.fizz.buzz_3) = 70
+[main.cpp:197] ::rust::Ref<int32_t>(a_fa_fizz.buzz_1) = 20
+[main.cpp:199] ::rust::Ref<int32_t>(a_fb_fizz.buzz_2) = 60
+[main.cpp:210] b = TypeB {
     foo: 100,
     bar: FieldTypeA {
         fizz: FieldTypeC {
@@ -150,40 +166,40 @@ Test nested Ref<T> where T is #heap_allocated and auto field offsets -- started
         },
     },
 }
-[main.cpp:182] ::rust::Ref<int32_t>(b.foo) = 100
-[main.cpp:183] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
-[main.cpp:184] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
-[main.cpp:187] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
-[main.cpp:189] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
-[main.cpp:194] fa = FieldTypeA {
+[main.cpp:211] ::rust::Ref<int32_t>(b.foo) = 100
+[main.cpp:212] ::rust::Ref<int32_t>(b.bar.fizz.buzz_2) = 300
+[main.cpp:213] ::rust::RefMut<int32_t>(b.baz.fizz.buzz_3) = 700
+[main.cpp:216] ::rust::Ref<int32_t>(b_fa_fizz.buzz_1) = 200
+[main.cpp:218] ::rust::Ref<int32_t>(b_fb_fizz.buzz_2) = 600
+[main.cpp:223] fa = FieldTypeA {
     fizz: FieldTypeC {
         buzz_1: 21,
         buzz_2: 31,
         buzz_3: 41,
     },
 }
-[main.cpp:195] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
-[main.cpp:196] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
-[main.cpp:201] fa = FieldTypeA {
+[main.cpp:224] ::rust::Ref<int32_t>(fa.fizz.buzz_1) = 21
+[main.cpp:225] ::rust::Ref<int32_t>(fa.fizz.buzz_3) = 41
+[main.cpp:230] fa = FieldTypeA {
     fizz: FieldTypeC {
         buzz_1: 21,
         buzz_2: 31,
         buzz_3: 41,
     },
 }
-[main.cpp:202] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
-[main.cpp:203] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
+[main.cpp:231] ::rust::Ref<int32_t>(fb.fizz.buzz_2) = 61
+[main.cpp:232] ::rust::Ref<int32_t>(fb.fizz.buzz_3) = 71
 Test nested Ref<T> where T is #heap_allocated and auto field offsets -- finished
 
 Test #layout_conservative -- started
-[main.cpp:212] c_layout = ConservativeLayoutType {
+[main.cpp:241] c_layout = ConservativeLayoutType {
     field1: 3.14159,
     field2: 42,
     field3: "A string at some unknown offset",
 }
 Rust( size = 32 , align = 8 )
 c++( size = 48 , align = 8 )
-[main.cpp:224] layouts = [
+[main.cpp:253] layouts = [
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,
@@ -195,26 +211,26 @@ c++( size = 48 , align = 8 )
         field3: "Another test string",
     },
 ]
-[main.cpp:225] layouts.get(0) = Some(
+[main.cpp:254] layouts.get(0) = Some(
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,
         field3: "A string at some unknown offset",
     },
 )
-[main.cpp:226] layouts.get(1) = Some(
+[main.cpp:255] layouts.get(1) = Some(
     ConservativeLayoutType {
         field1: 2.71828,
         field2: 1000,
         field3: "Another test string",
     },
 )
-[main.cpp:227] layouts.get(1).unwrap() = ConservativeLayoutType {
+[main.cpp:256] layouts.get(1).unwrap() = ConservativeLayoutType {
     field1: 2.71828,
     field2: 1000,
     field3: "Another test string",
 }
-[main.cpp:229] layouts = [
+[main.cpp:258] layouts = [
     ConservativeLayoutType {
         field1: 3.14159,
         field2: 42,
@@ -229,28 +245,28 @@ c++( size = 48 , align = 8 )
 Test #layout_conservative -- finished
 
 Test dbg of Ref<Ref<T>> -- started
-[main.cpp:241] r = RefHolder(
+[main.cpp:270] r = RefHolder(
     SimpleFoo(
         42,
     ),
 )
-[main.cpp:242] rr = RefHolder(
+[main.cpp:271] rr = RefHolder(
     SimpleFoo(
         42,
     ),
 )
-[main.cpp:243] rrr = RefHolder(
+[main.cpp:272] rrr = RefHolder(
     SimpleFoo(
         42,
     ),
 )
-[main.cpp:244] rust::Ref(r.f0) = SimpleFoo(
+[main.cpp:273] rust::Ref(r.f0) = SimpleFoo(
     42,
 )
-[main.cpp:245] rust::Ref((*rr).f0) = SimpleFoo(
+[main.cpp:274] rust::Ref((*rr).f0) = SimpleFoo(
     42,
 )
-[main.cpp:246] rust::Ref((**rrr).f0) = SimpleFoo(
+[main.cpp:275] rust::Ref((**rrr).f0) = SimpleFoo(
     42,
 )
 Test dbg of Ref<Ref<T>> -- finished

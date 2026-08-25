@@ -57,6 +57,13 @@ struct ConservativeLayoutType {
 }
 
 #[allow(unused)]
+#[derive(Debug, Copy, Clone)]
+/// bool field + Copy struct field, to test Ref/RefMut deref of user types
+struct BoolHolder {
+    pub flag: bool,
+    pub data: FieldTypeC,
+}
+
 impl ConservativeLayoutType {
     pub fn mem_size(&self) -> usize {
         std::mem::size_of::<Self>()
