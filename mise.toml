@@ -6,8 +6,10 @@ wasmtime = "36.0.2"
 [tools."github:WebAssembly/wasi-sdk"]
 version = "30"
 version_prefix = "wasi-sdk-"
-# don't export clang binaries
-filter_bins = ""
+# Keep wasi-sdk binaries off PATH: its wasm-only clang/ar shadow the host
+# toolchain and break native builds (e.g. `ar` segfaults on LTO objects).
+# wasi-sdk is consumed via WASI_SDK_PATH below, never through PATH.
+filter_bins = "wasm-ld"
 
 [tools."http:emsdk"]
 version = "5.0.2"

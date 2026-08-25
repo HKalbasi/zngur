@@ -1083,6 +1083,9 @@ pub extern "C" fn {mangled_name}("#
                     self,
                     r#"
 #[allow(non_snake_case)]
+#[allow(dropping_copy_types)]
+#[allow(dropping_references)]
+#[allow(undropped_manually_drops)]
 #[unsafe(no_mangle)]
 pub extern "C" fn {drop_in_place}(v: *mut u8) {{ unsafe {{
     ::std::ptr::drop_in_place(v as *mut {ty});

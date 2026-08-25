@@ -97,6 +97,7 @@ jobs:
           - release
     env:
       EXAMPLES_CARGO_PROFILE: ${{ matrix.cargo_profile }}
+      MISE_NPM_PACKAGE_MANAGER: npm
     steps:
       - name: Turn off autocrlf
         run: |
