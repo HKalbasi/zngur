@@ -116,6 +116,75 @@ void test_ref_deref_of_user_types() {
   zngur_dbg(holder.flag);
 }
 
+void test_bool_and_copy_field_conversions() {
+  auto scope = rust::crate::Scoped::new_(
+      "Test Bool and Copy struct field conversions"_rs);
+
+  rust::crate::BoolHolder holder{true, rust::crate::FieldTypeC{7, 8, 9}};
+
+  // FieldOwned<T> specializations used to drop operator T(), so types with a
+  // specialization (like Bool) lost the conversion that primitives like
+  // int32_t had.
+  zngur_dbg(holder.flag);
+  rust::Bool b1 = holder.flag;
+  zngur_dbg(b1);
+
+  // Copy struct field converts by value
+  rust::crate::FieldTypeC c1 = holder.data;
+  zngur_dbg(c1);
+
+  // Nested field conversion still works
+  int32_t v1 = holder.data.buzz_2;
+  zngur_dbg(v1);
+
+  // Same conversions on Ref and RefMut fields
+  rust::Ref<rust::crate::BoolHolder> r = holder;
+  zngur_dbg(r.flag);
+  rust::crate::FieldTypeC c2 = r.data;
+  zngur_dbg(c2);
+
+  rust::RefMut<rust::crate::BoolHolder> m = holder;
+  zngur_dbg(m.flag);
+  rust::crate::FieldTypeC c3 = m.data;
+  zngur_dbg(int32_t(c3.buzz_1));
+}
+
+void test_option_field_conversions() {
+  auto scope = rust::crate::Scoped::new_("Test Option field conversions"_rs);
+
+  auto some = rust::crate::make_option_holder();
+  zngur_dbg(some);
+
+  // `Option<&T>` is Copy, so it converts out of a FieldOwned by value
+  rust::std::option::Option<rust::Ref<int32_t>> o1 = some.opt_ref;
+  zngur_dbg(o1);
+
+  // Same for `Option<T: Copy>`
+  rust::std::option::Option<rust::crate::FieldTypeC> o2 = some.opt_copy;
+  zngur_dbg(o2);
+  zngur_dbg(o2.unwrap());
+
+  // Conversions also work on Ref and RefMut fields
+  rust::Ref<rust::crate::OptionHolder> r = some;
+  rust::std::option::Option<rust::Ref<int32_t>> o3 = r.opt_ref;
+  zngur_dbg(o3);
+  rust::std::option::Option<rust::crate::FieldTypeC> o4 = r.opt_copy;
+  zngur_dbg(o4);
+
+  rust::RefMut<rust::crate::OptionHolder> m = some;
+  rust::std::option::Option<rust::Ref<int32_t>> o5 = m.opt_ref;
+  zngur_dbg(o5);
+  rust::std::option::Option<rust::crate::FieldTypeC> o6 = m.opt_copy;
+  zngur_dbg(o6);
+
+  // And the None case works too
+  auto none = rust::crate::make_empty_option_holder();
+  rust::std::option::Option<rust::Ref<int32_t>> o7 = none.opt_ref;
+  zngur_dbg(o7);
+  rust::std::option::Option<rust::crate::FieldTypeC> o8 = none.opt_copy;
+  zngur_dbg(o8);
+}
+
 void test_floats() {
   auto scope = rust::crate::Scoped::new_("Test floats"_rs);
 
@@ -279,6 +348,8 @@ int main() {
   test_fields_and_constructor();
   test_field_underlying_conversions();
   test_ref_deref_of_user_types();
+  test_bool_and_copy_field_conversions();
+  test_option_field_conversions();
   test_floats();
   test_dyn_fn_with_multiple_arguments();
   test_refref();

@@ -189,6 +189,14 @@ namespace {{ self.namespace }} {
     };
     {% endif %}
 
+    {# The primary template of `{{ field_kind }}` provides a conversion to `T`, #}
+    {# but this explicit specialization would silently drop it. Only `Copy` #}
+    {# types can support it, since it copies the value out of the parent. #}
+    {# Defined out-of-line, where `Ref` and `T` are complete. #}
+    {% if td.has_copy() && !td.has_unsized() %}
+      inline operator {{ td.ty }}() const;
+    {% endif %}
+
     {% for method in td.methods %}
       {% if method.is_valid_field_method(field_kind) %}
           {{ method.sig.output }} {{ method.name }}(
