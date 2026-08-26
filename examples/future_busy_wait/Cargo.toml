@@ -1,0 +1,12 @@
+[package]
+name = "example-future-busy-wait"
+version = "0.11.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]

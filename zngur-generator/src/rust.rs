@@ -434,6 +434,127 @@ fn mangle_name(name: &str, mangling_base: &str) -> String {
     name
 }
 
+/// If `ty` is `Box<dyn ::std::future::Future<Output = T>>` (or `::core::future::Future`), returns `(T, is_send_sync)`.
+pub(crate) fn future_output_type(ty: &RustType) -> Option<(&RustType, bool)> {
+    let RustType::Boxed(inner) = ty else {
+        return None;
+    };
+    let RustType::Dyn(RustTrait::Normal(pg), bounds) = inner.as_ref() else {
+        return None;
+    };
+    // Accept both `std::future::Future` and `core::future::Future` (and possible leading `::`).
+    let path = &pg.path;
+    if path.len() < 3 {
+        return None;
+    }
+    if !(path[path.len() - 2] == "future" && path[path.len() - 1] == "Future") {
+        return None;
+    }
+    let crate_seg = &path[path.len() - 3];
+    if crate_seg != "std" && crate_seg != "core" {
+        return None;
+    }
+    let output = pg
+        .named_generics
+        .iter()
+        .find(|(name, _)| name == "Output")
+        .map(|(_, ty)| ty)?;
+    let is_send_sync = bounds.contains(&"Send".to_string()) && bounds.contains(&"Sync".to_string());
+    Some((output, is_send_sync))
+}
+
+/// Per-output-type symbol names for the coroutine support of a
+/// `Box<dyn ::std::future::Future<Output = T>>` declared type.
+#[derive(Debug, Clone)]
+pub struct CoroFutureShim {
+    pub rust_output: RustType,
+    pub cpp_output: CppType,
+    pub is_send_sync: bool,
+    /// Include guard for the C++ shims of this output type. Derived only from
+    /// the type (not the crate), so that two crates declaring the same future
+    /// type can be included in one C++ translation unit without redefinition.
+    pub guard: String,
+    /// Rust-provided: polls a `Box<dyn Future<Output = T>>`.
+    pub poll_future_fn: String,
+    /// Rust-provided: wraps a C++ coroutine handle in a `Box<dyn Future<Output = T>>`.
+    pub make_coro_future_fn: String,
+    /// C++-provided: drives the C++ coroutine (polls the pending future,
+    /// resumes when ready) and extracts the result.
+    pub coro_poll_fn: String,
+    /// C++-provided: destroys the C++ coroutine handle.
+    pub coro_destroy_fn: String,
+}
+
+/// Coroutine support for the declared `Box<dyn ::std::future::Future<Output = T>>`
+/// types, or `None` if the spec declares no such type.
+#[derive(Debug, Clone)]
+pub struct CoroSupport {
+    pub clone_waker_fn: String,
+    pub waker_wake_fn: String,
+    pub waker_drop_fn: String,
+    pub shims: Vec<CoroFutureShim>,
+}
+
+impl CoroSupport {
+    pub fn from_types<'a>(
+        types: impl IntoIterator<Item = &'a RustType>,
+        mangling_base: &str,
+        namespace: &str,
+        crate_name: &str,
+    ) -> Option<Self> {
+        let mut shims: Vec<CoroFutureShim> = vec![];
+        for ty in types {
+            let Some((output, is_send_sync)) = future_output_type(ty) else {
+                continue;
+            };
+            if shims
+                .iter()
+                .any(|s| &s.rust_output == output && s.is_send_sync == is_send_sync)
+            {
+                continue;
+            }
+            let (guard, suffix) = Self::shim_names(output, is_send_sync);
+            shims.push(CoroFutureShim {
+                rust_output: output.clone(),
+                cpp_output: output.into_cpp(namespace, crate_name),
+                is_send_sync,
+                guard,
+                poll_future_fn: mangle_name(&format!("coro_poll_future_{suffix}"), mangling_base),
+                make_coro_future_fn: mangle_name(
+                    &format!("coro_make_future_{suffix}"),
+                    mangling_base,
+                ),
+                coro_poll_fn: mangle_name(&format!("coro_poll_coro_{suffix}"), mangling_base),
+                coro_destroy_fn: mangle_name(&format!("coro_destroy_coro_{suffix}"), mangling_base),
+            });
+        }
+        if shims.is_empty() {
+            return None;
+        }
+        Some(CoroSupport {
+            clone_waker_fn: mangle_name("coro_clone_waker", mangling_base),
+            waker_wake_fn: mangle_name("coro_waker_wake", mangling_base),
+            waker_drop_fn: mangle_name("coro_waker_drop", mangling_base),
+            shims,
+        })
+    }
+
+    fn shim_names(output: &RustType, is_send_sync: bool) -> (String, String) {
+        let hash = hash_of_sig(std::slice::from_ref(output));
+        let guard = if is_send_sync {
+            format!("ZNGUR_CORO_SHIMS_{hash}_SEND_SYNC")
+        } else {
+            format!("ZNGUR_CORO_SHIMS_{hash}")
+        };
+        let suffix = if is_send_sync {
+            format!("{hash}_send_sync")
+        } else {
+            hash
+        };
+        (guard, suffix)
+    }
+}
+
 impl RustFile {
     fn mangle_name(&self, name: &str) -> String {
         mangle_name(name, &self.mangling_base)
@@ -1141,6 +1262,137 @@ pub extern "C" fn {debug_print}(v: *mut u8) {{
             f(self);
             wln!(self, "}});");
             wln!(self, "if let Err(_) = e {{ __zngur_mark_panicked(); }}");
+        }
+    }
+
+    /// Emits the Rust half of the coroutine support: shared waker shims plus
+    /// per-output-type future shims. See [`CoroSupport`].
+    pub fn add_coro_support(&mut self, coro: &CoroSupport) {
+        let clone_waker_fn = &coro.clone_waker_fn;
+        let waker_wake_fn = &coro.waker_wake_fn;
+        let waker_drop_fn = &coro.waker_drop_fn;
+        // The C++ side stores wakers in a fixed-size opaque slot
+        // (`ZngurWakerSlot`), so verify at compile time that a `Waker` fits.
+        wln!(
+            self,
+            r#"
+const _: () = {{
+    assert!(
+        ::std::mem::size_of::<::std::task::Waker>() <= 64,
+        "zngur: std::task::Waker does not fit in the C++ coroutine waker slot"
+    );
+    assert!(
+        ::std::mem::align_of::<::std::task::Waker>() <= 16,
+        "zngur: std::task::Waker alignment exceeds the C++ coroutine waker slot alignment"
+    );
+}};
+
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {clone_waker_fn}(src: *mut u8, dst: *mut u8) {{
+    unsafe {{
+        let src = &*(src as *const ::std::task::Waker);
+        let cloned = src.clone();
+        ::std::ptr::write(dst as *mut ::std::task::Waker, cloned);
+    }}
+}}
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {waker_wake_fn}(w: *mut u8) {{
+    unsafe {{
+        let w = ::std::ptr::read(w as *mut ::std::task::Waker);
+        w.wake();
+    }}
+}}
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {waker_drop_fn}(w: *mut u8) {{
+    unsafe {{
+        ::std::ptr::drop_in_place(w as *mut ::std::task::Waker);
+    }}
+}}"#
+        );
+        for shim in &coro.shims {
+            let ty = &shim.rust_output;
+            let is_send_sync = shim.is_send_sync;
+            let poll_future_fn = &shim.poll_future_fn;
+            let make_coro_future_fn = &shim.make_coro_future_fn;
+            let coro_poll_fn = &shim.coro_poll_fn;
+            let coro_destroy_fn = &shim.coro_destroy_fn;
+            let send_sync_bound = if is_send_sync { " + Send + Sync" } else { "" };
+            wln!(
+                self,
+                r#"
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {poll_future_fn}(fut: *mut u8, waker: *mut u8, out: *mut u8) -> u8 {{
+    unsafe {{
+        let fut = &mut *(fut as *mut ::std::boxed::Box<dyn ::std::future::Future<Output = {ty}>{send_sync_bound}>);
+        let waker = &*(waker as *const ::std::task::Waker);
+        let mut cx = ::std::task::Context::from_waker(waker);
+        match ::std::pin::Pin::new_unchecked(fut.as_mut()).poll(&mut cx) {{
+            ::std::task::Poll::Ready(v) => {{
+                ::std::ptr::write(out as *mut {ty}, v);
+                1
+            }}
+            ::std::task::Poll::Pending => 0,
+        }}
+    }}
+}}
+
+unsafe extern "C" {{
+    fn {coro_poll_fn}(handle: *mut u8, waker: *mut u8, out: *mut u8) -> u8;
+    fn {coro_destroy_fn}(handle: *mut u8);
+}}
+
+#[allow(non_snake_case)]
+#[unsafe(no_mangle)]
+pub extern "C" fn {make_coro_future_fn}(handle: *mut u8, out: *mut u8) {{
+    struct CoroState {{
+        handle: *mut u8,
+    }}
+    impl ::std::future::Future for CoroState {{
+        type Output = {ty};
+        fn poll(
+            self: ::std::pin::Pin<&mut Self>,
+            cx: &mut ::std::task::Context<'_>,
+        ) -> ::std::task::Poll<{ty}> {{
+            let mut out_val = ::std::mem::MaybeUninit::<{ty}>::uninit();
+            let waker_ptr = cx.waker() as *const ::std::task::Waker as *mut u8;
+            let is_ready =
+                unsafe {{ {coro_poll_fn}(self.handle, waker_ptr, out_val.as_mut_ptr() as *mut u8) }};
+            if is_ready != 0 {{
+                ::std::task::Poll::Ready(unsafe {{ out_val.assume_init() }})
+            }} else {{
+                ::std::task::Poll::Pending
+            }}
+        }}
+    }}
+    impl Drop for CoroState {{
+        fn drop(&mut self) {{
+            unsafe {{ {coro_destroy_fn}(self.handle) }}
+        }}
+    }}"#
+            );
+            if is_send_sync {
+                wln!(
+                    self,
+                    "    unsafe impl Send for CoroState {{}} unsafe impl Sync for CoroState {{}}"
+                );
+            }
+            wln!(
+                self,
+                r#"    let state = CoroState {{ handle }};
+    let boxed: ::std::boxed::Box<dyn ::std::future::Future<Output = {ty}>{send_sync_bound}> =
+        ::std::boxed::Box::new(state);
+    unsafe {{
+        ::std::ptr::write(
+            out as *mut ::std::boxed::Box<dyn ::std::future::Future<Output = {ty}>{send_sync_bound}>,
+            boxed,
+        )
+    }}
+}}"#
+            );
         }
     }
 

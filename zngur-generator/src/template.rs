@@ -55,6 +55,7 @@ pub(crate) struct CppHeaderTemplate<'a> {
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) rust_cfg_defines: &'a Vec<String>,
     pub(crate) zng_header_in_place: bool,
+    pub(crate) coro_support: &'a Option<crate::rust::CoroSupport>,
     pub(crate) namespace: &'a str,
     pub(crate) crate_name: &'a str,
 }
@@ -550,4 +551,5 @@ pub(crate) struct CppSourceTemplate<'a> {
     pub(crate) exported_fn_defs: &'a Vec<CppExportedFnDefinition>,
     pub(crate) exported_impls: &'a Vec<CppExportedImplDefinition>,
     pub(crate) cpp_namespace: &'a str,
+    pub(crate) coro_support: &'a Option<crate::rust::CoroSupport>,
 }

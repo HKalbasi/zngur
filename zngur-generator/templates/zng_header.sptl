@@ -403,6 +403,12 @@ namespace {{ self.cpp_namespace }} {
 
   template<> struct Tuple<  > {
     public:
+      Tuple() noexcept {}
+      Tuple(const Tuple&) = default;
+      Tuple(Tuple&&) = default;
+      Tuple& operator=(const Tuple&) = default;
+      Tuple& operator=(Tuple&&) = default;
+      ~Tuple() = default;
       union alignas(1) {
         alignas(1) mutable ::std::array< ::uint8_t, 0> __zngur_data;
       };

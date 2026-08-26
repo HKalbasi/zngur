@@ -11,6 +11,7 @@ use cpp::CppVariant;
 use cpp::cpp_handle_keyword;
 use indexmap::map::Entry;
 use itertools::Itertools;
+use rust::CoroSupport;
 use rust::IntoCpp;
 
 pub mod cpp;
@@ -47,6 +48,15 @@ impl ZngurGenerator {
         let sanitized_crate_name = self.1.replace('-', "_");
         let mut rust_file = RustFile::new(&zng.mangling_base);
         rust_file.panic_to_exception = zng.convert_panic_to_exception.0;
+        let coro_support = CoroSupport::from_types(
+            zng.types.iter().map(|td| &td.ty),
+            &zng.mangling_base,
+            default_ns,
+            &sanitized_crate_name,
+        );
+        if let Some(coro) = &coro_support {
+            rust_file.add_coro_support(coro);
+        }
         cpp_file.trait_defs = zng
             .traits
             .iter()
@@ -82,6 +92,7 @@ impl ZngurGenerator {
                 )
             }));
         let mut cpp_mod_content = String::new();
+        cpp_file.coro_support = coro_support;
         for ty_def in zng.types {
             let ty = &ty_def.ty;
             let is_copy = ty_def.wellknown_traits.contains(&ZngurWellknownTrait::Copy);

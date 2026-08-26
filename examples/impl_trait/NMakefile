@@ -8,14 +8,14 @@ WINLIBS = ntdll.lib Ws2_32.lib Userenv.lib
 
 EXAMPLE_NAME = impl_trait
 
-GENERATED = generated.h src/generated.rs
+GENERATED = generated.h generated.cpp src/generated.rs
 
 RUSTLIB_PATH = ../../target/$(EXAMPLES_CARGO_PROFILE)/
 
 RUSTLIB = example_$(EXAMPLE_NAME).lib
 
-a.exe : main.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
-	$(CXX) $(CXXFLAGS) main.cpp /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH)
+a.exe : main.cpp generated.cpp src/lib.rs $(GENERATED) $(RUSTLIB_PATH)/$(RUSTLIB)
+	$(CXX) $(CXXFLAGS) main.cpp generated.cpp /Fe:a.exe /link $(WINLIBS) $(RUSTLIB) /LIBPATH:$(RUSTLIB_PATH)
 
 $(RUSTLIB_PATH)/$(RUSTLIB) :
 	cargo build --profile $(EXAMPLES_CARGO_PROFILE:debug=dev)

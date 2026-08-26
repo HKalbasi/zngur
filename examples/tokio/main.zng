@@ -1,0 +1,72 @@
+#convert_panic_to_exception
+#unstable(template_types)
+
+type<T> Box<dyn ::std::future::Future<Output = T> + Send + Sync> {
+    #layout(size = 16, align = 8);
+    fn into_pin(self) -> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = T> + Send + Sync>>;
+}
+type<T> ::std::pin::Pin<Box<dyn ::std::future::Future<Output = T> + Send + Sync>> {
+    #layout(size = 16, align = 8);
+}
+
+type Box<dyn ::std::future::Future<Output = ()> + Send + Sync> {}
+type ::std::pin::Pin<Box<dyn ::std::future::Future<Output = ()> + Send + Sync>> {}
+
+type Box<dyn ::std::future::Future<Output = i32> + Send + Sync> {}
+type ::std::pin::Pin<Box<dyn ::std::future::Future<Output = i32> + Send + Sync>> {}
+
+type Box<dyn ::std::future::Future<Output = u64> + Send + Sync> {}
+type ::std::pin::Pin<Box<dyn ::std::future::Future<Output = u64> + Send + Sync>> {}
+
+type Box<dyn ::std::future::Future<Output = ::std::string::String> + Send + Sync> {}
+type ::std::pin::Pin<Box<dyn ::std::future::Future<Output = ::std::string::String> + Send + Sync>> {}
+
+type Box<dyn ::std::future::Future<Output = ::std::result::Result<i32, ::tokio::task::JoinError>> + Send + Sync> {}
+type ::std::pin::Pin<Box<dyn ::std::future::Future<Output = ::std::result::Result<i32, ::tokio::task::JoinError>> + Send + Sync>> {}
+
+type ::std::string::String {
+    #layout(size = 24, align = 8);
+}
+
+type ::std::time::Duration {
+    #layout(size = 16, align = 8);
+    fn from_millis(u64) -> ::std::time::Duration;
+}
+
+mod crate {
+    fn new_current_runtime() -> ::tokio::runtime::Runtime;
+    fn into_box_future<::std::result::Result<i32, ::tokio::task::JoinError>>(
+        ::tokio::task::JoinHandle<i32>
+    ) -> Box<dyn ::std::future::Future<Output = ::std::result::Result<i32, ::tokio::task::JoinError>> + Send + Sync>;
+}
+
+mod ::std::result {
+    type Result<i32, ::tokio::task::JoinError> {
+        #heap_allocated;
+
+        fn unwrap(self) -> i32;
+    }
+}
+
+mod tokio {
+    mod time {
+        fn sleep(::std::time::Duration) -> impl ::std::future::Future<Output = ()> + Send + Sync;
+    }
+
+    type runtime::Runtime {
+        #layout(size = 80, align = 8);
+        fn block_on(&self, ::std::pin::Pin<Box<dyn ::std::future::Future<Output = i32> + Send + Sync>>) -> i32;
+        fn block_on(&self, ::std::pin::Pin<Box<dyn ::std::future::Future<Output = u64> + Send + Sync>>) -> u64;
+        fn block_on(&self, ::std::pin::Pin<Box<dyn ::std::future::Future<Output = ()> + Send + Sync>>);
+        fn spawn(&self, ::std::pin::Pin<Box<dyn ::std::future::Future<Output = i32> + Send + Sync>>) -> task::JoinHandle<i32>;
+    }
+
+    type task::JoinHandle<i32> {
+        #layout(size = 8, align = 8);
+    }
+
+    type task::JoinError {
+        #only_by_ref;
+    }
+}
+

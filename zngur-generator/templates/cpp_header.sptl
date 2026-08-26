@@ -1270,3 +1270,175 @@ namespace exported_functions {
   {{ self.render_exported_impls() }}
 
 } // namespace {{ self.namespace }}
+
+{% if let Some(coro) = self.coro_support %}
+// Coroutine support for the declared `Box<dyn ::std::future::Future<Output = T>>`
+// types. Requires C++20; on older standards the future types remain usable as
+// ordinary opaque Zngur types.
+#if __cplusplus >= 202002L
+#include <coroutine>
+#include <optional>
+
+extern "C" {
+void {{ coro.clone_waker_fn }}(uint8_t* src, uint8_t* dst) noexcept(true);
+void {{ coro.waker_wake_fn }}(uint8_t* w) noexcept(true);
+void {{ coro.waker_drop_fn }}(uint8_t* w) noexcept(true);
+}
+
+#ifndef ZNGUR_CORO_DETAIL_V1
+#define ZNGUR_CORO_DETAIL_V1
+// Marker types for coroutine bounds. Forward-declared here so that plain
+// `Box<dyn Future>` specs (without `+Send+Sync`) still compile.
+namespace {{ self.namespace }} {
+struct Send;
+struct Sync;
+}
+namespace {{ self.namespace }} {
+namespace detail {
+// Opaque storage for a Rust `std::task::Waker`. The Rust side compile-time
+// asserts that `Waker` fits in this slot.
+struct ZngurWakerSlot {
+    alignas(16) uint8_t data[64];
+};
+
+struct CoroPromiseBase {
+    ZngurWakerSlot outer_waker;
+    bool has_waker = false;
+    void* pendingAwaiter = nullptr;
+    uint8_t (*pendingPoll)(void*, uint8_t*) = nullptr;
+    ::std::exception_ptr ex;
+    CoroPromiseBase() noexcept(true) {}
+    ~CoroPromiseBase() noexcept(true) {
+        if (has_waker) {
+            ::{{ coro.waker_drop_fn }}(outer_waker.data);
+        }
+    }
+};
+
+template<typename T, bool IsSendSync = true> struct CoroPromise;
+template<typename U, bool IsSendSync> struct FutureAwaiter;
+
+// Dispatches to the per-output-type Rust shims. Specialized below for every
+// declared `Box<dyn ::std::future::Future<Output = T>>` type, isolated by
+// `IsSendSync`.
+template<typename T, bool IsSendSync> struct CoroShims;
+
+template<typename U, bool IsSendSync>
+struct FutureAwaiter {
+    ::std::conditional_t<IsSendSync,
+        ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<U>, ::{{ self.namespace }}::Send, ::{{ self.namespace }}::Sync > >,
+        ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<U> > >
+    > fut;
+    U result;
+    bool await_ready() noexcept(true) { return false; }
+    template<typename T>
+    bool await_suspend(::std::coroutine_handle<CoroPromise<T, IsSendSync>> h) noexcept(true);
+    U await_resume() noexcept(true) { return ::std::move(result); }
+};
+
+template<typename T, bool IsSendSync>
+struct CoroPromise : CoroPromiseBase {
+    ::std::optional<T> result;
+    auto get_return_object() noexcept(true) {
+        auto h = ::std::coroutine_handle<CoroPromise>::from_promise(*this);
+        using BoxTy = ::std::conditional_t<IsSendSync,
+            ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<T>, ::{{ self.namespace }}::Send, ::{{ self.namespace }}::Sync > >,
+            ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<T> > > >;
+        BoxTy out;
+        ::{{ self.namespace }}::__zngur_internal<BoxTy>::assume_init(out);
+        detail::CoroShims<T, IsSendSync>::make_coro_future((uint8_t*)h.address(), ::{{ self.namespace }}::__zngur_internal_data_ptr(out));
+        return out;
+    }
+    ::std::suspend_always initial_suspend() noexcept(true) { return {}; }
+    ::std::suspend_always final_suspend() noexcept(true) { return {}; }
+    void unhandled_exception() noexcept(true) { ex = ::std::current_exception(); }
+    template<typename U>
+    void return_value(U&& v) noexcept(true) { result.emplace(::std::forward<U>(v)); }
+
+    template<typename U>
+    requires IsSendSync
+    auto await_transform(::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<U>, ::{{ self.namespace }}::Send, ::{{ self.namespace }}::Sync > > f) noexcept(true) {
+        FutureAwaiter<U, true> a;
+        a.fut = ::std::move(f);
+        return a;
+    }
+    template<typename U>
+    requires (!IsSendSync)
+    auto await_transform(::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<U> > > f) noexcept(true) {
+        FutureAwaiter<U, false> a;
+        a.fut = ::std::move(f);
+        return a;
+    }
+};
+
+template<typename U, bool IsSendSync>
+template<typename T>
+inline bool FutureAwaiter<U, IsSendSync>::await_suspend(::std::coroutine_handle<CoroPromise<T, IsSendSync>> h) noexcept(true) {
+    auto& prom = static_cast<CoroPromiseBase&>(h.promise());
+    if (prom.has_waker) {
+        // Poll once eagerly; if the future is already ready there is no need
+        // to suspend at all.
+        ZngurWakerSlot tmp_waker;
+        ::{{ coro.clone_waker_fn }}(prom.outer_waker.data, tmp_waker.data);
+        uint8_t is_ready = CoroShims<U, IsSendSync>::poll_future(
+            ::{{ self.namespace }}::__zngur_internal_data_ptr(fut),
+            tmp_waker.data,
+            ::{{ self.namespace }}::__zngur_internal_data_ptr(result));
+        ::{{ coro.waker_drop_fn }}(tmp_waker.data);
+        if (is_ready) {
+            ::{{ self.namespace }}::__zngur_internal_assume_init(result);
+            return false;
+        }
+    }
+    prom.pendingAwaiter = this;
+    prom.pendingPoll = [](void* p, uint8_t* w) -> uint8_t {
+        auto* self = static_cast<FutureAwaiter<U, IsSendSync>*>(p);
+        uint8_t r = CoroShims<U, IsSendSync>::poll_future(
+            ::{{ self.namespace }}::__zngur_internal_data_ptr(self->fut),
+            w,
+            ::{{ self.namespace }}::__zngur_internal_data_ptr(self->result));
+        if (r) ::{{ self.namespace }}::__zngur_internal_assume_init(self->result);
+        return r;
+    };
+    return true;
+}
+} // namespace detail
+} // namespace {{ self.namespace }}
+
+namespace std {
+template<typename T, typename... Args>
+struct coroutine_traits< ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<T>, ::{{ self.namespace }}::Send, ::{{ self.namespace }}::Sync > >, Args...> {
+    using promise_type = ::{{ self.namespace }}::detail::CoroPromise<T, true>;
+};
+template<typename T, typename... Args>
+struct coroutine_traits< ::{{ self.namespace }}::Box< ::{{ self.namespace }}::Dyn< ::{{ self.namespace }}::std::future::Future<T> > >, Args...> {
+    using promise_type = ::{{ self.namespace }}::detail::CoroPromise<T, false>;
+};
+}
+#endif // ZNGUR_CORO_DETAIL_V1
+
+{% for shim in coro.shims %}
+#ifndef {{ shim.guard }}
+#define {{ shim.guard }}
+extern "C" {
+uint8_t {{ shim.poll_future_fn }}(uint8_t* fut, uint8_t* waker, uint8_t* out) noexcept(true);
+void {{ shim.make_coro_future_fn }}(uint8_t* handle, uint8_t* out) noexcept(true);
+}
+namespace {{ self.namespace }} {
+namespace detail {
+template<> struct CoroShims<{{ shim.cpp_output }}, {% if shim.is_send_sync %}true{% else %}false{% endif %}> {
+    static inline uint8_t poll_future(uint8_t* fut, uint8_t* waker, uint8_t* out) noexcept(true) {
+        return ::{{ shim.poll_future_fn }}(fut, waker, out);
+    }
+    static inline void make_coro_future(uint8_t* handle, uint8_t* out) noexcept(true) {
+        ::{{ shim.make_coro_future_fn }}(handle, out);
+    }
+};
+} // namespace detail
+} // namespace {{ self.namespace }}
+extern "C" uint8_t {{ shim.coro_poll_fn }}(uint8_t* handle_ptr, uint8_t* waker_ptr, uint8_t* out_ptr) noexcept(true);
+extern "C" void {{ shim.coro_destroy_fn }}(uint8_t* handle_ptr) noexcept(true);
+#endif // {{ shim.guard }}
+{% endfor %}
+#endif // __cplusplus >= 202002L
+{% endif %}

@@ -1,0 +1,15 @@
+=== test ready futures ===
+Futures are lazy and do nothing until polled
+f1 = 5
+f2 = tokio_sleep 5 done
+tokio_sleep 5 done
+tokio_sleep 5 done
+15
+spawned 2 tasks
+tokio_sleep 60 done
+tokio_sleep 100 done
+tokio_sleep 60 done
+tokio_sleep 60 done
+tokio_sleep 100 done
+tokio_sleep 100 done
+joined 180 300

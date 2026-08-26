@@ -678,6 +678,7 @@ pub struct CppFile {
     pub panic_to_exception: bool,
     pub rust_cfg_defines: Vec<String>,
     pub zng_header_in_place: bool,
+    pub coro_support: Option<crate::rust::CoroSupport>,
 }
 
 impl CppFile {
@@ -697,6 +698,7 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             rust_cfg_defines: &self.rust_cfg_defines,
             zng_header_in_place: self.zng_header_in_place,
+            coro_support: &self.coro_support,
             namespace,
             crate_name,
         };
@@ -717,12 +719,14 @@ impl CppFile {
             exported_fn_defs: &self.exported_fn_defs,
             exported_impls: &self.exported_impls,
             cpp_namespace: namespace,
+            coro_support: &self.coro_support,
         };
         state.text += normalize_whitespace(template.render().unwrap().as_str()).as_str();
 
         *is_really_needed = !self.trait_defs.is_empty()
             || !self.exported_fn_defs.is_empty()
-            || !self.exported_impls.is_empty();
+            || !self.exported_impls.is_empty()
+            || self.coro_support.is_some();
 
         Ok(())
     }

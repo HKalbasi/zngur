@@ -10,6 +10,7 @@ chumsky
 cloneable
 Conds
 constexpr
+coro
 cout
 cplusplus
 CPTE
@@ -46,6 +47,7 @@ libyourcrate
 lwasi
 mdformat
 memcpy
+millis
 moveit
 msvc
 newtype
@@ -63,6 +65,7 @@ relpath
 repr
 respecify
 rlib
+RPIT
 rustc
 RUSTC
 RUSTFLAGS

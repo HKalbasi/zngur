@@ -1,0 +1,18 @@
+=== test ready futures ===
+Futures are lazy and do nothing until polled
+job 0 started
+cpp_coro_ready_5
+job 1 started
+cpp_coro_pend_3x 3
+job 1 is pending
+job 1 is pending
+job 1 is pending
+first done
+job 1 is pending
+job 1 is pending
+job 1 is pending
+second done
+job 1 is pending
+job 1 is pending
+job 1 is pending
+third done
