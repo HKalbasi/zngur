@@ -172,7 +172,8 @@ fn main() {
                 .with_cpp_file(cpp_file)
                 .with_h_file(h_file)
                 .with_rs_file(rs_file)
-                .with_zng_header_in_place_as(zng_header_in_place);
+                .with_zng_header_in_place_as(zng_header_in_place)
+                .with_warning_sink(|w| eprintln!("{w}"));
             if let Some(cpp_namespace) = cpp_namespace {
                 zng = zng.with_cpp_namespace(&cpp_namespace);
             }

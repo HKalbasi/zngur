@@ -9,7 +9,7 @@ There are currently 3 kinds of opaque types that `zngur` is able to represent
 These types are made available to Rust with varying sets of restrictions and tradeoffs imposed
 based on your choice
 
-For each of these types (aka. marked `#cpp_ref`, `#cpp_value`, or
+For each of these types (aka. marked `#cpp_ref`, `#cpp_heap_allocated`, or
 `#cpp_stack_owned`), `zngur` will generate a new type within `pub mod cpp {}`.
 
 This module is where all generated opaque types live
@@ -61,8 +61,11 @@ Those problem might be solved by the `extern type` language feature.
 
 ## Opaque Heap Allocated C++ Type
 
-Keeping C++ objects in Rust using heap allocation is supported with `#cpp_value` types.
+Keeping C++ objects in Rust using heap allocation is supported with `#cpp_heap_allocated` types.
 This is similar to `#cpp_ref` types. Look at the example `tutorial_cpp` for a usage example
+
+> **NOTE**: `#cpp_value` is a deprecated alias for `#cpp_heap_allocated` and will
+> emit a warning when used; new code should use `#cpp_heap_allocated`.
 
 ### Semantics of Opaque Heap Allocated Types
 

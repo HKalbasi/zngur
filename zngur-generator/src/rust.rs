@@ -1099,9 +1099,9 @@ pub {}fn {rust_name}("#,
         mangled_name
     }
 
-    pub fn add_cpp_value_bridge(&mut self, ty: &RustType) -> String {
+    pub fn add_cpp_heap_allocated_bridge(&mut self, ty: &RustType) -> String {
         let type_name = ty.to_string().split("::").last().unwrap().to_string();
-        let mangled_name = self.mangle_name(&format!("{ty}_cpp_value"));
+        let mangled_name = self.mangle_name(&format!("{ty}_cpp_heap_allocated"));
         w!(
             self,
             r#"

@@ -38,6 +38,7 @@ pub struct Zngur {
     zng_header_in_place: bool,
     zng_h_file_path: Option<PathBuf>,
     crate_name: Option<String>,
+    warning_sink: Option<Box<dyn Fn(&str)>>,
 }
 
 impl Zngur {
@@ -54,6 +55,7 @@ impl Zngur {
             zng_header_in_place: false,
             zng_h_file_path: None,
             crate_name: None,
+            warning_sink: None,
         }
     }
 
@@ -133,9 +135,33 @@ impl Zngur {
         self
     }
 
+    /// Set how deprecation and other non-fatal warnings produced while parsing the
+    /// `.zng` file are reported. Each warning is a rendered (possibly multi-line)
+    /// diagnostic, already labeled (e.g. `Warning: ...`), pointing at the relevant
+    /// source location.
+    ///
+    /// By default (if this is never called), warnings are printed to stdout using
+    /// Cargo's `cargo:warning=` build-script convention, which is appropriate when
+    /// [`generate`](Self::generate) is called from a build script. Callers that are
+    /// not running inside a build script (e.g. a CLI) should call this to print
+    /// warnings some other way, e.g. `.with_warning_sink(|w| eprintln!("{w}"))`.
+    pub fn with_warning_sink(mut self, sink: impl Fn(&str) + 'static) -> Self {
+        self.warning_sink = Some(Box::new(sink));
+        self
+    }
+
     pub fn generate(self) {
+        let warning_sink = self.warning_sink.unwrap_or_else(|| {
+            Box::new(|w: &str| {
+                // `cargo:warning=` is a line-based directive, so a multi-line warning
+                // needs the prefix repeated on every line to stay visible to Cargo.
+                for line in w.lines() {
+                    println!("cargo:warning={line}");
+                }
+            })
+        });
         let rust_cfg = self.rust_cfg.unwrap_or_else(|| Box::new(NullCfg));
-        let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg);
+        let parse_result = ParsedZngFile::parse(self.zng_file, rust_cfg, &*warning_sink);
         let crate_name = self
             .crate_name
             .or_else(|| std::env::var("CARGO_PKG_NAME").ok())

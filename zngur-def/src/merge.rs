@@ -1,6 +1,6 @@
 use crate::{
-    AdditionalIncludes, ConvertPanicToException, CppRef, CppStackOwned, CppValue, LayoutPolicy,
-    ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
+    AdditionalIncludes, ConvertPanicToException, CppHeapAllocated, CppRef, CppStackOwned,
+    LayoutPolicy, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
     ZngurMethodDetails, ZngurSpec, ZngurTrait, ZngurType, ZngurVariant,
 };
 
@@ -148,7 +148,8 @@ impl Merge for ZngurType {
             ));
         }
 
-        self.cpp_value.merge(&mut into.cpp_value)?;
+        self.cpp_heap_allocated
+            .merge(&mut into.cpp_heap_allocated)?;
         self.cpp_ref.merge(&mut into.cpp_ref)?;
         self.cpp_stack_owned.merge(&mut into.cpp_stack_owned)?;
 
@@ -189,14 +190,16 @@ impl Merge for ZngurTrait {
     }
 }
 
-impl Merge for CppValue {
+impl Merge for CppHeapAllocated {
     /// Writes the partial union of `self` and `into` to the latter.
     ///
-    /// There is no meaningful way to merge different CppValues, but we allow
-    /// merging the same CppValue from different sources.
+    /// There is no meaningful way to merge different CppHeapAllocated values, but we
+    /// allow merging the same CppHeapAllocated value from different sources.
     fn merge(self, into: &mut Self) -> MergeResult {
         if self != *into {
-            return Err(MergeFailure::Conflict("Cpp value mismatch".to_string()));
+            return Err(MergeFailure::Conflict(
+                "Cpp heap allocated mismatch".to_string(),
+            ));
         }
         Ok(())
     }

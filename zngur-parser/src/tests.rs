@@ -1,7 +1,7 @@
 use std::panic::catch_unwind;
 
 use expect_test::{Expect, expect};
-use zngur_def::{LayoutPolicy, RustPathAndGenerics, RustType, ZngurSpec};
+use zngur_def::{CppHeapAllocated, LayoutPolicy, RustPathAndGenerics, RustType, ZngurSpec};
 
 use crate::{
     ImportResolver, ParsedZngFile,
@@ -9,14 +9,14 @@ use crate::{
 };
 
 fn check_success(zng: &str) {
-    let _ = ParsedZngFile::parse_str(zng, NullCfg);
+    let _ = ParsedZngFile::parse_str(zng, NullCfg, |_| {});
 }
 
 pub struct ErrorText(pub String);
 
 fn check_fail(zng: &str, error: Expect) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str(zng, NullCfg);
+        let _ = ParsedZngFile::parse_str(zng, NullCfg, |_| {});
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -33,7 +33,7 @@ fn check_fail_with_cfg(
     error: Expect,
 ) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str(zng, cfg);
+        let _ = ParsedZngFile::parse_str(zng, cfg, |_| {});
     });
     match r {
         Ok(_) => panic!("Parsing succeeded but we expected fail"),
@@ -46,7 +46,7 @@ fn check_fail_with_cfg(
 
 fn check_import_fail(zng: &str, error: Expect, resolver: &MockFilesystem) {
     let r = catch_unwind(|| {
-        let _ = ParsedZngFile::parse_str_with_resolver(zng, NullCfg, resolver);
+        let _ = ParsedZngFile::parse_str_with_resolver(zng, NullCfg, resolver, |_| {});
     });
 
     match r {
@@ -63,7 +63,7 @@ fn catch_parse_fail(
     zng: &str,
     cfg: impl RustCfgProvider + std::panic::UnwindSafe + 'static,
 ) -> crate::ParseResult {
-    let r = catch_unwind(move || ParsedZngFile::parse_str(zng, cfg));
+    let r = catch_unwind(move || ParsedZngFile::parse_str(zng, cfg, |_| {}));
 
     match r {
         Ok(r) => r,
@@ -183,6 +183,93 @@ type crate::Way {
     );
 }
 
+#[test]
+fn cpp_heap_allocated_directive_parses() {
+    let result = ParsedZngFile::parse_str(
+        r#"
+type crate::Way {
+    #layout(size = 16, align = 8);
+    #cpp_heap_allocated "::osmium::Way";
+}
+    "#,
+        NullCfg,
+        |_| {},
+    );
+    let ty = result.spec.types.first().expect("no type parsed");
+    assert_eq!(
+        ty.cpp_heap_allocated,
+        Some(CppHeapAllocated("::osmium::Way".to_owned())),
+    );
+}
+
+#[test]
+fn cpp_value_emits_deprecation_warning_and_forwards_to_cpp_heap_allocated() {
+    let mut warnings = Vec::new();
+    let result = ParsedZngFile::parse_str(
+        r#"
+type crate::Way {
+    #layout(size = 16, align = 8);
+    #cpp_value "0" "::osmium::Way";
+}
+    "#,
+        NullCfg,
+        |w| warnings.push(w.to_owned()),
+    );
+    assert_eq!(warnings.len(), 1);
+    expect![[r#"
+        Warning: #cpp_value is deprecated; use #cpp_heap_allocated instead
+           ╭─[test.zng:4:5]
+           │
+         4 │     #cpp_value "0" "::osmium::Way";
+           │     ───────────────┬───────────────  
+           │                    ╰───────────────── #cpp_value is deprecated; use #cpp_heap_allocated instead
+        ───╯
+    "#]].assert_eq(&warnings[0]);
+    let ty = result.spec.types.first().expect("no type parsed");
+    assert_eq!(
+        ty.cpp_heap_allocated,
+        Some(CppHeapAllocated("::osmium::Way".to_owned())),
+    );
+}
+
+#[test]
+fn cpp_value_and_cpp_heap_allocated_merge_as_equivalent_across_files() {
+    let resolver = MockFilesystem::new(vec![(
+        "./a.zng",
+        r#"
+type crate::Way {
+    #layout(size = 16, align = 8);
+    #cpp_value "0" "::osmium::Way";
+}
+    "#,
+    )]);
+
+    let mut warnings = Vec::new();
+    let parsed = ParsedZngFile::parse_str_with_resolver(
+        r#"
+merge "./a.zng";
+type crate::Way {
+    #cpp_heap_allocated "::osmium::Way";
+}
+    "#,
+        NullCfg,
+        &resolver,
+        |w| warnings.push(w.to_owned()),
+    );
+    // The #cpp_value directive that triggered this warning lives in the imported
+    // a.zng, not the root file, so the rendered warning must show a.zng's own
+    // source snippet -- this exercises the cross-file source lookup used when
+    // rendering a warning that was merged in from an imported file's context.
+    assert_eq!(warnings.len(), 1);
+    assert!(warnings[0].contains("a.zng"));
+    assert!(warnings[0].contains(r#"#cpp_value "0" "::osmium::Way";"#));
+    let ty = parsed.spec.types.first().expect("no type parsed");
+    assert_eq!(
+        ty.cpp_heap_allocated,
+        Some(CppHeapAllocated("::osmium::Way".to_owned())),
+    );
+}
+
 macro_rules! assert_ty_path {
     ($path_expected:expr, $ty:expr) => {{
         let RustType::Adt(RustPathAndGenerics { path: p, .. }) = $ty else {
@@ -202,6 +289,7 @@ type MyString {
 }
     "#,
         NullCfg,
+        |_| {},
     );
     let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -223,6 +311,7 @@ mod crate {
 }
     "#,
         NullCfg,
+        |_| {},
     );
     let ty = parsed.spec.types.first().expect("no type parsed");
     let RustType::Adt(RustPathAndGenerics { path: p, .. }) = &ty.ty else {
@@ -246,6 +335,7 @@ type Option<i32> {
 }
         "#,
         NullCfg,
+        |_| {},
     );
 
     let ty = parsed.spec.types.first().expect("no type parsed");
@@ -311,6 +401,7 @@ type Example {
     "#,
         NullCfg,
         &resolver,
+        |_| {},
     );
     assert_eq!(parsed.spec.types.len(), 2);
 }
@@ -571,6 +662,7 @@ type A {
 }
         "#,
         NullCfg,
+        |_| {},
     );
     // Should have exactly one file (test.zng)
     assert_eq!(parsed.processed_files.len(), 1);
@@ -600,6 +692,7 @@ type Main {
         "#,
         NullCfg,
         &resolver,
+        |_| {},
     );
     // Should have two files: main (test.zng) + imported
     assert_eq!(parsed.processed_files.len(), 2);
@@ -635,6 +728,7 @@ type Main {
         "#,
         NullCfg,
         &resolver,
+        |_| {},
     );
     // Should have four files: main + a + b + c
     assert_eq!(parsed.processed_files.len(), 4);
@@ -1027,6 +1121,7 @@ fn module_import_parser_test() {
 import "module.zng";
 "#,
         crate::cfg::NullCfg,
+        |_| {},
     );
     assert_eq!(parsed.spec.imported_modules.len(), 1);
     assert_eq!(
@@ -1085,6 +1180,7 @@ fn cpp_additional_includes() {
 "
     "#,
         crate::cfg::NullCfg,
+        |_| {},
     );
     assert_eq!(
         parsed.spec.additional_includes.0,
@@ -1099,6 +1195,7 @@ fn cpp_additional_includes() {
 "#
     "##,
         crate::cfg::NullCfg,
+        |_| {},
     );
     assert_eq!(
         parsed.spec.additional_includes.0,

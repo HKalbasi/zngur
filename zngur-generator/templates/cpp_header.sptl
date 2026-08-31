@@ -78,8 +78,8 @@ extern "C" {
       uint32_t {{ discriminant }} (uint8_t* i) noexcept;
     {% endif %}
 
-    {% if let Some(cpp_value) = td.cpp_value %}
-      ::{{ self.namespace }}::ZngurCppOpaqueOwnedObject* {{ cpp_value.0 }}(uint8_t*);
+    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
+      ::{{ self.namespace }}::ZngurCppOpaqueOwnedObject* {{ cpp_heap_allocated.bridge_fn }}(uint8_t*);
     {% endif %}
 
     {% if !td.layout.is_stack_allocated() && !td.layout.is_only_by_ref() %}
@@ -368,9 +368,9 @@ namespace {{ self.namespace }} {
 
       {{ td.render_make_box(name, self.namespace, self.crate_name) }}
 
-      {% if let Some(cpp_value) = td.cpp_value %}
-          inline {{ cpp_value.1 }}& cpp() {
-              return (*{{ cpp_value.0 }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this))).as_cpp< {{ cpp_value.1 }} >();
+      {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
+          inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
+              return (*{{ cpp_heap_allocated.bridge_fn }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
           }
 
           inline {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject&& o) noexcept {
@@ -382,7 +382,7 @@ namespace {{ self.namespace }} {
 
           template<typename... Args>
           static inline {{ name }} build(Args&&... args) {
-              return {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject::build< {{ cpp_value.1 }} >(::std::forward<Args>(args)...));
+              return {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject::build< {{ cpp_heap_allocated.cpp_type }} >(::std::forward<Args>(args)...));
           }
       {% endif %}
 
@@ -704,9 +704,9 @@ namespace {{ self.namespace }} {
 
     {{ td.render_make_box_ref(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    {% if let Some(cpp_value) = td.cpp_value %}
-      inline {{ cpp_value.1 }}& cpp() {
-          return (*{{ cpp_value.0 }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_value.1 }} >();
+    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
+      inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
+          return (*{{ cpp_heap_allocated.bridge_fn }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
       }
     {% endif %}
 
@@ -928,9 +928,9 @@ namespace {{ self.namespace }} {
 
     {{ td.render_make_box_ref_only(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    {% if let Some(cpp_value) = td.cpp_value %}
-      inline {{ cpp_value.1 }}& cpp() {
-        return (*{{ cpp_value.0 }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_value.1 }} >();
+    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
+      inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
+        return (*{{ cpp_heap_allocated.bridge_fn }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
       }
     {% endif %}
 

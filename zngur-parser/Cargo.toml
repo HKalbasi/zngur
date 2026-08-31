@@ -13,8 +13,8 @@ license.workspace = true
 ariadne = "0.3.0"
 chumsky = { version = "=1.0.0-alpha.8", features = [] }
 itertools = "0.11"
+strip-ansi-escapes = "0.2.0"
 zngur-def = { version = "=0.11.0", path = "../zngur-def" }
 
 [dev-dependencies]
 expect-test = "1.4.1"
-strip-ansi-escapes = "0.2.0"

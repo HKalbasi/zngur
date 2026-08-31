@@ -5,7 +5,9 @@ use std::{
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use zngur_def::{CppRef, CppStackOwned, CppValue, RustTrait, ZngurFieldData, ZngurMethodReceiver};
+use zngur_def::{
+    CppHeapAllocatedData, CppRef, CppStackOwned, RustTrait, ZngurFieldData, ZngurMethodReceiver,
+};
 
 use crate::{
     ZngurWellknownTraitData,
@@ -525,7 +527,7 @@ pub struct CppTypeDefinition {
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
-    pub cpp_value: Option<CppValue>,
+    pub cpp_heap_allocated: Option<CppHeapAllocatedData>,
     pub cpp_ref: Option<CppRef>,
     pub cpp_stack_owned: Option<CppStackOwned>,
 }
@@ -659,7 +661,7 @@ impl Default for CppTypeDefinition {
             wellknown_traits: vec![],
             from_trait: None,
             from_trait_ref: None,
-            cpp_value: None,
+            cpp_heap_allocated: None,
             cpp_ref: None,
             cpp_stack_owned: None,
         }

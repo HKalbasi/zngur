@@ -161,7 +161,7 @@ impl ZngurGenerator {
 "#
                 ));
             }
-            if ty_def.cpp_value.is_some() {
+            if ty_def.cpp_heap_allocated.is_some() {
                 let type_name = ty.to_string().split("::").last().unwrap().to_string();
                 cpp_mod_content.push_str(&format!(
                     r#"
@@ -325,9 +325,11 @@ impl ZngurGenerator {
                 fields,
                 methods: cpp_methods,
                 wellknown_traits,
-                cpp_value: ty_def.cpp_value.map(|mut cpp_value| {
-                    cpp_value.0 = rust_file.add_cpp_value_bridge(&ty);
-                    cpp_value
+                cpp_heap_allocated: ty_def.cpp_heap_allocated.map(|cpp_heap_allocated| {
+                    CppHeapAllocatedData {
+                        bridge_fn: rust_file.add_cpp_heap_allocated_bridge(&ty),
+                        cpp_type: cpp_heap_allocated.0,
+                    }
                 }),
                 cpp_ref: ty_def.cpp_ref,
                 cpp_stack_owned: ty_def.cpp_stack_owned,

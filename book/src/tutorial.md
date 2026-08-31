@@ -396,13 +396,13 @@ In the same directory, create a `main.zng` file with the following content:
 type crate::Inventory {
     #layout(size = 16, align = 8);
 
-    #cpp_value "0" "::cpp_inventory::Inventory";
+    #cpp_heap_allocated "::cpp_inventory::Inventory";
 }
 
 type crate::Item {
     #layout(size = 16, align = 8);
 
-    #cpp_value "0" "::cpp_inventory::Item";
+    #cpp_heap_allocated "::cpp_inventory::Item";
 }
 ```
 

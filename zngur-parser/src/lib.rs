@@ -12,7 +12,7 @@ use chumsky::{input::MapExtra, prelude::*};
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    AdditionalIncludes, ConvertPanicToException, CppRef, CppStackOwned, CppValue, Import,
+    AdditionalIncludes, ConvertPanicToException, CppHeapAllocated, CppRef, CppStackOwned, Import,
     LayoutPolicy, Merge, MergeFailure, ModuleImport, Mutability, PrimitiveRustType,
     RustPathAndGenerics, RustTrait, RustType, TypeVar, ZngurConstructor, ZngurExternCppFn,
     ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver,
@@ -381,6 +381,9 @@ enum ParsedTypeItem<'a> {
         field: &'a str,
         cpp_type: &'a str,
     },
+    CppHeapAllocated {
+        cpp_type: &'a str,
+    },
     CppRef {
         cpp_type: &'a str,
     },
@@ -497,7 +500,7 @@ impl ProcessedItem<'_> {
                 let mut layout = None;
                 let mut layout_span = None;
                 let mut exhaustive = true;
-                let mut cpp_value = None;
+                let mut cpp_heap_allocated = None;
                 let mut cpp_ref = None;
                 let mut cpp_stack_owned = None;
                 let mut to_process = items;
@@ -664,8 +667,15 @@ impl ProcessedItem<'_> {
                                 cpp_name: cpp_name.map(|s| s.to_owned()),
                             });
                         }
-                        ParsedTypeItem::CppValue { field, cpp_type } => {
-                            cpp_value = Some(CppValue(field.to_owned(), cpp_type.to_owned()));
+                        ParsedTypeItem::CppValue { field: _, cpp_type } => {
+                            ctx.add_warning_str(
+                                "#cpp_value is deprecated; use #cpp_heap_allocated instead",
+                                item_span,
+                            );
+                            cpp_heap_allocated = Some(CppHeapAllocated(cpp_type.to_owned()));
+                        }
+                        ParsedTypeItem::CppHeapAllocated { cpp_type } => {
+                            cpp_heap_allocated = Some(CppHeapAllocated(cpp_type.to_owned()));
                         }
                         ParsedTypeItem::CppRef { cpp_type } => {
                             match layout_span {
@@ -715,7 +725,7 @@ impl ProcessedItem<'_> {
                     .collect::<Vec<_>>();
                 if let Some(is_unsized) = is_unsized {
                     if let Some(span) = layout_span {
-                        ctx.add_report(
+                        ctx.add_fatal_report(
                             Report::build(
                                 ReportKind::Error,
                                 ctx.filename().to_string(),
@@ -751,7 +761,7 @@ impl ProcessedItem<'_> {
                     constructor,
                     variants,
                     fields,
-                    cpp_value,
+                    cpp_heap_allocated,
                     cpp_ref,
                     cpp_stack_owned,
                 };
@@ -956,11 +966,17 @@ impl ParsedRustPathAndGenerics<'_> {
     }
 }
 
+/// A diagnostic report, tagged with whether it should abort the parse.
+struct ReportEntry<'b> {
+    fatal: bool,
+    report: Report<'b, (String, std::ops::Range<usize>)>,
+}
+
 struct ParseContext<'a, 'b> {
     path: std::path::PathBuf,
     text: &'a str,
     depth: usize,
-    reports: Vec<Report<'b, (String, std::ops::Range<usize>)>>,
+    reports: Vec<ReportEntry<'b>>,
     source_cache: std::collections::HashMap<std::path::PathBuf, String>,
     /// All .zng files processed during parsing (main file + imports)
     processed_files: Vec<std::path::PathBuf>,
@@ -1003,13 +1019,38 @@ impl<'a, 'b> ParseContext<'a, 'b> {
         self.path.file_name().unwrap().to_str().unwrap()
     }
 
-    fn add_report(&mut self, report: Report<'b, (String, std::ops::Range<usize>)>) {
-        self.reports.push(report);
+    /// Every known source file (this file plus every imported file already
+    /// processed), paired with its text, for ariadne's `sources()` cache. Needed so
+    /// that a report whose span points into an imported file can still be rendered
+    /// correctly after that file's `ParseContext` has been merged into this one.
+    fn all_sources(&self) -> impl Iterator<Item = (String, &str)> {
+        [(self.filename().to_string(), self.text)]
+            .into_iter()
+            .chain(self.source_cache.iter().map(|(path, text)| {
+                (
+                    path.file_name().unwrap().to_str().unwrap().to_string(),
+                    text.as_str(),
+                )
+            }))
+    }
+
+    /// Renders a single report to text (stripped of ANSI color codes).
+    fn render_report(&self, report: &Report<'b, (String, std::ops::Range<usize>)>) -> String {
+        let mut buf = Vec::new();
+        report.write(sources(self.all_sources()), &mut buf).unwrap();
+        String::from_utf8(strip_ansi_escapes::strip(buf)).unwrap()
+    }
+
+    fn add_fatal_report(&mut self, report: Report<'b, (String, std::ops::Range<usize>)>) {
+        self.reports.push(ReportEntry {
+            fatal: true,
+            report,
+        });
     }
     fn add_errors<'err_src>(&mut self, errs: impl Iterator<Item = Rich<'err_src, String>>) {
         let filename = self.filename().to_string();
         self.reports.extend(errs.map(|e| {
-            Report::build(ReportKind::Error, &filename, e.span().start)
+            let report = Report::build(ReportKind::Error, &filename, e.span().start)
                 .with_message(e.to_string())
                 .with_label(
                     Label::new((filename.clone(), e.span().into_range()))
@@ -1021,12 +1062,34 @@ impl<'a, 'b> ParseContext<'a, 'b> {
                         .with_message(format!("while parsing this {}", label))
                         .with_color(Color::Yellow)
                 }))
-                .finish()
+                .finish();
+            ReportEntry {
+                fatal: true,
+                report,
+            }
         }));
     }
 
     fn add_error_str(&mut self, error: &str, span: Span) {
         self.add_errors([Rich::custom(span, error)].into_iter());
+    }
+
+    /// Records a non-fatal warning as an ariadne diagnostic pointing at `span`.
+    /// Rendering is deferred until dispatch time (see `render_report`).
+    fn add_warning_str(&mut self, warning: &str, span: Span) {
+        let filename = self.filename().to_string();
+        let report = Report::build(ReportKind::Warning, &filename, span.start)
+            .with_message(warning)
+            .with_label(
+                Label::new((filename.clone(), span.into_range()))
+                    .with_message(warning)
+                    .with_color(Color::Yellow),
+            )
+            .finish();
+        self.reports.push(ReportEntry {
+            fatal: false,
+            report,
+        });
     }
 
     fn consume_from(&mut self, mut other: ParseContext<'_, 'b>) {
@@ -1038,33 +1101,17 @@ impl<'a, 'b> ParseContext<'a, 'b> {
     }
 
     fn has_errors(&self) -> bool {
-        !self.reports.is_empty()
+        self.reports.iter().any(|entry| entry.fatal)
     }
 
     #[cfg(test)]
     fn emit_ariadne_errors(&self) -> ! {
         let mut r = Vec::<u8>::new();
-        for err in &self.reports {
-            err.write(
-                sources(
-                    [(self.filename().to_string(), self.text)]
-                        .into_iter()
-                        .chain(
-                            self.source_cache
-                                .iter()
-                                .map(|(path, text)| {
-                                    (
-                                        path.file_name().unwrap().to_str().unwrap().to_string(),
-                                        text.as_str(),
-                                    )
-                                })
-                                .collect::<Vec<_>>()
-                                .into_iter(),
-                        ),
-                ),
-                &mut r,
-            )
-            .unwrap();
+        for entry in self.reports.iter().filter(|entry| entry.fatal) {
+            entry
+                .report
+                .write(sources(self.all_sources()), &mut r)
+                .unwrap();
         }
         std::panic::resume_unwind(Box::new(tests::ErrorText({
             let s = String::from_utf8(strip_ansi_escapes::strip(r)).unwrap();
@@ -1075,24 +1122,8 @@ impl<'a, 'b> ParseContext<'a, 'b> {
 
     #[cfg(not(test))]
     fn emit_ariadne_errors(&self) -> ! {
-        for err in &self.reports {
-            err.eprint(sources(
-                [(self.filename().to_string(), self.text)]
-                    .into_iter()
-                    .chain(
-                        self.source_cache
-                            .iter()
-                            .map(|(path, text)| {
-                                (
-                                    path.file_name().unwrap().to_str().unwrap().to_string(),
-                                    text.as_str(),
-                                )
-                            })
-                            .collect::<Vec<_>>()
-                            .into_iter(),
-                    ),
-            ))
-            .unwrap();
+        for entry in self.reports.iter().filter(|entry| entry.fatal) {
+            entry.report.eprint(sources(self.all_sources())).unwrap();
         }
         exit(101);
     }
@@ -1177,7 +1208,7 @@ impl<'a> ParsedZngFile<'a> {
                         // TODO: emit a better error. How should we get a span here?
                         // I'd like to avoid putting a ParsedImportPath in ZngurSpec, and
                         // also not have to pass a filename to add_to_zngur_spec.
-                        ctx.add_report(
+                        ctx.add_fatal_report(
                             Report::build(ReportKind::Error, ctx.filename(), 0)
                                 .with_message(format!(
                                     "Import path not found: {}",
@@ -1192,7 +1223,14 @@ impl<'a> ParsedZngFile<'a> {
     }
 
     /// Parse a .zng file and return both the spec and list of all processed files.
-    pub fn parse(path: std::path::PathBuf, cfg: Box<dyn RustCfgProvider>) -> ParseResult {
+    ///
+    /// `warning_sink` is called once per deprecation or other non-fatal warning
+    /// produced while parsing.
+    pub fn parse(
+        path: std::path::PathBuf,
+        cfg: Box<dyn RustCfgProvider>,
+        warning_sink: &dyn Fn(&str),
+    ) -> ParseResult {
         let mut zngur = ZngurSpecBuilder::default();
         zngur.spec.rust_cfg.extend(cfg.get_cfg_pairs());
         zngur.spec.rust_cfg.sort();
@@ -1200,9 +1238,12 @@ impl<'a> ParsedZngFile<'a> {
         let mut ctx = ParseContext::new(path.clone(), &text, cfg.clone_box());
         Self::parse_into(&mut zngur, &mut ctx, &DefaultImportResolver);
         let spec = zngur.to_zngur(&mut ctx);
+        for entry in ctx.reports.iter().filter(|entry| !entry.fatal) {
+            warning_sink(&ctx.render_report(&entry.report));
+        }
         if ctx.has_errors() {
             // add report of cfg values used
-            ctx.add_report(
+            ctx.add_fatal_report(
                 Report::build(
                     ReportKind::Custom("cfg values", ariadne::Color::Green),
                     path.file_name().unwrap_or_default().to_string_lossy(),
@@ -1230,8 +1271,12 @@ impl<'a> ParsedZngFile<'a> {
 
     /// Parse a .zng file from a string. Mainly useful for testing.
     #[cfg(test)]
-    pub fn parse_str(text: &str, cfg: impl RustCfgProvider + 'static) -> ParseResult {
-        Self::parse_str_with_resolver(text, cfg, &DefaultImportResolver)
+    pub fn parse_str(
+        text: &str,
+        cfg: impl RustCfgProvider + 'static,
+        warning_sink: impl FnMut(&str),
+    ) -> ParseResult {
+        Self::parse_str_with_resolver(text, cfg, &DefaultImportResolver, warning_sink)
     }
 
     #[cfg(test)]
@@ -1239,11 +1284,15 @@ impl<'a> ParsedZngFile<'a> {
         text: &str,
         cfg: impl RustCfgProvider + 'static,
         resolver: &impl ImportResolver,
+        mut warning_sink: impl FnMut(&str),
     ) -> ParseResult {
         let mut zngur = ZngurSpecBuilder::default();
         let mut ctx = ParseContext::new(std::path::PathBuf::from("test.zng"), text, Box::new(cfg));
         Self::parse_into(&mut zngur, &mut ctx, resolver);
         let spec = zngur.to_zngur(&mut ctx);
+        for entry in ctx.reports.iter().filter(|entry| !entry.fatal) {
+            warning_sink(&ctx.render_report(&entry.report));
+        }
         if ctx.has_errors() {
             ctx.emit_ariadne_errors();
         }
@@ -1381,7 +1430,7 @@ impl ZngurSpecBuilder {
                     );
                     if let Err(e) = template_match.merge(ty) {
                         let MergeFailure::Conflict(e) = e;
-                        ctx.add_report(
+                        ctx.add_fatal_report(
                             Report::build(ReportKind::Error, &template.filename, 0)
                                 .with_message(format!(
                                     "Failed to apply template {} to type {}: {}",
@@ -1427,7 +1476,7 @@ impl ZngurSpecBuilder {
                             .with_color(Color::Blue),
                     );
                 }
-                ctx.add_report(report.finish());
+                ctx.add_fatal_report(report.finish());
             }
         }
         spec
@@ -2016,6 +2065,12 @@ fn inner_type_item<'a>()
             field: x.0,
             cpp_type: x.1,
         });
+    let cpp_heap_allocated = just(Token::Sharp)
+        .then(just(Token::Ident("cpp_heap_allocated")))
+        .ignore_then(select! {
+            Token::Str(c) => c,
+        })
+        .map(|cpp_type| ParsedTypeItem::CppHeapAllocated { cpp_type });
     let cpp_ref = just(Token::Sharp)
         .then(just(Token::Ident("cpp_ref")))
         .ignore_then(select! {
@@ -2057,6 +2112,7 @@ fn inner_type_item<'a>()
             constructor.boxed(),
             field.boxed(),
             cpp_value.boxed(),
+            cpp_heap_allocated.boxed(),
             cpp_ref.boxed(),
             cpp_stack_owned.boxed(),
             method()

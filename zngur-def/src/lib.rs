@@ -146,7 +146,13 @@ pub struct ZngurMethodDetails {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CppValue(pub String, pub String);
+pub struct CppHeapAllocated(pub String);
+
+#[derive(Debug)]
+pub struct CppHeapAllocatedData {
+    pub bridge_fn: String,
+    pub cpp_type: String,
+}
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct CppRef(pub String);
@@ -174,7 +180,7 @@ pub struct ZngurType {
     pub constructor: Option<ZngurConstructor>,
     pub variants: Vec<ZngurVariant>,
     pub fields: Vec<ZngurField>,
-    pub cpp_value: Option<CppValue>,
+    pub cpp_heap_allocated: Option<CppHeapAllocated>,
     pub cpp_ref: Option<CppRef>,
     pub cpp_stack_owned: Option<CppStackOwned>,
 }
