@@ -130,7 +130,7 @@ impl ZngurGenerator {
     #[repr(C)]
     #[repr(align({align}))]
     pub struct {type_name} {{
-      pub(crate) buffer: core::mem::MaybeUninit<[u8; {size}]>,
+      pub(crate) buffer: core::cell::UnsafeCell<core::mem::MaybeUninit<[u8; {size}]>>,
       _no_auto_traits: core::marker::PhantomData<*mut ()>,
       _pinned: core::marker::PhantomPinned,
     }}
@@ -145,7 +145,7 @@ impl ZngurGenerator {
             }}
             let mut dummy = ();
             unsafe {{
-                {mangled_name}(self.buffer.assume_init_mut().as_mut_ptr() as *mut _, &mut dummy as *mut () as *mut u8);
+                {mangled_name}(self.buffer.get() as *mut _, &mut dummy as *mut () as *mut u8);
             }}
         }}
     }} 
