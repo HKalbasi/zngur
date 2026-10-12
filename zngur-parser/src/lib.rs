@@ -10,11 +10,11 @@ use chumsky::{input::MapExtra, prelude::*};
 use itertools::{Either, Itertools};
 
 use zngur_def::{
-    AdditionalIncludes, ConflictSource, ConvertPanicToException, CppHeapAllocated, CppRef,
-    CppStackOwned, Import, LayoutPolicy, Merge, MergeFailure, ModuleImport, Mutability,
-    PrimitiveRustType, RustPathAndGenerics, RustTrait, RustType, TypeVar, ZngurConstructor,
-    ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn, ZngurMethod, ZngurMethodDetails,
-    ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType, ZngurVariant, ZngurWellknownTrait,
+    AdditionalIncludes, ConflictSource, ConvertPanicToException, Import, LayoutPolicy, Merge,
+    MergeFailure, ModuleImport, Mutability, PrimitiveRustType, RustPathAndGenerics, RustTrait,
+    RustType, TypeVar, ZngurConstructor, ZngurExternCppFn, ZngurExternCppImpl, ZngurField, ZngurFn,
+    ZngurMethod, ZngurMethodDetails, ZngurMethodReceiver, ZngurSpec, ZngurTrait, ZngurType,
+    ZngurVariant, ZngurWellknownTrait,
 };
 
 pub type Span = SimpleSpan<usize>;
@@ -103,6 +103,7 @@ enum ParsedPathStart {
     Absolute,
     Relative,
     Crate,
+    Cpp,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -112,10 +113,53 @@ struct ParsedPath<'a> {
     span: Span,
 }
 
+/// A path to some named entity in either the Rust or C++ universe -- today
+/// always a namespace/module path, but named generally since a scope's base
+/// may need to refer to other kinds of entities (e.g. structs) later.
+#[derive(Debug, Clone)]
+enum EntityPath {
+    /// If initial element is "crate", interpreted as crate relative.
+    /// Otherwise, understood to be a global path.
+    Rust(Vec<String>),
+    Cpp(Vec<String>),
+}
+
+impl EntityPath {
+    fn rust<'s>(segments: impl IntoIterator<Item = &'s str>) -> EntityPath {
+        EntityPath::Rust(segments.into_iter().map(str::to_owned).collect())
+    }
+
+    fn cpp<'s>(segments: impl IntoIterator<Item = &'s str>) -> EntityPath {
+        EntityPath::Cpp(segments.into_iter().map(str::to_owned).collect())
+    }
+
+    fn crate_relative<'s>(segments: impl IntoIterator<Item = &'s str>) -> EntityPath {
+        EntityPath::rust(["crate"].into_iter().chain(segments))
+    }
+
+    fn child(&self, name: &str) -> EntityPath {
+        let mut child = self.clone();
+        match &mut child {
+            EntityPath::Rust(v) | EntityPath::Cpp(v) => v.push(name.to_owned()),
+        }
+        child
+    }
+
+    fn join<'s>(&self, extra: impl IntoIterator<Item = &'s str>) -> EntityPath {
+        let mut joined = self.clone();
+        match &mut joined {
+            EntityPath::Rust(v) | EntityPath::Cpp(v) => {
+                v.extend(extra.into_iter().map(str::to_owned))
+            }
+        }
+        joined
+    }
+}
+
 #[derive(Debug, Clone)]
 struct Scope<'a> {
     aliases: Vec<ParsedAlias<'a>>,
-    base: Vec<String>,
+    base: EntityPath,
     type_vars: HashSet<ParsedTypeVar<'a>>,
 }
 
@@ -124,13 +168,13 @@ impl<'a> Scope<'a> {
     fn new_root(aliases: Vec<ParsedAlias<'a>>) -> Scope<'a> {
         Scope {
             aliases,
-            base: Default::default(),
+            base: EntityPath::Rust(Default::default()),
             type_vars: Default::default(),
         }
     }
 
     /// Resolve a path according to the current scope.
-    fn resolve_path(&self, path: ParsedPath<'a>) -> Vec<String> {
+    fn resolve_path(&self, path: ParsedPath<'a>) -> EntityPath {
         // Check to see if the path refers to an alias:
         if let Some(expanded_alias) = self
             .aliases
@@ -143,13 +187,36 @@ impl<'a> Scope<'a> {
         }
     }
 
-    /// Create a fully-qualified path relative to this scope's base path.
-    fn simple_relative_path(&self, relative_item_name: &str) -> Vec<String> {
-        self.base
-            .iter()
-            .cloned()
-            .chain(Some(relative_item_name.to_string()))
-            .collect()
+    /// Return rust source text that references `target` from within `self`.
+    fn reference_to(&self, target: &EntityPath) -> Option<String> {
+        match (target, &self.base) {
+            // Rust paths don't use self.base
+            (EntityPath::Rust(v), _) => Some(
+                v.iter()
+                    .map(|s| {
+                        if s == "crate" {
+                            s.clone()
+                        } else {
+                            format!("::{s}")
+                        }
+                    })
+                    .collect(),
+            ),
+            // Cannot reference a Cpp path from a Rust path because we don't
+            // know where the generated rust code will end up.
+            (EntityPath::Cpp(_), EntityPath::Rust(_)) => None,
+            // Cpp paths can reference other Cpp paths, but super may be needed.
+            (EntityPath::Cpp(target_segs), EntityPath::Cpp(self_segs)) => {
+                let common = self_segs
+                    .iter()
+                    .zip(target_segs)
+                    .take_while(|(a, b)| a == b)
+                    .count();
+                let ups = std::iter::repeat("super").take(self_segs.len() - common);
+                let downs = target_segs[common..].iter().map(String::as_str);
+                Some(ups.chain(downs).join("::"))
+            }
+        }
     }
 
     fn sub_scope(&self, new_aliases: &[ParsedAlias<'a>], nested_path: ParsedPath<'a>) -> Scope<'_> {
@@ -196,31 +263,21 @@ impl<'a> Scope<'a> {
 }
 
 impl ParsedPath<'_> {
-    fn to_zngur(self, base: &[String]) -> Vec<String> {
+    fn to_zngur(self, base: &EntityPath) -> EntityPath {
         match self.start {
-            ParsedPathStart::Absolute => self.segments.into_iter().map(|x| x.to_owned()).collect(),
-            ParsedPathStart::Relative => base
-                .iter()
-                .map(|x| x.as_str())
-                .chain(self.segments)
-                .map(|x| x.to_owned())
-                .collect(),
-            ParsedPathStart::Crate => ["crate"]
-                .into_iter()
-                .chain(self.segments)
-                .map(|x| x.to_owned())
-                .collect(),
+            ParsedPathStart::Absolute => EntityPath::rust(self.segments),
+            ParsedPathStart::Relative => base.join(self.segments),
+            ParsedPathStart::Crate => EntityPath::crate_relative(self.segments),
+            ParsedPathStart::Cpp => EntityPath::cpp(self.segments),
         }
     }
 
     fn matches_alias(&self, alias: &ParsedAlias<'_>) -> bool {
-        match self.start {
-            ParsedPathStart::Absolute | ParsedPathStart::Crate => false,
-            ParsedPathStart::Relative => self
+        self.start == ParsedPathStart::Relative
+            && self
                 .segments
                 .first()
-                .is_some_and(|part| *part == alias.name),
-        }
+                .is_some_and(|part| *part == alias.name)
     }
 }
 
@@ -232,34 +289,10 @@ pub struct ParsedAlias<'a> {
 }
 
 impl ParsedAlias<'_> {
-    fn expand(&self, path: &ParsedPath<'_>, base: &[String]) -> Option<Vec<String>> {
+    fn expand(&self, path: &ParsedPath<'_>, base: &EntityPath) -> Option<EntityPath> {
         if path.matches_alias(self) {
-            match self.path.start {
-                ParsedPathStart::Absolute => Some(
-                    self.path
-                        .segments
-                        .iter()
-                        .chain(path.segments.iter().skip(1))
-                        .map(|seg| (*seg).to_owned())
-                        .collect(),
-                ),
-                ParsedPathStart::Crate => Some(
-                    ["crate"]
-                        .into_iter()
-                        .chain(self.path.segments.iter().cloned())
-                        .chain(path.segments.iter().skip(1).cloned())
-                        .map(|seg| (*seg).to_owned())
-                        .collect(),
-                ),
-                ParsedPathStart::Relative => Some(
-                    base.iter()
-                        .map(|x| x.as_str())
-                        .chain(self.path.segments.iter().cloned())
-                        .chain(path.segments.iter().skip(1).cloned())
-                        .map(|seg| (*seg).to_owned())
-                        .collect(),
-                ),
-            }
+            let extra = path.segments.iter().skip(1).copied();
+            Some(self.path.clone().to_zngur(base).join(extra))
         } else {
             None
         }
@@ -378,20 +411,6 @@ enum ParsedTypeItem<'a> {
         use_path: Option<ParsedPath<'a>>,
         deref: Option<ParsedRustType<'a>>,
         cpp_name: Option<&'a str>,
-    },
-    CppValue {
-        field: &'a str,
-        cpp_type: &'a str,
-    },
-    CppHeapAllocated {
-        cpp_type: &'a str,
-    },
-    CppRef {
-        cpp_type: &'a str,
-    },
-    CppStackOwned {
-        cpp_type: &'a str,
-        props: Vec<(Spanned<&'a str>, usize)>,
     },
     MatchOnCfg(Condition<CfgConditional<'a>, ParsedTypeItem<'a>, NItems>),
 }
@@ -614,9 +633,32 @@ impl ProcessedItem<'_> {
                 items,
                 aliases,
             } => {
-                let sub_scope = scope.sub_scope(&aliases, path);
-                for item in items {
-                    item.add_to_zngur_spec(r, &sub_scope, ctx);
+                let is_root = matches!(scope.base, EntityPath::Rust(ref v) if v.is_empty());
+                // Only a relative mod path composes onto the enclosing module;
+                // every anchored start (`c++::`, `crate::`, `::`) discards it,
+                // so nesting one silently ignores the surrounding module. Allow
+                // anchored paths only at the file root and require nested mods
+                // to be relative.
+                let anchor = match path.start {
+                    ParsedPathStart::Cpp => Some("c++::"),
+                    ParsedPathStart::Crate => Some("crate::"),
+                    ParsedPathStart::Absolute => Some("::"),
+                    ParsedPathStart::Relative => None,
+                };
+                if let Some(anchor) = anchor
+                    && !is_root
+                {
+                    ctx.add_error_str(
+                        &format!(
+                            "`{anchor}` modules can only appear at the top level of a file, not nested inside another module"
+                        ),
+                        path.span,
+                    );
+                } else {
+                    let sub_scope = scope.sub_scope(&aliases, path);
+                    for item in items {
+                        item.add_to_zngur_spec(r, &sub_scope, ctx);
+                    }
                 }
             }
             ProcessedItem::Import(path) => {
@@ -666,9 +708,6 @@ impl ProcessedItem<'_> {
                 let mut layout = None;
                 let mut layout_span = None;
                 let mut exhaustive = true;
-                let mut cpp_heap_allocated = None;
-                let mut cpp_ref = None;
-                let mut cpp_stack_owned = None;
                 let mut to_process = items;
                 to_process.reverse(); // create a stack of items to process
                 let check_size_align = |props: Vec<(Spanned<&str>, usize)>| {
@@ -850,9 +889,21 @@ impl ProcessedItem<'_> {
                                 };
                                 Some((deref_type, receiver_mutability))
                             });
+                            let use_path = use_path.and_then(|x| {
+                                let span = x.span;
+                                let target = scope.resolve_path(x);
+                                let reference = scope.reference_to(&target);
+                                if reference.is_none() {
+                                    ctx.add_error_str(
+                                        "cannot reference a c++::-only path from a Rust-only scope",
+                                        span,
+                                    );
+                                }
+                                reference
+                            });
                             let method = ZngurMethodDetails {
                                 data: data.to_zngur(scope),
-                                use_path: use_path.map(|x| scope.resolve_path(x)),
+                                use_path,
                                 deref,
                                 cpp_name: cpp_name.map(|s| s.to_owned()),
                             };
@@ -862,62 +913,6 @@ impl ProcessedItem<'_> {
                             );
                             methods.push(method);
                         }
-                        ParsedTypeItem::CppValue { field: _, cpp_type } => {
-                            ctx.add_warning_str(
-                                "#cpp_value is deprecated; use #cpp_heap_allocated instead",
-                                item_span,
-                            );
-                            let cpp = CppHeapAllocated(cpp_type.to_owned());
-                            cpp_heap_allocated = Some(cpp);
-                        }
-                        ParsedTypeItem::CppHeapAllocated { cpp_type } => {
-                            let cpp = CppHeapAllocated(cpp_type.to_owned());
-                            ctx.record_span(
-                                &cpp.into_span_key_with(rust_ty.clone()),
-                                item_span.into_range(),
-                            );
-                            cpp_heap_allocated = Some(cpp);
-                        }
-                        ParsedTypeItem::CppRef { cpp_type } => {
-                            match layout_span {
-                                Some(span) => {
-                                    ctx.add_error_str("Duplicate layout policy found", span);
-                                    continue;
-                                }
-                                None => {
-                                    layout = Some(LayoutPolicy::ZERO_SIZED_TYPE);
-                                    layout_span = Some(item_span);
-                                }
-                            }
-                            let cpp = CppRef(cpp_type.to_owned());
-                            ctx.record_span(
-                                &cpp.into_span_key_with(rust_ty.clone()),
-                                item_span.into_range(),
-                            );
-                            cpp_ref = Some(cpp);
-                        }
-                        ParsedTypeItem::CppStackOwned { cpp_type, props } => {
-                            let (size, align) = match check_size_align(props) {
-                                Ok(x) => x,
-                                Err(errs) => {
-                                    for (msg, span) in errs {
-                                        ctx.add_error_str(msg, span);
-                                    }
-                                    continue;
-                                }
-                            };
-                            let cpp = CppStackOwned {
-                                cpp_type: cpp_type.to_owned(),
-                                size,
-                                align,
-                            };
-                            ctx.record_span(
-                                &cpp.into_span_key_with(rust_ty.clone()),
-                                item_span.into_range(),
-                            );
-                            cpp_stack_owned = Some(cpp);
-                            layout = Some(LayoutPolicy::StackAllocated { size, align });
-                        }
                         ParsedTypeItem::MatchOnCfg(match_) => {
                             let result = match_.eval(ctx);
                             if let Some(result) = result {
@@ -926,6 +921,11 @@ impl ProcessedItem<'_> {
                         }
                     }
                 }
+                // Types in the `c++::` namespace are normal types: they use the
+                // normal layout policies, and the backing C++ type is derived
+                // from the `c++::` segments at generation time (e.g. a
+                // `c++::osmium::Way` means the C++ type `::osmium::Way`).
+                // No extra bookkeeping is needed here.
                 let is_unsized = wellknown_traits
                     .iter()
                     .find(|x| x.inner == ZngurWellknownTrait::Unsized)
@@ -968,9 +968,6 @@ impl ProcessedItem<'_> {
                     constructor,
                     variants,
                     fields,
-                    cpp_heap_allocated,
-                    cpp_ref,
-                    cpp_stack_owned,
                 };
                 if is_template {
                     r.templates.push(TemplateDef {
@@ -1002,9 +999,19 @@ impl ProcessedItem<'_> {
             }
             ProcessedItem::Fn(f) => {
                 let method = f.inner.to_zngur(scope);
+                let path = match scope.base.child(&method.name) {
+                    EntityPath::Rust(v) => v,
+                    EntityPath::Cpp(_) => {
+                        ctx.add_error_str(
+                            "a free function cannot be declared inside a c++:: scope",
+                            f.span,
+                        );
+                        return;
+                    }
+                };
                 let func = ZngurFn {
                     path: RustPathAndGenerics {
-                        path: scope.simple_relative_path(&method.name),
+                        path,
                         generics: method.generics,
                         named_generics: vec![],
                     },
@@ -1117,7 +1124,18 @@ impl ParsedRustType<'_> {
             }
             ParsedRustType::Adt(s) => match scope.as_type_var(&s) {
                 Some(v) => RustType::TypeVar(v),
-                None => RustType::Adt(s.to_zngur(scope)),
+                None => match scope.resolve_path(s.path.clone()) {
+                    EntityPath::Cpp(segs) => RustType::Cpp(RustPathAndGenerics {
+                        path: segs,
+                        generics: s.generics.into_iter().map(|x| x.to_zngur(scope)).collect(),
+                        named_generics: s
+                            .named_generics
+                            .into_iter()
+                            .map(|(name, x)| (name.to_owned(), x.to_zngur(scope)))
+                            .collect(),
+                    }),
+                    EntityPath::Rust(_) => RustType::Adt(s.to_zngur(scope)),
+                },
             },
         }
     }
@@ -1160,7 +1178,12 @@ struct ParsedRustPathAndGenerics<'a> {
 impl ParsedRustPathAndGenerics<'_> {
     fn to_zngur(self, scope: &Scope<'_>) -> RustPathAndGenerics {
         RustPathAndGenerics {
-            path: scope.resolve_path(self.path),
+            path: match scope.resolve_path(self.path) {
+                EntityPath::Rust(v) => v,
+                EntityPath::Cpp(_) => todo!(
+                    "a c++::-only path was used somewhere that can't support it (e.g. as a trait); needs a proper user-facing error instead of this panic"
+                ),
+            },
             generics: self
                 .generics
                 .into_iter()
@@ -1210,15 +1233,6 @@ enum PartialSpanKey {
     /// a [`Constructor`](zngur_def::ZngurConstructor)
     /// outer_ty, constructor_sig?
     Constructor(RustType, Option<Vec<(String, RustType)>>),
-    /// a [`CppRef`](zngur_def::CppRef)
-    /// outer_ty
-    CppRef(RustType),
-    /// a [`CppHeapAllocated`](zngur_def::CppHeapAllocated)
-    /// outer_ty
-    CppHeapAllocated(RustType),
-    /// a [`CppStackOwned`](zngur_def::CppStackOwned)
-    /// outer_ty
-    CppStackOwned(RustType),
     /// a [`Method`](zngur_def::ZngurMethod) on a
     /// [`Type`](zngur_def::ZngurType) or [`Trait`](zngur_def::ZngurTrait)
     /// outer_ty, method
@@ -1316,11 +1330,6 @@ impl VariantQualifiedSpanKeyExt for zngur_def::ConflictSource {
             zngur_def::ConflictSource::Constructor(sig) => {
                 PartialSpanKey::Constructor(outer_ty, sig.clone())
             }
-            zngur_def::ConflictSource::CppRef => PartialSpanKey::CppRef(outer_ty),
-            zngur_def::ConflictSource::CppHeapAllocated => {
-                PartialSpanKey::CppHeapAllocated(outer_ty)
-            }
-            zngur_def::ConflictSource::CppStackOwned => PartialSpanKey::CppStackOwned(outer_ty),
             zngur_def::ConflictSource::Method(method) => {
                 PartialSpanKey::Method(outer_ty, method.clone())
             }
@@ -1350,24 +1359,6 @@ impl QualifiedSpanKeyExt for zngur_def::LayoutPolicy {
 impl QualifiedSpanKeyExt for zngur_def::ZngurMethod {
     fn into_span_key_with(&self, outer_ty: RustType) -> PartialSpanKey {
         PartialSpanKey::Method(outer_ty, self.clone())
-    }
-}
-
-impl QualifiedSpanKeyExt for zngur_def::CppHeapAllocated {
-    fn into_span_key_with(&self, outer_ty: RustType) -> PartialSpanKey {
-        PartialSpanKey::CppHeapAllocated(outer_ty)
-    }
-}
-
-impl QualifiedSpanKeyExt for zngur_def::CppRef {
-    fn into_span_key_with(&self, outer_ty: RustType) -> PartialSpanKey {
-        PartialSpanKey::CppRef(outer_ty)
-    }
-}
-
-impl QualifiedSpanKeyExt for zngur_def::CppStackOwned {
-    fn into_span_key_with(&self, outer_ty: RustType) -> PartialSpanKey {
-        PartialSpanKey::CppStackOwned(outer_ty)
     }
 }
 
@@ -1611,26 +1602,6 @@ impl<'this, 'source, 'cfg> ParseContext<'this, 'source, 'cfg> {
     /// Record a fatal report from the passed message and span
     fn add_error_str(&mut self, error: &str, span: Span) {
         self.add_errors([Rich::custom(span, error)].into_iter());
-    }
-
-    /// Records a non-fatal warning as an ariadne diagnostic pointing at `span`.
-    /// Rendering is deferred until dispatch time (see `render_report`).
-    fn add_warning_str(&mut self, warning: &str, span: Span) {
-        let report = Report::build(
-            ReportKind::Warning,
-            (self.source_id.to_owned(), span.into_range()),
-        )
-        .with_message(warning)
-        .with_label(
-            Label::new((self.source_id.to_owned(), span.into_range()))
-                .with_message(warning)
-                .with_color(Color::Yellow),
-        )
-        .finish();
-        self.sink_report(ReportEntry {
-            fatal: false,
-            report,
-        });
     }
 
     /// a count of the errors recorded by this parse context and any nested ones
@@ -2215,6 +2186,7 @@ enum Token<'a> {
     KwMatch,
     KwSafe,
     KwUnsafe,
+    CppPathStart,
     Ident(&'a str),
     Str(&'a str),
     RawStr(usize, &'a str),
@@ -2298,6 +2270,7 @@ impl Display for Token<'_> {
             Token::KwMatch => write!(f, "match"),
             Token::KwSafe => write!(f, "safe"),
             Token::KwUnsafe => write!(f, "unsafe"),
+            Token::CppPathStart => write!(f, "c++"),
             Token::Ident(i) => write!(f, "{i}"),
             Token::Number(n) => write!(f, "{n}"),
             Token::Str(s) => write!(f, r#""{s}""#),
@@ -2332,6 +2305,7 @@ fn lexer<'src>()
 
     let token = choice((
         choice([
+            just("c++").to(Token::CppPathStart),
             just("->").to(Token::Arrow),
             just("=>").to(Token::ArrowArm),
             just("<").to(Token::AngleOpen),
@@ -2579,7 +2553,18 @@ fn rust_trait<'a>(
         output: Box::new(x.1.1),
     });
 
-    let rust_trait = fn_trait.or(rust_path_and_generics(rust_type).map(ParsedRustTrait::Normal));
+    let rust_trait = fn_trait.or(rust_path_and_generics(rust_type)
+        .try_map_with(|pg, extra| {
+            if pg.path.start == ParsedPathStart::Cpp {
+                Err(Rich::custom(
+                    extra.span(),
+                    "`c++::` paths cannot be used as a trait",
+                ))
+            } else {
+                Ok(pg)
+            }
+        })
+        .map(ParsedRustTrait::Normal));
     rust_trait.boxed()
 }
 
@@ -2738,45 +2723,6 @@ fn inner_type_item<'a>()
         )
         .map(|(name, (offset, ty))| ParsedTypeItem::Field { name, ty, offset }),
     );
-    let cpp_value = just(Token::Sharp)
-        .then(just(Token::Ident("cpp_value")))
-        .ignore_then(select! {
-            Token::Str(c) => c,
-        })
-        .then(select! {
-            Token::Str(c) => c,
-        })
-        .map(|x| ParsedTypeItem::CppValue {
-            field: x.0,
-            cpp_type: x.1,
-        });
-    let cpp_heap_allocated = just(Token::Sharp)
-        .then(just(Token::Ident("cpp_heap_allocated")))
-        .ignore_then(select! {
-            Token::Str(c) => c,
-        })
-        .map(|cpp_type| ParsedTypeItem::CppHeapAllocated { cpp_type });
-    let cpp_ref = just(Token::Sharp)
-        .then(just(Token::Ident("cpp_ref")))
-        .ignore_then(select! {
-            Token::Str(c) => c,
-        })
-        .map(|x| ParsedTypeItem::CppRef { cpp_type: x });
-    let cpp_stack_owned = just(Token::Sharp)
-        .then(just(Token::Ident("cpp_stack_owned")))
-        .ignore_then(select! {
-            Token::Str(c) => c,
-        })
-        .then(
-            property_item
-                .clone()
-                .separated_by(just(Token::Comma))
-                .collect::<Vec<_>>()
-                .delimited_by(just(Token::ParenOpen), just(Token::ParenClose))
-                .boxed(),
-        )
-        .map(|(cpp_type, props)| ParsedTypeItem::CppStackOwned { cpp_type, props });
-
     let variant = just(Token::Ident("variant"))
         .ignore_then(select! { Token::Ident(c) => c })
         .then(
@@ -2796,14 +2742,10 @@ fn inner_type_item<'a>()
             non_exhaustive.boxed(),
             constructor.boxed(),
             field.boxed(),
-            cpp_value.boxed(),
-            cpp_heap_allocated.boxed(),
-            cpp_ref.boxed(),
-            cpp_stack_owned.boxed(),
             method()
                 .then(
                     just(Token::KwUse)
-                        .ignore_then(path())
+                        .ignore_then(non_cpp_path("a method's `use` path"))
                         .map(Some)
                         .or(empty().to(None))
                         .boxed(),
@@ -3057,6 +2999,9 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
         just(Token::KwCrate)
             .then(just(Token::ColonColon))
             .to(ParsedPathStart::Crate),
+        just(Token::CppPathStart)
+            .then(just(Token::ColonColon))
+            .to(ParsedPathStart::Cpp),
         empty().to(ParsedPathStart::Relative),
     ));
 
@@ -3077,6 +3022,21 @@ fn path<'a>() -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra
             span: extra.span(),
         })
         .boxed()
+}
+
+fn non_cpp_path<'a>(
+    context: &'static str,
+) -> impl Parser<'a, ParserInput<'a>, ParsedPath<'a>, ZngParserExtra<'a>> + Clone {
+    path().try_map_with(move |p, extra| {
+        if p.start == ParsedPathStart::Cpp {
+            Err(Rich::custom(
+                extra.span(),
+                format!("`c++::` paths cannot be used in {context}"),
+            ))
+        } else {
+            Ok(p)
+        }
+    })
 }
 
 impl<'a> conditional::BodyItem for crate::ParsedTypeItem<'a> {

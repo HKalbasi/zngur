@@ -48,6 +48,9 @@ lwasi
 mdformat
 memcpy
 millis
+monomorphize
+monomorphized
+monomorphizes
 moveit
 msvc
 newtype
@@ -76,6 +79,7 @@ rustyline
 Rustyline
 scrutinee
 scrutinees
+segs
 serde
 SIGSEGV
 sptl

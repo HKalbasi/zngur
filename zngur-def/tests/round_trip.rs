@@ -159,49 +159,62 @@ type [u8] {
 }
 
 #[test]
-fn reparse_cpp_heap_allocated() {
+fn reparse_cxx_heap_allocated() {
     let _ = check_round_trip(
         r#"
-type crate::Way {
+type c++::osmium::Way {
+    #heap_allocated;
+}
+    "#,
+        expect![[r#"
+            type c++::osmium::Way {
+                #heap_allocated;
+            }
+        "#]],
+    );
+}
+#[test]
+fn reparse_cxx_only_by_ref() {
+    let _ = check_round_trip(
+        r#"
+type c++::osmium::Way {
+    #only_by_ref;
+}
+    "#,
+        expect![[r#"
+            type c++::osmium::Way {
+                #only_by_ref;
+            }
+        "#]],
+    );
+}
+#[test]
+fn reparse_cxx_stack_layout() {
+    let _ = check_round_trip(
+        r#"
+type c++::osmium::Way {
     #layout(size = 16, align = 8);
-    #cpp_heap_allocated "::osmium::Way";
 }
     "#,
         expect![[r#"
-            type crate::Way {
+            type c++::osmium::Way {
                 #layout(size = 16, align = 8);
-                #cpp_heap_allocated "::osmium::Way";
             }
         "#]],
     );
 }
+
 #[test]
-fn reparse_cpp_ref() {
+fn reparse_cxx_conservative_layout() {
     let _ = check_round_trip(
         r#"
-type crate::Way {
-    #cpp_ref "::osmium::Way";
+type c++::osmium::Way {
+    #layout_conservative(size = 16, align = 8);
 }
     "#,
         expect![[r#"
-            type crate::Way {
-                #cpp_ref "::osmium::Way";
-            }
-        "#]],
-    );
-}
-#[test]
-fn reparse_cpp_stack_owned() {
-    let _ = check_round_trip(
-        r#"
-type crate::Way {
-    #cpp_stack_owned "::osmium::Way" (size = 16, align = 8);
-}
-    "#,
-        expect![[r#"
-            type crate::Way {
-                #layout(size = 16, align = 8);
-                #cpp_stack_owned "::osmium::Way" (size = 16, align = 8);
+            type c++::osmium::Way {
+                #layout_conservative(size = 16, align = 8);
             }
         "#]],
     );

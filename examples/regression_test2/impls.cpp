@@ -6,25 +6,28 @@
 
 namespace rust {
 
-Unit Impl<crate::Dispatcher>::constructor(
-    RefMut<crate::Dispatcher> dispatcher) {
-  new (&dispatcher.cpp()) task::Dispatcher();
+// Method bodies for the real C++ types. There is no rust:: mirror wrapper:
+// `Impl` is specialized directly on ::task::Dispatcher/::task::CppTaskForRust.
+using ::task::CppTaskForRust;
+using ::task::Dispatcher;
+using crate::RustTask;
+
+Unit Impl<Dispatcher>::constructor(RefMut<Dispatcher> dispatcher) {
+  new (&dispatcher.cpp()) ::task::Dispatcher();
   return {};
 }
 
-Unit Impl<crate::CppTask>::constructor(RefMut<crate::CppTask> dispatcher) {
-  new (&dispatcher.cpp()) task::CppTaskForRust();
+Unit Impl<CppTaskForRust>::constructor(RefMut<CppTaskForRust> dispatcher) {
+  new (&dispatcher.cpp()) ::task::CppTaskForRust();
   return {};
 }
 
-::rust::Unit Impl<rust::crate::Dispatcher>::run_task(
-    ::rust::Ref<rust::crate::Dispatcher> self,
-    ::rust::RefMut<rust::crate::RustTask> task) {
+Unit Impl<Dispatcher>::run_task(Ref<Dispatcher> self, RefMut<RustTask> task) {
   auto &d = self.cpp();
-  ::rust::RawMut<::rust::crate::RustTask> raw_mut(task);
-  ::rust::crate::RustTask *rust_ptr = ::rust::from_rust_ptr(raw_mut);
-  task::CppTaskForRust *task_ref = task::CppTaskForRust::Inheritance::get_base(
-      ::rust::as_rust_ptr_mut(rust_ptr));
+  RawMut<RustTask> raw_mut(task);
+  RustTask *rust_ptr = from_rust_ptr(raw_mut);
+  ::task::CppTaskForRust *task_ref =
+      ::task::CppTaskForRust::Inheritance::get_base(as_rust_ptr_mut(rust_ptr));
   d.run_task(task_ref);
   return {};
 }

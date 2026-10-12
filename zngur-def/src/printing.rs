@@ -1,9 +1,5 @@
 use std::io::Write;
 
-use itertools::Itertools;
-
-use crate::CppStackOwned;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum IDLItem {
     Function,
@@ -205,6 +201,30 @@ impl WriteIDL for crate::RustType {
             }
             Self::Adt(pg) => p.write_idl(pg),
             Self::TypeVar(var) => p.write_idl(var),
+            Self::Cpp(pg) => {
+                write!(p, "c++::{}", pg.path.join("::"))?;
+                if (pg.generics.len() + pg.named_generics.len()) > 0 {
+                    write!(p, "<")?;
+                    let mut generic_count = 0;
+                    for generic in &pg.generics {
+                        if generic_count > 0 {
+                            write!(p, ", ")?;
+                        }
+                        p.write_idl(generic)?;
+                        generic_count += 1;
+                    }
+                    for (name, generic) in &pg.named_generics {
+                        if generic_count > 0 {
+                            write!(p, ", ")?;
+                        }
+                        write!(p, "{name} = ")?;
+                        p.write_idl(generic)?;
+                        generic_count += 1;
+                    }
+                    write!(p, ">")?;
+                }
+                Ok(())
+            }
         }
     }
 }
@@ -379,23 +399,8 @@ impl WriteIDL for crate::ZngurType {
             writeln!(p, " {{")?;
             p.indent();
 
-            // don't duplicate layout info
-            if self.cpp_ref.is_none() {
-                p.write_indent()?;
-                p.write_idl(&self.layout)?;
-            }
-            if self.cpp_heap_allocated.is_some() {
-                p.write_indent()?;
-                p.write_idl(&self.cpp_heap_allocated)?;
-            }
-            if self.cpp_ref.is_some() {
-                p.write_indent()?;
-                p.write_idl(&self.cpp_ref)?;
-            }
-            if self.cpp_stack_owned.is_some() {
-                p.write_indent()?;
-                p.write_idl(&self.cpp_stack_owned)?;
-            }
+            p.write_indent()?;
+            p.write_idl(&self.layout)?;
 
             if p.enabled(&IDLItem::TypeWellknownTrait) {
                 let drop_filtered: Vec<_> = self
@@ -529,47 +534,12 @@ impl WriteIDL for crate::LayoutPolicy {
                     writeln!(p, "layout_conservative(size = {size}, align = {align});")?;
                 }
                 Self::HeapAllocated => {
-                    writeln!(p, "heap_allocate;")?;
+                    writeln!(p, "heap_allocated;")?;
                 }
                 Self::OnlyByRef => {
                     writeln!(p, "only_by_ref;")?;
                 }
             }
-        }
-        Ok(())
-    }
-}
-
-impl WriteIDL for crate::CppStackOwned {
-    fn write_idl<W: Write>(&self, p: &mut IDLPrinter<W>) -> std::io::Result<()> {
-        if p.enabled(&IDLItem::TypeLayout) {
-            let CppStackOwned {
-                cpp_type: ty,
-                size,
-                align,
-            } = self;
-            writeln!(
-                p,
-                r#"#cpp_stack_owned "{ty}" (size = {size}, align = {align});"#
-            )?;
-        }
-        Ok(())
-    }
-}
-impl WriteIDL for crate::CppHeapAllocated {
-    fn write_idl<W: Write>(&self, p: &mut IDLPrinter<W>) -> std::io::Result<()> {
-        if p.enabled(&IDLItem::TypeLayout) {
-            let ty = &self.0;
-            writeln!(p, r#"#cpp_heap_allocated "{ty}";"#)?;
-        }
-        Ok(())
-    }
-}
-impl WriteIDL for crate::CppRef {
-    fn write_idl<W: Write>(&self, p: &mut IDLPrinter<W>) -> std::io::Result<()> {
-        if p.enabled(&IDLItem::TypeLayout) {
-            let ty = &self.0;
-            writeln!(p, r#"#cpp_ref "{ty}";"#)?;
         }
         Ok(())
     }
@@ -667,13 +637,7 @@ impl WriteIDL for crate::ZngurMethodDetails {
             write!(p, "{safety}")?;
             p.write_idl(&self.data)?;
             if let Some(use_path) = &self.use_path {
-                let path = use_path.iter().join("::");
-                let path = if use_path.first().is_some_and(|p| p == "crate") {
-                    path
-                } else {
-                    format!("::{path}")
-                };
-                write!(p, " use {path}")?;
+                write!(p, " use {use_path}")?;
             }
             if let Some((ty, _)) = &self.deref {
                 write!(p, " deref ")?;
@@ -772,9 +736,6 @@ fn print_spec() {
                 deref: None,
                 cpp_name: Some("fooBar".into()),
             }],
-            cpp_heap_allocated: None,
-            cpp_ref: None,
-            cpp_stack_owned: None,
         }],
         traits: indexmap::IndexMap::default(),
         funcs: vec![crate::ZngurFn {

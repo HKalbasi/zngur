@@ -30,6 +30,7 @@ impl IntoCpp for RustPathAndGenerics {
                 .map(|x| x.into_cpp(namespace, crate_name))
                 .collect(),
             tail: None,
+            is_cpp_origin: false,
         }
     }
 }
@@ -50,6 +51,7 @@ impl IntoCpp for RustTrait {
                     .map(|x| x.into_cpp(namespace, crate_name))
                     .collect(),
                 tail: None,
+                is_cpp_origin: false,
             },
         }
     }
@@ -99,6 +101,7 @@ impl IntoCpp for RustType {
                 path: CppPath::from(&*format!("{namespace}::Box")),
                 generic_args: vec![t.into_cpp(namespace, crate_name)],
                 tail: None,
+                is_cpp_origin: false,
             },
             RustType::Ref(m, t) => CppType {
                 path: match m {
@@ -107,21 +110,71 @@ impl IntoCpp for RustType {
                 },
                 generic_args: vec![t.into_cpp(namespace, crate_name)],
                 tail: None,
+                is_cpp_origin: false,
             },
             RustType::Slice(s) => CppType {
                 path: CppPath::from(&*format!("{namespace}::Slice")),
                 generic_args: vec![s.into_cpp(namespace, crate_name)],
                 tail: None,
+                is_cpp_origin: false,
             },
-            RustType::Raw(m, t) => CppType {
-                path: match m {
-                    Mutability::Mut => CppPath::from(&*format!("{namespace}::RawMut")),
-                    Mutability::Not => CppPath::from(&*format!("{namespace}::Raw")),
-                },
-                generic_args: vec![t.into_cpp(namespace, crate_name)],
-                tail: None,
-            },
+            RustType::Raw(m, t) => {
+                // C++-originated types cross the boundary as plain C++ pointers:
+                // `*const c++::Ty` -> `const Ty*`, `*mut c++::Ty` -> `Ty*`.
+                // No `Raw`/`RawMut` specialization is emitted for them.
+                if matches!(**t, RustType::Cpp(_)) {
+                    let inner = t.into_cpp(namespace, crate_name).to_string();
+                    let base = inner.strip_prefix("::").unwrap_or(&inner);
+                    let star = match *m {
+                        Mutability::Mut => "*",
+                        Mutability::Not => " const*",
+                    };
+                    // Kept as one unsplit segment on purpose: template
+                    // arguments may nest `<...>`, which `CppType::from`
+                    // cannot split back apart. Pointer spellings are only
+                    // ever rendered (`Display`), never declared, so the
+                    // lack of structure is unobservable.
+                    CppType {
+                        path: CppPath(vec![format!("{base}{star}")]),
+                        generic_args: vec![],
+                        tail: None,
+                        is_cpp_origin: true,
+                    }
+                } else {
+                    CppType {
+                        path: match *m {
+                            Mutability::Mut => CppPath::from(&*format!("{}::RawMut", namespace)),
+                            Mutability::Not => CppPath::from(&*format!("{}::Raw", namespace)),
+                        },
+                        generic_args: vec![t.into_cpp(namespace, crate_name)],
+                        tail: None,
+                        is_cpp_origin: false,
+                    }
+                }
+            }
             RustType::Adt(pg) => pg.into_cpp(namespace, crate_name),
+            RustType::Cpp(pg) => CppType {
+                // C++-originated types name the real C++ type directly:
+                // no `rust::` mirror namespace is generated for them.
+                // Template arguments carry over, so `c++::std::unique_ptr<T>`
+                // spells `::std::unique_ptr< T >`. The definition always
+                // comes from the user's own C++ headers, so nothing under
+                // it is ever forward-declared.
+                path: CppPath(pg.path.clone()),
+                generic_args: pg
+                    .generics
+                    .iter()
+                    .chain(
+                        pg.named_generics
+                            .iter()
+                            .sorted_by_key(|x| &x.0)
+                            .map(|x| &x.1),
+                    )
+                    .map(|x| x.into_cpp(namespace, crate_name))
+                    .collect(),
+                tail: None,
+                is_cpp_origin: true,
+            },
             RustType::Tuple(v) => {
                 if v.is_empty() {
                     return CppType::from(&*format!("{namespace}::Unit"));
@@ -133,6 +186,7 @@ impl IntoCpp for RustType {
                         .map(|x| x.into_cpp(namespace, crate_name))
                         .collect(),
                     tail: None,
+                    is_cpp_origin: false,
                 }
             }
             RustType::Dyn(tr, marker_bounds) => {
@@ -148,6 +202,7 @@ impl IntoCpp for RustType {
                         )
                         .collect(),
                     tail: None,
+                    is_cpp_origin: false,
                 }
             }
             RustType::Impl(_, _) => panic!("impl Trait is invalid in C++"),
@@ -1103,28 +1158,13 @@ pub {}fn {rust_name}("#,
         mangled_name
     }
 
-    pub fn add_cpp_heap_allocated_bridge(&mut self, ty: &RustType) -> String {
-        let type_name = ty.to_string().split("::").last().unwrap().to_string();
-        let mangled_name = self.mangle_name(&format!("{ty}_cpp_heap_allocated"));
-        w!(
-            self,
-            r#"
-#[allow(non_snake_case)]
-#[unsafe(no_mangle)]
-pub extern "C" fn {mangled_name}(d: *mut u8) -> *mut cpp::{type_name} {{
-    d as *mut cpp::{type_name}
-}}"#
-        );
-        mangled_name
-    }
-
     pub fn add_function(
         &mut self,
         cxx_name: &str,
         rust_name: &str,
         inputs: &[RustType],
         output: &RustType,
-        use_path: Option<Vec<String>>,
+        use_path: Option<String>,
         deref: Option<Mutability>,
         namespace: &str,
         crate_name: &str,
@@ -1156,11 +1196,7 @@ pub extern "C" fn {mangled_name}("#
         wln!(self, "o: *mut u8) {{ unsafe {{");
         self.wrap_in_catch_unwind(|this| {
             if let Some(use_path) = use_path {
-                if use_path.first().is_some_and(|x| x == "crate") {
-                    wln!(this, "    use {};", use_path.iter().join("::"));
-                } else {
-                    wln!(this, "    use ::{};", use_path.iter().join("::"));
-                }
+                wln!(this, "    use {use_path};");
             }
 
             w!(
@@ -1412,6 +1448,9 @@ pub extern "C" fn {make_coro_future_fn}(handle: *mut u8, out: *mut u8) {{
             LayoutPolicy::Conservative { size, align } => {
                 CppLayoutPolicy::StackAllocated { size, align }
             }
+            LayoutPolicy::HeapAllocated if matches!(ty, RustType::Cpp(_)) => {
+                CppLayoutPolicy::CppHeapAllocated
+            }
             LayoutPolicy::HeapAllocated => {
                 let size_fn = self.mangle_name(&format!("{ty}_size_fn"));
                 let alloc_fn = self.mangle_name(&format!("{ty}_alloc_fn"));
@@ -1446,5 +1485,60 @@ pub extern "C" fn {make_coro_future_fn}(handle: *mut u8, out: *mut u8) {{
             }
             LayoutPolicy::OnlyByRef => CppLayoutPolicy::OnlyByRef,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cpp_into_cpp() {
+        let cpp = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["a".to_owned(), "Name".to_owned()],
+            generics: vec![],
+            named_generics: vec![],
+        });
+        let cpp_type = cpp.into_cpp("rust", "my_crate");
+        assert_eq!(cpp_type.to_string(), "::a::Name");
+    }
+
+    #[test]
+    fn test_cpp_template_into_cpp() {
+        let arg = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["Foo".to_owned()],
+            generics: vec![],
+            named_generics: vec![],
+        });
+        let cpp = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["std".to_owned(), "unique_ptr".to_owned()],
+            generics: vec![arg],
+            named_generics: vec![],
+        });
+        let cpp_type = cpp.into_cpp("rust", "my_crate");
+        assert_eq!(cpp_type.to_string(), "::std::unique_ptr< ::Foo >");
+    }
+
+    #[test]
+    fn test_raw_cpp_into_plain_pointer() {
+        // `*const c++::Ty` -> `const Ty*`, `*mut c++::Ty` -> `Ty*`;
+        // no `Raw`/`RawMut` specialization is emitted for C++ types.
+        let cpp = || {
+            RustType::Cpp(RustPathAndGenerics {
+                path: vec!["a".to_owned(), "Name".to_owned()],
+                generics: vec![],
+                named_generics: vec![],
+            })
+        };
+        let const_ptr = RustType::Raw(Mutability::Not, Box::new(cpp()));
+        assert_eq!(
+            const_ptr.into_cpp("rust", "my_crate").to_string(),
+            "::a::Name const*"
+        );
+        let mut_ptr = RustType::Raw(Mutability::Mut, Box::new(cpp()));
+        assert_eq!(
+            mut_ptr.into_cpp("rust", "my_crate").to_string(),
+            "::a::Name*"
+        );
     }
 }

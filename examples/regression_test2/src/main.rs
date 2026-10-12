@@ -10,7 +10,7 @@ use std::task::{Context, Poll, Waker};
 
 use cpp_inherit::CppInherit;
 
-use crate::generated::cpp::{CppTask, Dispatcher};
+use crate::generated::task::{CppTaskForRust, Dispatcher};
 
 pub struct RustTask<'a>(pub Pin<&'a mut dyn Future<Output = ()>>);
 
@@ -34,11 +34,11 @@ fn main() {
     };
 
     let fut = RustTask(unsafe { Pin::new_unchecked(&mut fut) });
-    let mut cpp_task: MaybeUninit<CppTask> = MaybeUninit::uninit();
+    let mut cpp_task: MaybeUninit<CppTaskForRust> = MaybeUninit::uninit();
     unsafe {
         cpp_task.assume_init_mut().constructor();
     }
-    let mut task: CppInherit<CppTask, RustTask> =
+    let mut task: CppInherit<CppTaskForRust, RustTask> =
         CppInherit::new(fut, unsafe { cpp_task.assume_init() });
     let mut dispatcher: MaybeUninit<Dispatcher> = MaybeUninit::uninit();
     unsafe {

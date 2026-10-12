@@ -1,0 +1,11 @@
+Numbers sum 6
+Numbers sum 10
+Shared sum 30
+Shared sum 60
+Holder first 1
+Holder first 10
+Default holder 42
+Rust holder 3 4
+Holder vec len 2
+Boxed vec len 2
+First boxed 1 2

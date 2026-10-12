@@ -7,6 +7,12 @@ Raw pointers `*mut T` and `*const T` are Rust primitve types used in `unsafe` Ru
 A raw pointer to a primitive type available in both C++ and Rust becomes a normal pointer in C++.
 For example, `*const i32` becomes a `const int32_t*` and you can use it like a normal pointer.
 
+## Raw pointers to C++ types
+
+A raw pointer to a C++-originated type becomes a normal pointer in C++.
+For example, `*const c++::Ty` becomes a `const Ty*` and `*mut c++::Ty` becomes a `Ty*`.
+No `rust::Raw`/`rust::RawMut` specialization is generated for them.
+
 ## Raw pointers to Rust specific types
 
 For a Rust type `T`, Zngur generates `rust::Raw<rust::T>` for `*const T` and `rust::RawMut<rust::T>` for `*mut T`.

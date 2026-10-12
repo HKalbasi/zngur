@@ -2,24 +2,21 @@
 #include <packet.zng.h>
 #include <stats.h>
 
-using rust::aggregation::StatsAccumulator;
-using rust::packet::Packet;
-
-// We need to implement the methods declared in aggregation.zng
-StatsAccumulator rust::Impl<StatsAccumulator>::create() {
-  return StatsAccumulator(
-      rust::ZngurCppOpaqueOwnedObject::build<cpp_stats::StatsAccumulator>());
+// Method bodies for the real C++ type. There is no rust:: mirror wrapper:
+// `Impl` is specialized directly on cpp_stats::StatsAccumulator.
+cpp_stats::StatsAccumulator
+rust::Impl<cpp_stats::StatsAccumulator>::create() {
+  return cpp_stats::StatsAccumulator();
 }
 
-rust::Unit
-rust::Impl<StatsAccumulator>::add_packet(rust::RefMut<StatsAccumulator> self,
-                                         Packet p) {
+rust::Unit rust::Impl<cpp_stats::StatsAccumulator>::add_packet(
+    rust::RefMut<cpp_stats::StatsAccumulator> self, rust::packet::Packet p) {
   self.cpp().add_packet(p);
   return {};
 }
 
-rust::Unit
-rust::Impl<StatsAccumulator>::print_report(rust::Ref<StatsAccumulator> self) {
+rust::Unit rust::Impl<cpp_stats::StatsAccumulator>::print_report(
+    rust::Ref<cpp_stats::StatsAccumulator> self) {
   self.cpp().print_report();
   return {};
 }

@@ -2,13 +2,40 @@
 #include <cpp_type.h>
 "
 
-type crate::MyCppWrapper {
-    #cpp_stack_owned "::CppType" (size = 8, align = 4);
+type c++::CppType {
+    #layout(size = 8, align = 4);
+}
+
+type c++::CppConservativeType {
+    #layout_conservative(size = 32, align = 16);
+}
+
+type c++::CppRefType {
+    #only_by_ref;
+}
+
+type c++::std::unique_ptr<c++::CppType> {
+    #layout(size = 8, align = 8);
 }
 
 extern "C++" {
-    impl crate::MyCppWrapper {
-        safe fn new(i32, i32) -> crate::MyCppWrapper;
+    impl c++::CppType {
+        safe fn new(i32, i32) -> c++::CppType;
+        safe fn print(&self);
+    }
+
+    impl c++::CppConservativeType {
+        safe fn new(i64, i32) -> c++::CppConservativeType;
+        safe fn print(&self);
+    }
+
+    impl c++::CppRefType {
+        safe fn get_global() -> *const c++::CppRefType;
+        safe fn print(&self);
+    }
+
+    impl c++::std::unique_ptr<c++::CppType> {
+        safe fn make_unique(i32, i32) -> c++::std::unique_ptr<c++::CppType>;
         safe fn print(&self);
     }
 }

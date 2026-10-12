@@ -5,9 +5,7 @@ use std::{
 
 use indexmap::IndexMap;
 use itertools::Itertools;
-use zngur_def::{
-    CppHeapAllocatedData, CppRef, CppStackOwned, RustTrait, ZngurFieldData, ZngurMethodReceiver,
-};
+use zngur_def::{RustTrait, ZngurFieldData, ZngurMethodReceiver};
 
 use crate::{
     ZngurWellknownTraitData,
@@ -98,6 +96,11 @@ pub struct CppType {
     pub generic_args: Vec<CppType>,
     // TODO: is there a better way to do it?
     pub tail: Option<String>,
+    /// True when this spelling names a C++-originated (`c++::`) type: its
+    /// definition always comes from the user's own C++ headers (which are
+    /// included before anything generated), so no forward declaration of
+    /// it -- or anything under it -- must ever be emitted.
+    pub is_cpp_origin: bool,
 }
 
 impl CppType {
@@ -148,6 +151,9 @@ impl CppType {
 
     fn header_helper(&self, state: &mut impl Write) -> std::fmt::Result {
         // Note: probably need to keep this out of the template because it's recursive.
+        if self.is_cpp_origin {
+            return Ok(());
+        }
         for x in &self.generic_args {
             x.header_helper(state)?;
         }
@@ -232,6 +238,7 @@ impl From<&str> for CppType {
                 path: CppPath::from(value),
                 generic_args: vec![],
                 tail: None,
+                is_cpp_origin: false,
             },
             Some((path, generics)) => {
                 let generics = generics.strip_suffix('>').unwrap();
@@ -239,6 +246,7 @@ impl From<&str> for CppType {
                     path: CppPath::from(path),
                     generic_args: split_string(generics).map(|x| CppType::from(&*x)).collect(),
                     tail: None,
+                    is_cpp_origin: false,
                 }
             }
         }
@@ -435,6 +443,10 @@ pub enum CppLayoutPolicy {
         alloc_fn: String,
         free_fn: String,
     },
+    /// Heap-allocated C++-originated type: ownership is native (`new` /
+    /// `delete` on the real type), so no Rust-implemented size/alloc/free
+    /// roundtrip functions exist for it.
+    CppHeapAllocated,
     OnlyByRef,
 }
 
@@ -518,7 +530,17 @@ impl CppLayoutPolicy {
 #[derive(Debug)]
 pub struct CppTypeDefinition {
     pub ty: CppType,
+    /// True for C++-originated (`c++::`) types: no `rust::` mirror wrapper
+    /// class is generated for them, the real C++ type is used directly.
+    pub is_cpp: bool,
+    /// Name of the generated Rust-side struct. For plain types this is the
+    /// last path segment; for template instantiations it is the
+    /// monomorphized name (`unique_ptr_CppType`).
+    pub rust_type_name: String,
     pub layout: CppLayoutPolicy,
+    pub layout_size: usize,
+    pub layout_align: usize,
+    pub is_layout_conservative: bool,
     pub methods: Vec<CppMethod>,
     pub constructor: Option<CppFnSig>,
     pub variants: Vec<CppVariant>,
@@ -527,24 +549,9 @@ pub struct CppTypeDefinition {
     pub from_trait: Option<RustTrait>,
     pub from_trait_ref: Option<RustTrait>,
     pub wellknown_traits: Vec<ZngurWellknownTraitData>,
-    pub cpp_heap_allocated: Option<CppHeapAllocatedData>,
-    pub cpp_ref: Option<CppRef>,
-    pub cpp_stack_owned: Option<CppStackOwned>,
 }
 
 impl CppTypeDefinition {
-    pub fn rust_short_name(&self) -> String {
-        self.ty.to_string().split("::").last().unwrap().to_string()
-    }
-
-    pub fn cpp_short_name(&self) -> String {
-        if let Some(c) = &self.cpp_stack_owned {
-            c.cpp_type.split("::").last().unwrap().to_string()
-        } else {
-            "".to_string()
-        }
-    }
-
     pub fn has_unsized(&self) -> bool {
         self.wellknown_traits
             .iter()
@@ -652,7 +659,12 @@ impl Default for CppTypeDefinition {
     fn default() -> Self {
         Self {
             ty: CppType::from("fill::me::you::forgot::it"),
+            is_cpp: false,
+            rust_type_name: "it".to_owned(),
             layout: CppLayoutPolicy::OnlyByRef,
+            layout_size: 0,
+            layout_align: 1,
+            is_layout_conservative: false,
             methods: vec![],
             constructor: None,
             variants: vec![],
@@ -661,9 +673,6 @@ impl Default for CppTypeDefinition {
             wellknown_traits: vec![],
             from_trait: None,
             from_trait_ref: None,
-            cpp_heap_allocated: None,
-            cpp_ref: None,
-            cpp_stack_owned: None,
         }
     }
 }

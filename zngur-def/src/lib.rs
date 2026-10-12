@@ -136,41 +136,12 @@ pub enum LayoutPolicy {
     OnlyByRef,
 }
 
-impl LayoutPolicy {
-    pub const ZERO_SIZED_TYPE: Self = LayoutPolicy::StackAllocated { size: 0, align: 1 };
-}
-
 #[derive(Debug, PartialEq, Eq)]
 pub struct ZngurMethodDetails {
     pub data: ZngurMethod,
-    pub use_path: Option<Vec<String>>,
+    pub use_path: Option<String>,
     pub deref: Option<(RustType, Mutability)>,
     pub cpp_name: Option<String>,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CppHeapAllocated(pub String);
-
-#[derive(Debug)]
-pub struct CppHeapAllocatedData {
-    pub bridge_fn: String,
-    pub cpp_type: String,
-}
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CppRef(pub String);
-
-#[derive(Debug, PartialEq, Eq, Clone)]
-pub struct CppStackOwned {
-    pub cpp_type: String,
-    pub size: usize,
-    pub align: usize,
-}
-
-impl Display for CppRef {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -183,9 +154,6 @@ pub struct ZngurType {
     pub constructor: Option<ZngurConstructor>,
     pub variants: Vec<ZngurVariant>,
     pub fields: Vec<ZngurField>,
-    pub cpp_heap_allocated: Option<CppHeapAllocated>,
-    pub cpp_ref: Option<CppRef>,
-    pub cpp_stack_owned: Option<CppStackOwned>,
 }
 
 #[derive(Debug, PartialEq)]
@@ -277,10 +245,100 @@ pub enum RustType {
     Tuple(Vec<RustType>),
     Adt(RustPathAndGenerics),
     TypeVar(TypeVar),
+    Cpp(RustPathAndGenerics),
 }
 
 impl RustType {
     pub const UNIT: Self = RustType::Tuple(Vec::new());
+}
+
+impl RustPathAndGenerics {
+    /// Identifier-safe spelling of a concrete template instantiation, for
+    /// generated item names that cannot spell `<...>` (`unique_ptr<Foo>`
+    /// -> `unique_ptr_Foo`). Plain paths return their last segment
+    /// unchanged. If two different instantiations ever flatten identically,
+    /// the generator reports the ambiguity instead of silently confusing
+    /// them.
+    pub fn flat_item_name(&self) -> String {
+        let mut name = self.path.last().cloned().unwrap_or_default();
+        let args = flat_generic_args(self);
+        if !args.is_empty() {
+            name.push('_');
+            name.push_str(&args);
+        }
+        name
+    }
+}
+
+fn flat_generic_args(pg: &RustPathAndGenerics) -> String {
+    pg.generics
+        .iter()
+        .map(flat_generic_arg)
+        .chain(
+            pg.named_generics
+                .iter()
+                .sorted_by_key(|x| &x.0)
+                .map(|x| flat_generic_arg(&x.1)),
+        )
+        .join("_")
+}
+
+/// Flatten one C++ template argument into an identifier fragment, so a
+/// concrete instantiation gets a predictable flat name
+/// (`unique_ptr<Foo>` -> `unique_ptr_Foo`). `::` flattens to `_`; if two
+/// different instantiations ever flatten identically, the generator
+/// reports the ambiguity instead of silently confusing them.
+fn flat_generic_arg(arg: &RustType) -> String {
+    match arg {
+        RustType::Primitive(p) => format!("{p}"),
+        RustType::TypeVar(TypeVar(v)) => v.clone(),
+        RustType::Ref(m, t) => format!(
+            "Ref_{}",
+            match m {
+                Mutability::Mut => format!("Mut_{}", flat_generic_arg(t)),
+                Mutability::Not => flat_generic_arg(t),
+            }
+        ),
+        RustType::Raw(m, t) => format!(
+            "Ptr_{}",
+            match m {
+                Mutability::Mut => format!("Mut_{}", flat_generic_arg(t)),
+                Mutability::Not => flat_generic_arg(t),
+            }
+        ),
+        RustType::Boxed(t) => format!("Box_{}", flat_generic_arg(t)),
+        RustType::Slice(t) => format!("Slice_{}", flat_generic_arg(t)),
+        RustType::Tuple(tys) => format!("Tuple_{}", tys.iter().map(flat_generic_arg).join("_")),
+        RustType::Dyn(tr, _) | RustType::Impl(tr, _) => {
+            format!(
+                "Dyn_{}",
+                tr.to_string()
+                    .chars()
+                    .map(|c| if c.is_ascii_alphanumeric() { c } else { '_' })
+                    .collect::<String>()
+            )
+        }
+        RustType::Adt(pg) | RustType::Cpp(pg) => {
+            let base = pg.path.join("_");
+            if pg.generics.is_empty() && pg.named_generics.is_empty() {
+                base
+            } else {
+                format!(
+                    "{base}_{}",
+                    pg.generics
+                        .iter()
+                        .map(flat_generic_arg)
+                        .chain(
+                            pg.named_generics
+                                .iter()
+                                .sorted_by_key(|x| &x.0)
+                                .map(|x| flat_generic_arg(&x.1))
+                        )
+                        .join("_")
+                )
+            }
+        }
+    }
 }
 
 impl Display for RustPathAndGenerics {
@@ -371,6 +429,70 @@ impl Display for RustType {
             }
             RustType::Slice(s) => write!(f, "[{s}]"),
             RustType::TypeVar(TypeVar(v)) => write!(f, "{v}"),
+            RustType::Cpp(pg) => {
+                let base = pg.path.join("::");
+                if pg.generics.len() == 1 && pg.named_generics.is_empty() {
+                    // A single-argument instantiation is a real Rust
+                    // generic: `c++::std::unique_ptr<c++::Foo>` is the
+                    // struct `std::unique_ptr<Foo>`, bounded by the
+                    // template's `...Specializations` trait over
+                    // `T::Data`, with one trait impl per instantiation.
+                    write!(f, "{base}<{}>", pg.generics[0])
+                } else if pg.generics.is_empty() && pg.named_generics.is_empty() {
+                    write!(f, "{base}")
+                } else {
+                    // Anything else monomorphizes into its own generated
+                    // Rust struct, so `Display` must spell that struct's
+                    // flat path for every reference to resolve. The
+                    // generator rejects ambiguous spellings.
+                    write!(f, "{base}_{}", flat_generic_args(pg))
+                }
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_cpp_display() {
+        let cpp = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["a".to_owned(), "b".to_owned(), "Name".to_owned()],
+            generics: vec![],
+            named_generics: vec![],
+        });
+        assert_eq!(cpp.to_string(), "a::b::Name");
+    }
+
+    #[test]
+    fn test_cpp_template_display_is_generic() {
+        let arg = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["Foo".to_owned()],
+            generics: vec![],
+            named_generics: vec![],
+        });
+        let cpp = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["std".to_owned(), "unique_ptr".to_owned()],
+            generics: vec![arg],
+            named_generics: vec![],
+        });
+        assert_eq!(cpp.to_string(), "std::unique_ptr<Foo>");
+    }
+
+    #[test]
+    fn test_cpp_template_flat_item_name() {
+        let arg = RustType::Cpp(RustPathAndGenerics {
+            path: vec!["Foo".to_owned()],
+            generics: vec![],
+            named_generics: vec![],
+        });
+        let pg = RustPathAndGenerics {
+            path: vec!["std".to_owned(), "unique_ptr".to_owned()],
+            generics: vec![arg],
+            named_generics: vec![],
+        };
+        assert_eq!(pg.flat_item_name(), "unique_ptr_Foo");
     }
 }

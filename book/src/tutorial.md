@@ -393,16 +393,12 @@ In the same directory, create a `main.zng` file with the following content:
 //     #include "inventory.h"
 // "#
 
-type crate::Inventory {
-    #layout(size = 16, align = 8);
-
-    #cpp_heap_allocated "::cpp_inventory::Inventory";
+type c++::cpp_inventory::Inventory {
+    #heap_allocated;
 }
 
-type crate::Item {
-    #layout(size = 16, align = 8);
-
-    #cpp_heap_allocated "::cpp_inventory::Item";
+type c++::cpp_inventory::Item {
+    #heap_allocated;
 }
 ```
 
@@ -412,9 +408,6 @@ And add these to the `main.rs` file:
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/generated.rs"));
 }
-
-pub use generated::cpp::Inventory;
-pub use generated::cpp::Item;
 ```
 
 This time we will use the Zngur generator inside of cargo build script.
@@ -464,7 +457,7 @@ fn main() {
 }
 ```
 
-Now we have a `crate::Inventory` and a `crate::Item` that can contain their C++ counterparts.
+Now we have a `c++::cpp_inventory::Inventory` and a `c++::cpp_inventory::Item` that can contain their C++ counterparts.
 But there is no way to use them in Rust.
 In Zngur, the Rust side can't access C++ opaque objects.
 So to make these types useful in Rust, we can add `impl` blocks for these types in C++.
@@ -479,14 +472,14 @@ type str {
 }
 
 extern "C++" {
-    impl crate::Inventory {
-        safe fn new_empty(u32) -> crate::Inventory;
+    impl c++::cpp_inventory::Inventory {
+        safe fn new_empty(u32) -> c++::cpp_inventory::Inventory;
         safe fn add_banana(&mut self, u32);
-        safe fn add_item(&mut self, crate::Item);
+        safe fn add_item(&mut self, c++::cpp_inventory::Item);
     }
 
-    impl crate::Item {
-        safe fn new(&str, u32) -> crate::Item;
+    impl c++::cpp_inventory::Item {
+        safe fn new(&str, u32) -> c++::cpp_inventory::Item;
     }
 }
 ```
@@ -498,30 +491,36 @@ Create a file named `impls.cpp` with this content:
 #include "generated.h"
 #include <string>
 
-using namespace rust::crate;
+namespace rust {
 
-Inventory rust::Impl<Inventory>::new_empty(uint32_t space) {
-  return Inventory::build(space);
+// `Impl` is specialized directly on the real C++ types: there is no
+// `rust::` mirror wrapper for `c++::` types.
+::cpp_inventory::Inventory
+Impl<::cpp_inventory::Inventory>::new_empty(uint32_t space) {
+  return ::cpp_inventory::Inventory(space);
 }
 
-rust::Unit rust::Impl<Inventory>::add_banana(rust::RefMut<Inventory> self,
-                                             uint32_t count) {
+Unit Impl<::cpp_inventory::Inventory>::add_banana(
+    RefMut<::cpp_inventory::Inventory> self, uint32_t count) {
   self.cpp().add_banana(count);
   return {};
 }
 
-rust::Unit rust::Impl<Inventory>::add_item(rust::RefMut<Inventory> self,
-                                           Item item) {
-  self.cpp().add_item(item.cpp());
+Unit Impl<::cpp_inventory::Inventory>::add_item(
+    RefMut<::cpp_inventory::Inventory> self, ::cpp_inventory::Item item) {
+  self.cpp().add_item(::std::move(item));
   return {};
 }
 
-Item rust::Impl<Item>::new_(rust::Ref<rust::Str> name, uint32_t size) {
-  return Item::build(cpp_inventory::Item{
+::cpp_inventory::Item Impl<::cpp_inventory::Item>::new_(Ref<Str> name,
+                                                        uint32_t size) {
+  return ::cpp_inventory::Item{
       .name = ::std::string(reinterpret_cast<const char *>(name.as_ptr()),
                             name.len()),
-      .size = size});
+      .size = size};
 }
+
+} // namespace rust
 ```
 
 These functions look like some unnecessary boilerplate, but writing them has some benefits:
@@ -544,7 +543,7 @@ In Zngur, that code is the wrapper, which lives in the C++ so it can do whatever
 
 In the Rust to C++ side, we used `zngur_dbg` macro to see the result.
 We will do the same here with the `dbg!` macro.
-To do that, we need to implement the `Debug` trait for `crate::Inventory`.
+To do that, we need to implement the `Debug` trait for `c++::Inventory`.
 Add this to the `main.zng`:
 
 ```
@@ -575,7 +574,7 @@ type ::std::fmt::Formatter {
 extern "C++" {
     // ...
 
-    impl std::fmt::Debug for crate::Inventory {
+    impl std::fmt::Debug for c++::cpp_inventory::Inventory {
         safe fn fmt(&self, &mut ::std::fmt::Formatter) -> ::std::fmt::Result;
     }
 }
@@ -584,12 +583,19 @@ extern "C++" {
 and this code to the `impls.cpp`:
 
 ```C++
-rust::Ref<rust::Str> rust_str_from_c_str(const char* input) {
-  return rust::std::ffi::CStr::from_ptr(reinterpret_cast<const int8_t*>(input)).to_str().expect("invalid_utf8"_rs);
+namespace rust {
+
+using std::ffi::CStr;
+using std::fmt::Debug;
+using std::fmt::Formatter;
+using std::fmt::Result;
+
+static Ref<Str> rust_str_from_c_str(const char* input) {
+  return CStr::from_ptr(reinterpret_cast<const int8_t*>(input)).to_str().expect("invalid_utf8"_rs);
 }
 
-rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
-    Ref<Inventory> self, RefMut<rust::std::fmt::Formatter> f) {
+Result Impl<::cpp_inventory::Inventory, Debug>::fmt(
+    Ref<::cpp_inventory::Inventory> self, RefMut<Formatter> f) {
   ::std::string result = "Inventory { remaining_space: ";
   result += ::std::to_string(self.cpp().remaining_space);
   result += ", items: [";
@@ -609,11 +615,15 @@ rust::std::fmt::Result rust::Impl<Inventory, rust::std::fmt::Debug>::fmt(
   result += "] }";
   return f.write_str(rust_str_from_c_str(result.c_str()));
 }
+
+} // namespace rust
 ```
 
 So now we can write the main function:
 
 ```Rust
+use generated::cpp_inventory::{Inventory, Item};
+
 fn main() {
     let mut inventory = Inventory::new_empty(1000);
     inventory.add_banana(3);
@@ -625,7 +635,7 @@ fn main() {
 and run it:
 
 ```
-[examples/tutorial_cpp/src/main.rs:12] inventory = Inventory { remaining_space: 974, items: [Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "apple", size: 5 }] }
+[examples/tutorial_cpp/src/main.rs:11] inventory = Inventory { remaining_space: 974, items: [Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "banana", size: 7 }, Item { name: "apple", size: 5 }] }
 ```
 
 You can see the full code at [`examples/tutorial_cpp`](https://github.com/HKalbasi/zngur/blob/main/examples/tutorial_cpp)

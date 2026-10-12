@@ -78,14 +78,12 @@ extern "C" {
       uint32_t {{ discriminant }} (uint8_t* i) noexcept;
     {% endif %}
 
-    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
-      ::{{ self.namespace }}::ZngurCppOpaqueOwnedObject* {{ cpp_heap_allocated.bridge_fn }}(uint8_t*);
-    {% endif %}
-
+    {% if !td.is_cpp %}
     {% if !td.layout.is_stack_allocated() && !td.layout.is_only_by_ref() %}
       size_t {{ td.layout.size_fn() }}();
       uint8_t* {{ td.layout.alloc_fn() }}();
       void {{ td.layout.free_fn() }}(uint8_t*);
+    {% endif %}
     {% endif %}
 
     {% for field in td.fields %}
@@ -221,6 +219,7 @@ namespace {{ self.namespace }} {
     };
   }
 
+  {% if !td.is_cpp %}
   {{ td.ty.path.open_namespace() }}
     {{ td.ty.specialization_decl() }} {
       public:
@@ -368,48 +367,6 @@ namespace {{ self.namespace }} {
 
       {{ td.render_make_box(name, self.namespace, self.crate_name) }}
 
-      {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
-          inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
-              return (*{{ cpp_heap_allocated.bridge_fn }}(::{{ self.namespace }}::__zngur_internal_data_ptr(*this))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
-          }
-
-          inline {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject&& o) noexcept {
-              {% if !is_copy %}
-              this->drop_flag = true;
-              {% endif %}
-              *reinterpret_cast<::{{ self.namespace }}::ZngurCppOpaqueOwnedObject*>(::{{ self.namespace }}::__zngur_internal_data_ptr(*this)) = ::std::move(o);
-          }
-
-          template<typename... Args>
-          static inline {{ name }} build(Args&&... args) {
-              return {{ name }}(::{{ self.namespace }}::ZngurCppOpaqueOwnedObject::build< {{ cpp_heap_allocated.cpp_type }} >(::std::forward<Args>(args)...));
-          }
-      {% endif %}
-
-      {% if let Some(cpp_stack_owned) = td.cpp_stack_owned %}
-          static_assert(sizeof({{ cpp_stack_owned.cpp_type }}) == {{ cpp_stack_owned.size }}, "Size mismatch");
-          static_assert(alignof({{ cpp_stack_owned.cpp_type }}) == {{ cpp_stack_owned.align }}, "Alignment mismatch");
-          static_assert(::{{ self.namespace }}::is_trivially_relocatable< {{ cpp_stack_owned.cpp_type }} >::value, "Type must be trivially relocatable");
-
-          inline {{ cpp_stack_owned.cpp_type }}& cpp() & {
-              return *reinterpret_cast< {{ cpp_stack_owned.cpp_type }}* >(__zngur_data.data());
-          }
-          inline const {{ cpp_stack_owned.cpp_type }}& cpp() const & {
-              return *reinterpret_cast< const {{ cpp_stack_owned.cpp_type }}* >(__zngur_data.data());
-          }
-          inline {{ cpp_stack_owned.cpp_type }}&& cpp() && {
-              return ::std::move(*reinterpret_cast< {{ cpp_stack_owned.cpp_type }}* >(__zngur_data.data()));
-          }
-
-          template<typename... Args>
-          static inline {{ name }} build(Args&&... args) {
-              {{ name }} w;
-              new (&w.cpp()) {{ cpp_stack_owned.cpp_type }}(::std::forward<Args>(args)...);
-              ::{{ self.namespace }}::__zngur_internal< {{ name }} >::assume_init(w);
-              return w;
-          }
-      {% endif %}
-
     {% endif %}
 
     {% for method in td.methods %}
@@ -457,6 +414,19 @@ namespace {{ self.namespace }} {
     {% endfor %}
 
   }; // {{ td.ty.specialization_decl() }}
+  {% endif %}
+  {% if td.is_cpp && td.layout.is_stack_allocated() %}
+  {{ td.ty.path.open_namespace() }}
+      {% if td.is_layout_conservative %}
+      static_assert(sizeof({{ td.ty }}) <= {{ td.layout_size }}, "Size mismatch");
+      static_assert(alignof({{ td.ty }}) <= {{ td.layout_align }}, "Alignment mismatch");
+      {% else %}
+      static_assert(sizeof({{ td.ty }}) == {{ td.layout_size }}, "Size mismatch");
+      static_assert(alignof({{ td.ty }}) == {{ td.layout_align }}, "Alignment mismatch");
+      {% endif %}
+      static_assert(::{{ self.namespace }}::is_trivially_relocatable< {{ td.ty }} >::value, "Type must be trivially relocatable");
+  {{ td.ty.path.close_namespace() }}
+  {% endif %}
 
   {% for variant in td.variants %}
     class {{ td.ty.specialized_name() }}::{{ variant.name }} {
@@ -498,7 +468,9 @@ namespace {{ self.namespace }} {
     };
   {% endfor %}
 
-{{ td.ty.path.close_namespace() }}
+ {% if !td.is_cpp %}
+ {{ td.ty.path.close_namespace() }}
+ {% endif %}
 
 namespace {{ self.namespace }} {
 
@@ -509,16 +481,41 @@ namespace {{ self.namespace }} {
   inline size_t __zngur_internal< {{ td.ty }} >::align_of() noexcept {
       return {{ td.layout.stack_align() }};
   }
+  {% if td.is_cpp %}
+  template<>
+  struct zngur_cpp_origin< {{ td.ty }} > : ::std::true_type {};
+  {% endif %}
 {% else if !td.layout.is_only_by_ref() %}
+  {% if td.is_cpp %}
+  inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
+      return sizeof({{ td.ty }});
+  }
+  inline size_t __zngur_internal< {{ td.ty }} >::align_of() noexcept {
+      return alignof({{ td.ty }});
+  }
+  {% else %}
   inline size_t __zngur_internal< {{ td.ty }} >::size_of() noexcept {
       return {{ td.layout.size_fn() }}();
   }
+  {% endif %}
 
   template <>
   struct zngur_heap_allocated< {{ td.ty }} > : ::std::true_type {};
+  {% if td.is_cpp %}
+  template<>
+  struct zngur_cpp_origin< {{ td.ty }} > : ::std::true_type {};
+  {% endif %}
 {% endif %}
 
 {% if !td.layout.is_only_by_ref() %}
+  {% if td.is_cpp %}
+    // C++-originated types are plain objects: no drop flags, no init
+    // tracking; misuse is ordinary C++ undefined behavior.
+    inline void __zngur_internal< {{ td.ty }} >::check_init(const {{ td.ty }}&) noexcept {}
+    inline void __zngur_internal< {{ td.ty }} >::assume_init({{ td.ty }}&) noexcept {}
+    inline void __zngur_internal< {{ td.ty }} >::assume_deinit({{ td.ty }}&) noexcept {}
+  {% endif %}
+  {% if !td.is_cpp %}
   {% if is_copy %}
     inline void __zngur_internal< {{ td.ty }} >::check_init(const {{ td.ty }}&) noexcept {}
     inline void __zngur_internal< {{ td.ty }} >::assume_init({{ td.ty }}&) noexcept {}
@@ -540,9 +537,13 @@ namespace {{ self.namespace }} {
         t.drop_flag = false;
     }
   {% endif %}
+  {% endif %}
 
   inline uint8_t* __zngur_internal< {{ td.ty }} >::data_ptr({{ td.ty }} const & t) noexcept {
-    {% if !td.layout.is_stack_allocated() %}
+    {% if td.is_cpp %}
+      // The object is stored directly: its bytes are the object itself.
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    {% else if !td.layout.is_stack_allocated() %}
       return const_cast<uint8_t*>(t.__zngur_data);
     {% else %}
       return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t.__zngur_data));
@@ -572,6 +573,43 @@ namespace {{ self.namespace }} {
   };
   {% endif %}
 {% endfor %}
+
+{% if td.is_cpp %}
+  // Raw pointers to C++-originated types spell as plain C++ pointers
+  // (`const T*`/`T*`, no `Raw`/`RawMut` wrapper), so they need the same
+  // full `__zngur_internal` specializations that builtin pointer types get.
+  template<>
+  struct __zngur_internal< {{ td.ty }}* > {
+    static inline uint8_t* data_ptr({{ td.ty }}* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init({{ td.ty }}*&) noexcept {}
+    static inline void assume_deinit({{ td.ty }}*&) noexcept {}
+    static inline void check_init({{ td.ty }}*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof({{ td.ty }}*);
+    }
+    static inline size_t align_of() noexcept {
+      return alignof({{ td.ty }}*);
+    }
+  };
+
+  template<>
+  struct __zngur_internal< {{ td.ty }} const* > {
+    static inline uint8_t* data_ptr({{ td.ty }} const* const & t) noexcept {
+      return const_cast<uint8_t*>(reinterpret_cast<const uint8_t*>(&t));
+    }
+    static inline void assume_init({{ td.ty }} const*&) noexcept {}
+    static inline void assume_deinit({{ td.ty }} const*&) noexcept {}
+    static inline void check_init({{ td.ty }} const*&) noexcept {}
+    static inline size_t size_of() noexcept {
+      return sizeof({{ td.ty }} const*);
+    }
+    static inline size_t align_of() noexcept {
+      return alignof({{ td.ty }} const*);
+    }
+  };
+{% endif %}
 
 } // namespace {{ self.namespace }}
 
@@ -629,11 +667,27 @@ namespace {{ self.namespace }} {
     {% endif %}
     };
 
+    {% if td.is_cpp %}
+    // Second handle word for C++-originated types: backs the self-cell that
+    // keeps the `Ref`/`RefMut` contract (handle points at a {pointer, ...}
+    // cell) for objects held directly, without a Rust-owned shadow.
+    size_t __zngur_data2;
+    {% endif %}
+
     {% if !is_unsized && !td.layout.is_only_by_ref() %}
+      {% if td.is_cpp && !td.layout.is_stack_allocated() %}
+      // The handle must point at a {pointer, ...} cell, like a Rust-owned
+      // shadow does: form a self-cell holding this object's address.
+      RefMut(const {{ td.ty }}& t) {
+        __zngur_data2 = reinterpret_cast<size_t>(&t);
+        __zngur_data = reinterpret_cast<size_t>(&__zngur_data2);
+      }
+      {% else %}
       RefMut(const {{ td.ty }}& t) {
         ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
         __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
       }
+      {% endif %}
     {% endif %}
 
     {% if !is_unsized %}
@@ -704,23 +758,28 @@ namespace {{ self.namespace }} {
 
     {{ td.render_make_box_ref(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
-      inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
-          return (*{{ cpp_heap_allocated.bridge_fn }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
+    {% if td.is_cpp %}
+      {% if !td.layout.is_stack_allocated() && !td.layout.is_only_by_ref() %}
+      // C++-originated heap type: the handle points at a {pointer, ...}
+      // cell (a Rust-owned shadow or a self-cell); the object lives
+      // behind its first word.
+      inline {{ td.ty }}& cpp() {
+          return *reinterpret_cast< {{ td.ty }}* >(*reinterpret_cast<void**>(__zngur_data));
       }
-    {% endif %}
-
-    {% if let Some(cpp_ref) = td.cpp_ref %}
-      inline {{ cpp_ref.0 }}& cpp() {
-          return *reinterpret_cast< {{ cpp_ref.0 }}* >(__zngur_data);
+      {% else if td.layout.is_only_by_ref() %}
+      // Reference-only C++-originated type: the handle stores the object's
+      // address directly.
+      inline {{ td.ty }}& cpp() {
+          return *reinterpret_cast< {{ td.ty }}* >(__zngur_data);
       }
-      inline RefMut(const {{ cpp_ref.0 }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
-    {% endif %}
-
-    {% if let Some(cpp_stack_owned) = td.cpp_stack_owned %}
-      inline {{ cpp_stack_owned.cpp_type }}& cpp() {
-          return *reinterpret_cast< {{ cpp_stack_owned.cpp_type }}* >(__zngur_data);
+      inline RefMut(const {{ td.ty }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
+      {% else %}
+      // Stack-allocated C++-originated type: the handle stores the object's
+      // address directly (see the `RefMut(const T&)` constructor above).
+      inline {{ td.ty }}& cpp() {
+          return *reinterpret_cast< {{ td.ty }}* >(__zngur_data);
       }
+      {% endif %}
     {% endif %}
 
     {% for method in td.methods %}
@@ -824,11 +883,22 @@ namespace {{ self.namespace }} {
     {% endif %}
     };
 
+    {% if td.is_cpp %}
+    size_t __zngur_data2;
+    {% endif %}
+
     {% if !is_unsized && !td.layout.is_only_by_ref() %}
-    Ref(const {{ td.ty }}& t) {
-      ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
-      __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
-    }
+      {% if td.is_cpp && !td.layout.is_stack_allocated() %}
+      Ref(const {{ td.ty }}& t) {
+        __zngur_data2 = reinterpret_cast<size_t>(&t);
+        __zngur_data = reinterpret_cast<size_t>(&__zngur_data2);
+      }
+      {% else %}
+      Ref(const {{ td.ty }}& t) {
+        ::{{ self.namespace }}::__zngur_internal_check_init< {{ td.ty }} >(t);
+        __zngur_data = reinterpret_cast<size_t>(__zngur_internal_data_ptr(t));
+      }
+      {% endif %}
     {% endif %}
 
       Ref(RefMut< {{ td.ty }} > rm) {
@@ -928,26 +998,30 @@ namespace {{ self.namespace }} {
 
     {{ td.render_make_box_ref_only(td.ty.path.name(), self.namespace, self.crate_name) }}
 
-    {% if let Some(cpp_heap_allocated) = td.cpp_heap_allocated %}
-      inline {{ cpp_heap_allocated.cpp_type }}& cpp() {
-        return (*{{ cpp_heap_allocated.bridge_fn }}(reinterpret_cast<uint8_t*>(__zngur_data))).as_cpp< {{ cpp_heap_allocated.cpp_type }} >();
+    {% if td.is_cpp %}
+      {% if !td.layout.is_stack_allocated() && !td.layout.is_only_by_ref() %}
+      // C++-originated heap type: the handle points at a {pointer, ...}
+      // cell; the object lives behind its first word.
+      inline {{ td.ty }}& cpp() {
+        return *reinterpret_cast< {{ td.ty }}* >(*reinterpret_cast<void**>(__zngur_data));
       }
-    {% endif %}
-
-    {% if let Some(cpp_ref) = td.cpp_ref %}
-      inline {{ cpp_ref.0 }}& cpp() {
-        return *reinterpret_cast< {{ cpp_ref.0 }}* >(__zngur_data);
+      {% else if td.layout.is_only_by_ref() %}
+      // Reference-only C++-originated type: the handle stores the object's
+      // address directly.
+      inline {{ td.ty }}& cpp() {
+        return *reinterpret_cast< {{ td.ty }}* >(__zngur_data);
       }
-      inline Ref(const {{ cpp_ref.0 }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
-    {% endif %}
-
-    {% if let Some(cpp_stack_owned) = td.cpp_stack_owned %}
-      inline const {{ cpp_stack_owned.cpp_type }}& cpp() const {
-        return *reinterpret_cast< const {{ cpp_stack_owned.cpp_type }}* >(__zngur_data);
+      inline Ref(const {{ td.ty }}& t) : __zngur_data(reinterpret_cast<size_t>(&t)) {}
+      {% else %}
+      // Stack-allocated C++-originated type: the handle stores the object's
+      // address directly (see the `Ref(const T&)` constructor above).
+      inline {{ td.ty }}& cpp() {
+        return *reinterpret_cast< {{ td.ty }}* >(__zngur_data);
       }
-      inline {{ cpp_stack_owned.cpp_type }}& cpp() {
-        return *reinterpret_cast< {{ cpp_stack_owned.cpp_type }}* >(__zngur_data);
+      inline const {{ td.ty }}& cpp() const {
+        return *reinterpret_cast< const {{ td.ty }}* >(__zngur_data);
       }
+      {% endif %}
     {% endif %}
 
     {% for method in td.methods %}

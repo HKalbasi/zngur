@@ -1,0 +1,114 @@
+#unstable(template_types)
+
+#cpp_additional_includes r#"
+#include <cstdint>
+#include <memory>
+#include <vector>
+#include "cpp_templates.h"
+"#
+
+type c++::CppType {
+    #layout(size = 8, align = 4);
+}
+
+// Every named instantiation declares its own layout, including nested
+// arguments: `shared_ptr<vector<i32>>` needs both `vector<i32>` and the
+// `shared_ptr<...>` itself.
+type c++::std::vector<i32> {
+    #layout(size = 24, align = 8);
+}
+
+type c++::std::shared_ptr<c++::std::vector<i32>> {
+    #layout(size = 16, align = 8);
+}
+
+type c++::Holder<c++::CppType> {
+    #heap_allocated;
+}
+
+type c++::Holder<i32> {
+    #only_by_ref;
+}
+
+// A plain Rust type. C++ templates can hold it by value: the C++ side
+// works with the generated `rust::crate::RustPoint` mirror, which moves
+// like any other trivially relocatable object as long as the Rust side
+// stays plain data.
+mod crate {
+    type RustPoint {
+        #layout(size = 8, align = 4);
+        constructor(i32, i32);
+    }
+}
+
+type c++::Holder<crate::RustPoint> {
+    #layout(size = 12, align = 4);
+}
+
+// A Rust template instantiated with a C++ type: the methods are the real
+// `Vec` methods, moving the instantiation's bytes like any other element.
+mod ::std {
+    type<T> vec::Vec<T> {
+        #layout(size = 24, align = 8);
+        fn new() -> vec::Vec<T>;
+        fn push(&mut self, T);
+        fn len(&self) -> usize;
+    }
+
+    // `Box<T>` for concrete `T`: the template supplies the layout, each
+    // named instantiation inherits it and gets a full `rust::Box<...>`
+    // definition. (Only `Box<dyn Trait>` is special: 16 bytes for the
+    // fat pointer, overridden per instantiation.)
+    type<T> boxed::Box<T> {
+        #layout(size = 8, align = 8);
+    }
+}
+
+type ::std::vec::Vec<c++::Holder<c++::CppType>> {
+}
+
+type ::std::boxed::Box<crate::RustPoint> {
+}
+
+// A C++ template over a Rust box: the vector owns the mirrors, the
+// mirrors own the Rust allocations.
+type c++::std::vector<::std::boxed::Box<crate::RustPoint>> {
+    #layout(size = 24, align = 8);
+}
+
+extern "C++" {
+    impl c++::std::vector<i32> {
+        safe fn make_numbers() -> c++::std::vector<i32>;
+        safe fn sum(&self) -> i32;
+        safe fn push(&mut self, i32);
+    }
+
+    impl c++::std::shared_ptr<c++::std::vector<i32>> {
+        safe fn make_shared_numbers() -> c++::std::shared_ptr<c++::std::vector<i32>>;
+        safe fn sum(&self) -> i32;
+        safe fn push(&mut self, i32);
+    }
+
+    impl c++::Holder<c++::CppType> {
+        safe fn make_holder(i32, i32) -> c++::Holder<c++::CppType>;
+        safe fn first(&self) -> i32;
+        safe fn set_first(&mut self, i32);
+    }
+
+    impl c++::Holder<i32> {
+        safe fn default_holder() -> *const c++::Holder<i32>;
+        safe fn value(&self) -> i32;
+    }
+
+    impl c++::Holder<crate::RustPoint> {
+        safe fn make_rust_holder(i32, i32) -> c++::Holder<crate::RustPoint>;
+        safe fn take_inner(&mut self) -> crate::RustPoint;
+    }
+
+    impl c++::std::vector<::std::boxed::Box<crate::RustPoint>> {
+        safe fn make_boxed_points() -> c++::std::vector<::std::boxed::Box<crate::RustPoint>>;
+        safe fn len(&self) -> i32;
+        safe fn push_box(&mut self, ::std::boxed::Box<crate::RustPoint>);
+        safe fn take_first(&mut self) -> ::std::boxed::Box<crate::RustPoint>;
+    }
+}

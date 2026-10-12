@@ -11,7 +11,9 @@
 #include <iostream>
 #include <functional>
 #include <math.h>
+#include <new>
 #include <type_traits>
+#include <utility>
 
 {% if self.panic_to_exception %}
   namespace {{ self.cpp_namespace }} {
@@ -99,18 +101,91 @@ namespace {{ self.cpp_namespace }} {
     return __zngur_internal<T>::size_of();
   }
 
+  // specialize to record allocation strategy into type system
+  template <typename T>
+  struct zngur_heap_allocated : ::std::false_type {};
+
+  // specialize to mark C++-originated types, which are used directly with
+  // no rust:: mirror wrapper class; the generated header specializes this
+  // for every `c++::` type
+  template <typename T>
+  struct zngur_cpp_origin : ::std::false_type {};
+
   template<typename T>
-  inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
+  void __zngur_delete_cpp_object(uint8_t* p) noexcept {
+    delete reinterpret_cast<T*>(p);
+  }
+
+  template<typename T>
+  inline void __zngur_internal_move_to_rust_cpp(uint8_t* dst, T& t, ::std::false_type) noexcept {
+    // C++-originated stack types cross by value with real C++ move
+    // semantics: construct in place, so every object is destroyed exactly
+    // once. Note: this move-constructs (falling back to copy-constructing),
+    // so T must be move- or copy-constructible.
+    new (dst) T(::std::move(t));
+  }
+
+  template<typename T>
+  inline void __zngur_internal_move_to_rust_cpp(uint8_t* dst, T& t, ::std::true_type) noexcept {
+    // Rust's out-buffer holds a {pointer, destructor} pair (the Rust shadow
+    // layout for heap-allocated types); heap-box the object natively.
+    // Note: this move-constructs, so T must be move-constructible.
+    T* p = new T(::std::move(t));
+    reinterpret_cast<void**>(dst)[0] = p;
+    reinterpret_cast<void**>(dst)[1] = (void*)&__zngur_delete_cpp_object<T>;
+  }
+
+  // Non-C++-originated types keep the historical memcpy-based protocol.
+  template<typename T>
+  inline void __zngur_internal_move_to_rust_impl(uint8_t* dst, T& t, ::std::false_type) noexcept {
     __zng_memcpy(dst, ::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
     ::{{ self.cpp_namespace }}::__zngur_internal_assume_deinit(t);
   }
 
+  // C++-originated types cross by value with real C++ move semantics.
+  // Stack-allocated ones are trivially relocatable, so a memcpy is exact.
   template<typename T>
-  inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
+  inline void __zngur_internal_move_to_rust_impl(uint8_t* dst, T& t, ::std::true_type) noexcept {
+    __zngur_internal_move_to_rust_cpp(dst, t, zngur_heap_allocated<T>());
+  }
+
+  template<typename T>
+  inline void __zngur_internal_move_to_rust(uint8_t* dst, T& t) noexcept {
+    __zngur_internal_move_to_rust_impl(dst, t, zngur_cpp_origin<T>());
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust_cpp(uint8_t* src, ::std::false_type) noexcept {
+    return T(::std::move(*reinterpret_cast<T*>(src)));
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust_cpp(uint8_t* src, ::std::true_type) noexcept {
+    // src points at the Rust shadow {pointer, destructor}; pilfer the heap
+    // object and leave the allocation for the Rust side to destroy
+    // (destroying a moved-from object is valid C++).
+    T* p = *reinterpret_cast<T**>(src);
+    return T(::std::move(*p));
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust_impl(uint8_t* src, ::std::false_type) noexcept {
     T t;
     ::{{ self.cpp_namespace }}::__zngur_internal_assume_init(t);
     __zng_memcpy(::{{ self.cpp_namespace }}::__zngur_internal_data_ptr(t), src, ::{{ self.cpp_namespace }}::__zngur_internal_size_of<T>());
     return t;
+  }
+
+  // C++-originated types move-construct instead of copying bytes, so only a
+  // move constructor (not memcpy-ability) is required to cross by value.
+  template<typename T>
+  inline T __zngur_internal_move_from_rust_impl(uint8_t* src, ::std::true_type) noexcept {
+    return __zngur_internal_move_from_rust_cpp<T>(src, zngur_heap_allocated<T>());
+  }
+
+  template<typename T>
+  inline T __zngur_internal_move_from_rust(uint8_t* src) noexcept {
+    return __zngur_internal_move_from_rust_impl<T>(src, zngur_cpp_origin<T>());
   }
 
   template<typename T>
@@ -158,10 +233,6 @@ namespace {{ self.cpp_namespace }} {
   struct FieldAutoOffset {
       static size_t offset(const uint8_t*) noexcept;
   };
-
-  // specialize to record allocation strategy into type system
-  template <typename T>
-  struct zngur_heap_allocated : ::std::false_type {};
 
   // specialize to opt-in to stack-owned C++ types
   template <typename T, typename Enable = void>
