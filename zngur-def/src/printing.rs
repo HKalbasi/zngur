@@ -471,6 +471,7 @@ impl WriteIDL for crate::ZngurTrait {
                 for method in &self.methods {
                     p.write_indent()?;
                     p.write_idl(method)?;
+                    writeln!(p, ";")?;
                 }
                 p.dedent();
             }
