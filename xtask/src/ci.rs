@@ -1,4 +1,4 @@
-use crate::format_book;
+use crate::{format_book, test};
 use anyhow::{Context, Result};
 use xshell::{Shell, cmd};
 
@@ -235,6 +235,8 @@ pub fn main(fix: bool) -> Result<()> {
     }
 
     check_examples(sh, fix).with_context(|| "Checking examples failed")?;
+
+    test::main(fix).with_context(|| "End-to-end tests failed")?;
 
     // it's nigh impossible to get this to run under MSVC
     #[cfg(not(target_os = "windows"))]

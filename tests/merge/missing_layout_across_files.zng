@@ -1,0 +1,3 @@
+//@ fail
+merge "./_missing_layout.zng";
+type A {}

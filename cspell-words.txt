@@ -8,6 +8,7 @@ blobstore
 cerr
 chumsky
 cloneable
+codegen
 Conds
 constexpr
 coro
@@ -48,6 +49,7 @@ lwasi
 mdformat
 memcpy
 millis
+mktemp
 moveit
 msvc
 newtype

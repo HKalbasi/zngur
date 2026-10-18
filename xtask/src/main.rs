@@ -3,10 +3,16 @@ use clap::Parser;
 mod ci;
 mod format_book;
 mod format_templates;
+mod test;
 
 #[derive(Parser)]
 enum Command {
     CI {
+        #[arg(long)]
+        fix: bool,
+    },
+    /// Run the end-to-end tests under `tests/`.
+    Test {
         #[arg(long)]
         fix: bool,
     },
@@ -26,5 +32,6 @@ fn main() -> anyhow::Result<()> {
         Command::CI { fix } => ci::main(fix),
         Command::FormatBook { fix } => format_book::main(fix),
         Command::FormatTemplates { fix } => format_templates::main(fix),
+        Command::Test { fix } => test::main(fix),
     }
 }
